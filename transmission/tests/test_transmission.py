@@ -30,28 +30,27 @@ class TestTransmission(unittest.TestCase):
             for (ds, _) in ds_list:
                 npy_file = dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 tf_sim_test = np.load(npy_file)
-                np.array_equal(tf_sim_test, tf_sim_all[line][ds])
+                self.assertEqual(np.array_equal(tf_sim_test, tf_sim_all[line][ds]), 1)
 
                 csv_file = dir_output + "/pc_line_mc_" + ds + '_' + line.replace(' - ','_') + ".csv"
                 prob_sim_test = pd.read_csv(csv_file)
-                prob_sim_test.equals(prob_sim_all[line][ds])
-
+                self.assertEqual(prob_sim_test.equals(prob_sim_all[line][ds]), 1)
 
                 csv_file = dir_output + "/est_ntower_" + ds + '_' + line.replace(' - ','_') + ".csv"
                 est_ntower_test = pd.read_csv(csv_file)
-                est_ntower_test.equals(est_ntower_all[line][ds])
+                self.assertEqual(est_ntower_test.equals(est_ntower_all[line][ds]), 1)
 
                 npy_file = dir_output + "/prob_ntower_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 prob_ntower_test = np.load(npy_file)
-                np.array_equal(prob_ntower_test, prob_ntower_all[line][ds])
+                self.assertEqual(np.array_equal(prob_ntower_test, prob_ntower_all[line][ds]), 1)
 
                 csv_file = dir_output + "/est_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".csv"
                 est_ntower_nc_test = pd.read_csv(csv_file)
-                est_ntower_nc_test.equals(est_ntower_nc_all[line][ds])
+                self.assertEqual(est_ntower_nc_test.equals(est_ntower_nc_all[line][ds]), 1)
 
                 npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 prob_ntower_nc_test = np.load(npy_file)
-                np.array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds])
+                self.assertEqual(np.array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds]), 1)
 
 
 if __name__ == '__main__':

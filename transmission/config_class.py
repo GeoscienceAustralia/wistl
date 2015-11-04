@@ -63,7 +63,7 @@ class TestTransmissionConfig(object):
             os.makedirs(self.dir_output)
 
         # number of simulations for MC
-        self.nsims = 20
+        self.nsims = 200
 
         # flag for save
         self.flag_save = 0
