@@ -58,6 +58,7 @@ from class_Event import Event
 
 
 def main(conf):
+    print "==============>conf.test:", conf.test
     shape_file_tower = conf.shape_file_tower
     shape_file_line = conf.shape_file_line
     dir_wind_timeseries = conf.dir_wind_timeseries
@@ -120,10 +121,12 @@ def main(conf):
     prob_ntower_nc_all = dict()
 
     for id, line in enumerate(sel_lines):
-        # print line
-        rv = np.random.random((nsims, ntime))  # perfect correlation within a single line
-        # print rv.shape
-
+        if conf.test:
+            print "we are in test"
+            prng = np.random.RandomState(id)
+        else:
+            prng = np.random.RandomState()
+        rv = prng.uniform(size=(nsims, ntime))  # perfect correlation within a single line
         for i in fid_by_line[line]:
             event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], nsims, ntime,
             ds_list, nds, rv)
