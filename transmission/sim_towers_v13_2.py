@@ -57,8 +57,10 @@ from class_Event import Event
 ###############################################################################
 
 
-def main(shape_file_tower, shape_file_line, dir_wind_timeseries, file_frag, file_cond_pc, file_design_value,
-         file_terrain_height, file_topo_value, flag_strainer, flag_save, dir_output, nsims):
+def main(shape_file_tower, shape_file_line, dir_wind_timeseries,
+        file_frag, file_cond_pc, file_design_value, file_terrain_height,
+        file_topo_value=None, flag_strainer=None, flag_save=None,
+        dir_output=None, nsims=100):
     # shape_file_tower = conf.shape_file_tower
     # shape_file_line  = conf.shape_file_line
     # dir_wind_timeseries = conf.dir_wind_timeseries
