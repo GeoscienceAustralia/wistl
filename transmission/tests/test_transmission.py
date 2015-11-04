@@ -30,7 +30,7 @@ class TestTransmission(unittest.TestCase):
             for (ds, _) in ds_list:
                 npy_file = dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 tf_sim_test = np.load(npy_file)
-                self.assertEqual(np.array_equal(tf_sim_test, tf_sim_all[line][ds]), 1)
+                np.testing.assert_array_equal(tf_sim_test, tf_sim_all[line][ds])
 
                 csv_file = dir_output + "/pc_line_mc_" + ds + '_' + line.replace(' - ','_') + ".csv"
                 prob_sim_test = pd.read_csv(csv_file, names=prob_sim_all[line][ds].columns, header=False)  # dataframe

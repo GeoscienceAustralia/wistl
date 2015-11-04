@@ -32,7 +32,7 @@ class TransmissionConfig(object):
 
         # flag for save
         if self.test:
-            self.flag_save = 1
+            self.flag_save = 0
             self.dir_output = os.path.join(self.pdir, 'transmission', 'tests', 'test_output_current_glenda')
         else:
             self.flag_save = 1

@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import lognorm
 import pandas as pd
 
+
 class Event(object):
 
     """
@@ -10,13 +11,12 @@ class Event(object):
     def __init__(self, fid):
 
         self.fid = fid
-
         # to be assigned
-        self.wind = None # pd.DataFrame
-        self.pc_wind = None # pd.DataFrame <- cal_pc_wind
-        self.pc_adj = None # dict (ntime,) <- cal_pc_adj_towers
-        self.mc_wind = None # dict(nsims, ntime)
-        self.mc_adj = None # dict
+        self.wind = None  # pd.DataFrame
+        self.pc_wind = None  # pd.DataFrame <- cal_pc_wind
+        self.pc_adj = None  # dict (ntime,) <- cal_pc_adj_towers
+        self.mc_wind = None  # dict(nsims, ntime)
+        self.mc_adj = None  # dict
 
     # originally a part of Tower class but moved wind to pandas timeseries
     def cal_pc_wind(self, asset, frag, ntime, ds_list, nds):
@@ -71,14 +71,16 @@ class Event(object):
 
         return
 
-    def cal_mc_adj(self, asset, nsims, ntime, ds_list, nds, rv=None):
+    def cal_mc_adj(self, asset, nsims, ntime, ds_list, nds, rv, idx):
         """
         2. determine if adjacent tower collapses or not due to pull by the tower
         jtime: time index (array)
+        idx: multiprocessing thread id
         """
 
-        if rv is None: # perfect correlation
-            rv = np.random.random((nsims, ntime))
+        # if rv is None:  # perfect correlation
+        #     prng = np.random.RandomState()
+        #     rv = prng.uniform(size=(nsims, ntime))
 
         # 1. determine damage state of tower due to wind
         val = np.array([rv < self.pc_wind[ds[0]].values for ds in ds_list]) # (nds, nsims, ntime)
@@ -98,27 +100,23 @@ class Event(object):
 
         nprob = len(asset.cond_pc_adj_mc['cum_prob']) # 
 
-        mc_adj = {} # impact on adjacent towers
+        mc_adj = {}  # impact on adjacent towers
 
         # simulaiton where none of adjacent tower collapses    
         #if max_idx == 0:
 
         if nprob > 0:
 
-        #    for jtime in unq_itime:
-        #        jdx = np.where(tf_wind['itime'] == jtime)[0]
-        #        idx_sim = tf_wind['isim'][jdx] # index of simulation
-        #        mc_adj.setdefault(jtime, {})[event.fid] = idx_sim
-
-        #else:    
-
             for jtime in unq_itime:
 
                 jdx = np.where(mc_wind['collapse']['itime'] == jtime)[0]
                 idx_sim = mc_wind['collapse']['isim'][jdx] # index of simulation
                 nsims = len(idx_sim)
-
-                rv = np.random.random((nsims))# (nsims,1)
+                if idx:
+                    prng = np.random.RandomState(idx)
+                else:
+                    prng = np.random.RandomState()
+                rv = prng.uniform(size=(nsims))
 
                 list_idx_cond = []
                 for rv_ in rv:
@@ -141,12 +139,6 @@ class Event(object):
                     isim = [i for i, x in enumerate(list_idx_cond) if x == idx_cond]
                     mc_adj.setdefault(jtime, {})[tuple(abs_idx)] = idx_sim[isim]
 
-                # simulaiton where none of adjacent tower collapses    
-                #isim = [i for i, n in enumerate(list_idx_cond) if n == max_idx]
-                #if len(isim) > 0:
-                #    mc_adj.setdefault(jtime, {})[event.fid] = idx_sim[isim]
-        
         self.mc_wind = mc_wind
         self.mc_adj = mc_adj
-
         return

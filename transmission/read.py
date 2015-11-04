@@ -10,7 +10,7 @@ read
 import pandas as pd
 import numpy as np
 from StringIO import StringIO
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from scipy.stats import lognorm
 
 def read_topo_value(file_):
@@ -537,13 +537,14 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
 
     Usage:
     read_velocity_profile(Wind, dir_wind_timeseries, tower)
+    Wind: Event class
     """
 
     # read velocity profile for each of the towers
 
     terrain_height = read_terrain_height_multiplier(file_terrain_height)
 
-    event = {}
+    event = dict()  # dictionary of event class instances
 
     for name in tower.keys():
 
@@ -581,5 +582,4 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
         except ValueError:
             print vel_file
 
-    #ntime = len(towers[towers.keys()[0]].wind['time'])
     return event
