@@ -109,34 +109,34 @@ def main(conf):
 
     # mc approach
     # realisation of tower collapse in each simulation
-    tf_sim = {}  # dictionary of boolean array
-    prob_sim = {}  # dictionary of numerical array
-    est_ntower = {}  # dictionary for expected and std of collapse
-    prob_ntower = {}
-    est_ntower_nc = dict()
-    prob_ntower_nc = dict()
-    # parallel_return = parmap.map()
+    # mc_returns = parmap.map(mc_loop, sel_lines, nsims, ntime, fid_by_line, event, tower,
+    #                         fid2name, ds_list, nds, idx_time, dir_output, flag_save)
 
-    for line in sel_lines:
+    tf_sim_all = dict()
+    prob_sim_all = dict()
+    est_ntower_all = dict()
+    prob_ntower_all = dict()
+    est_ntower_nc_all = dict()
+    prob_ntower_nc_all = dict()
+
+    for id, line in enumerate(sel_lines):
         # print line
         rv = np.random.random((nsims, ntime))  # perfect correlation within a single line
         # print rv.shape
 
         for i in fid_by_line[line]:
-            event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], nsims, ntime, 
+            event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], nsims, ntime,
             ds_list, nds, rv)
 
         # compute estimated number and probability of towers without considering
         # cascading effect
         (est_ntower_nc, prob_ntower_nc) = cal_exp_std_no_cascading(
-        fid_by_line[line], event, fid2name, ds_list, nsims, idx_time, ntime)    
-        
-        # compute collapse of tower considering cascading effect    
+        fid_by_line[line], event, fid2name, ds_list, nsims, idx_time, ntime)
+
+        # compute collapse of tower considering cascading effect
         (tf_sim, prob_sim) = (cal_collapse_of_towers_mc(fid_by_line[line], event,
                                                         fid2name, ds_list, nsims, idx_time, ntime))
-
         (est_ntower, prob_ntower) = cal_exp_std(tf_sim, ds_list, idx_time)
-
         if flag_save:
             for (ds, _) in ds_list:
                 npy_file = dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
@@ -156,26 +156,27 @@ def main(conf):
 
                 npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 np.save(npy_file, prob_ntower_nc[ds])
-
+        tf_sim_all[line] = tf_sim
+        prob_sim_all[line] = prob_sim
+        est_ntower_all[line] = est_ntower
+        prob_ntower_all[line] = prob_ntower
+        est_ntower_nc_all[line] = est_ntower_nc
+        prob_ntower_nc_all[line] = prob_ntower_nc
     print "MC calculation is completed"
-    return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc
+    return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all
 
 
 def mc_loop(line, nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time, dir_output, flag_save):
-    # print line
     rv = np.random.random((nsims, ntime))  # perfect correlation within a single line
-    # print rv.shape
-
     for i in fid_by_line[line]:
-        event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], nsims, ntime,
-        ds_list, nds, rv)
+        event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], nsims, ntime, ds_list, nds, rv)
 
     # compute estimated number and probability of towers without considering
     # cascading effect
-    (est_ntower_nc, prob_ntower_nc) = cal_exp_std_no_cascading(
-    fid_by_line[line], event, fid2name, ds_list, nsims, idx_time, ntime)
+    (est_ntower_nc, prob_ntower_nc) = cal_exp_std_no_cascading(fid_by_line[line], event,
+                                                               fid2name, ds_list, nsims, idx_time, ntime)
 
-    # compute collapse of tower considering cascading effect
+    # compute collapse of tower considering cascading effect2
     (tf_sim, prob_sim) = (cal_collapse_of_towers_mc(fid_by_line[line], event,
                                                     fid2name, ds_list, nsims, idx_time, ntime))
 
@@ -184,8 +185,8 @@ def mc_loop(line, nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nd
     if flag_save:
 
         for (ds, _) in ds_list:
-            #npy_file = dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
-            #np.save(npy_file, tf_sim[ds])
+            npy_file = dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
+            np.save(npy_file, tf_sim[ds])
 
             csv_file = dir_output + "/pc_line_mc_" + ds + '_' + line.replace(' - ','_') + ".csv"
             prob_sim[ds].to_csv(csv_file)
@@ -201,6 +202,8 @@ def mc_loop(line, nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nd
 
             npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
             np.save(npy_file, prob_ntower_nc[ds])
+
+    return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc
 
 
 if __name__ == '__main__':
