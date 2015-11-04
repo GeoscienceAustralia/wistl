@@ -57,22 +57,19 @@ from class_Event import Event
 ###############################################################################
 
 
-def main(shape_file_tower, shape_file_line, dir_wind_timeseries,
-        file_frag, file_cond_pc, file_design_value, file_terrain_height,
-        file_topo_value=None, flag_strainer=None, flag_save=None,
-        dir_output=None, nsims=100):
-    # shape_file_tower = conf.shape_file_tower
-    # shape_file_line  = conf.shape_file_line
-    # dir_wind_timeseries = conf.dir_wind_timeseries
-    # file_frag = conf.file_frag
-    # file_cond_pc = conf.file_cond_pc
-    # file_design_value = conf.file_design_value
-    # file_terrain_height = conf.file_terrain_height
-    # file_topo_value= conf.file_topo_value
-    # flag_strainer = conf.flag_strainer
-    # flag_save = conf.flag_save
-    # dir_output = conf.dir_output
-    # nsims = conf.nsims
+def main(conf):
+    shape_file_tower = conf.shape_file_tower
+    shape_file_line = conf.shape_file_line
+    dir_wind_timeseries = conf.dir_wind_timeseries
+    file_frag = conf.file_frag
+    file_cond_pc = conf.file_cond_pc
+    file_design_value = conf.file_design_value
+    file_terrain_height = conf.file_terrain_height
+    file_topo_value= conf.file_topo_value
+    flag_strainer = conf.flag_strainer
+    flag_save = conf.flag_save
+    dir_output = conf.dir_output
+    nsims = conf.nsims
 
     # read GIS information
     (tower, sel_lines, fid_by_line, fid2name, lon, lat) = \
@@ -112,11 +109,12 @@ def main(shape_file_tower, shape_file_line, dir_wind_timeseries,
 
     # mc approach
     # realisation of tower collapse in each simulation
-    tf_sim = {} # dictionary of boolean array
-    prob_sim = {} # dictionary of numerical array
-    est_ntower = {} # dictionary for expected and std of collapse
+    tf_sim = {}  # dictionary of boolean array
+    prob_sim = {}  # dictionary of numerical array
+    est_ntower = {}  # dictionary for expected and std of collapse
     prob_ntower = {}
-
+    est_ntower_nc = dict()
+    prob_ntower_nc = dict()
     # parallel_return = parmap.map()
 
     for line in sel_lines:
@@ -129,7 +127,7 @@ def main(shape_file_tower, shape_file_line, dir_wind_timeseries,
             ds_list, nds, rv)
 
         # compute estimated number and probability of towers without considering
-        # cascading effect    
+        # cascading effect
         (est_ntower_nc, prob_ntower_nc) = cal_exp_std_no_cascading(
         fid_by_line[line], event, fid2name, ds_list, nsims, idx_time, ntime)    
         
@@ -160,6 +158,7 @@ def main(shape_file_tower, shape_file_line, dir_wind_timeseries,
                 np.save(npy_file, prob_ntower_nc[ds])
 
     print "MC calculation is completed"
+    return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc
 
 
 def mc_loop(line, nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time, dir_output, flag_save):
@@ -207,4 +206,4 @@ def mc_loop(line, nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nd
 if __name__ == '__main__':
     from config_class import TransmissionConfig
     conf = TransmissionConfig()
-    # main(conf)
+    main(conf)
