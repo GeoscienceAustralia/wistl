@@ -10,8 +10,8 @@ read
 import pandas as pd
 import numpy as np
 from StringIO import StringIO
-#import matplotlib.pyplot as plt
 from scipy.stats import lognorm
+import matplotlib.pyplot as plt
 
 def read_topo_value(file_):
     '''
@@ -73,10 +73,10 @@ def read_frag(file_, flag_plot=None):
     """read collapse fragility parameter values
 
     >>> txt = '''ConstType, damage, index, function, param0, param1
-    ... Unknown, minor, 1, lognorm, 0.85, 0.05'''
-    ... Unknown, collpase, 2, lognorm, 1.02, 0.05'''
+    ... Unknown, minor, 1, lognorm, 0.85, 0.05
+    ... Unknown, collpase, 2, lognorm, 1.02, 0.05
     >>> data = read_collapse_frag(StringIO(txt))
-    >>> data
+    >>> data'''
     {'Unknown': {'collapse': {'function': 'lognorm',
        'param0': 1.02,
        'param1': 0.05},
@@ -169,7 +169,7 @@ def read_cond_prob(file_):
     ... strainer, 5, 0.10, -2, 2'''
     ... strainer, 5, 0.10, -2, 2'''
     >>> cond_pc = read_cond_prob(StringIO(txt))
-    >>> cond_pc
+    >>> cond_pc'''
     {'strainer': {'max_adj': 2,
       (-2, -1, 0, 1): 0.025,
       (-2, -1, 0, 1, 2): 0.1,
@@ -236,7 +236,7 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
 
     (sel_lines, design_value) = read_design_value(file_design_value)
 
-    if file_topo_value != None:
+    if not file_topo_value:
         topo_value = read_topo_value(file_topo_value)
         topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 
         0: 1.0, 1: 1.1, 2: 1.2, 3: 1.3, 4: 1.45, 5: 1.6}
@@ -262,7 +262,7 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
 
         line_route_ = item[sel_idx['LineRoute']]
 
-        if (line_route_ in sel_lines):
+        if line_route_ in sel_lines:
 
             name_ = item[sel_idx['Name']] #
             ttype_ = item[sel_idx['Type']]
@@ -277,7 +277,7 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
             # FIXME
             height_z_ = height_z_dic[funct_] 
 
-            if file_topo_value is not None:
+            if not file_topo_value:
                 idx_topo = np.sum(topo_value[name_] >= topo_dic['threshold'])
                 designSpeed_ = design_value[line_route_]['speed']*topo_dic[idx_topo]
             else:
@@ -357,7 +357,6 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
             temp = distance(pt0, pt1)*km2m
 
             dist_forward.append(temp)
-
 
         if flag_figure:
             pt_x, pt_y = [], []
