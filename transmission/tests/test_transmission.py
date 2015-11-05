@@ -10,7 +10,8 @@ from transmission.class_Tower import Tower
 
 
 class TestTransmission(unittest.TestCase):
-    def test_something(self):
+
+    def test_transmision(self):
         conf = TransmissionConfig(test=1)
         shape_file_tower = conf.shape_file_tower
         shape_file_line = conf.shape_file_line
@@ -50,6 +51,9 @@ class TestTransmission(unittest.TestCase):
                 npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 prob_ntower_nc_test = np.load(npy_file)
                 self.assertEqual(np.array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds]), 1)
+
+    def test_something_else(self):
+        self.assertEqual(True, True)
 
 
 class TestTransmissionConfig(unittest.TestCase):

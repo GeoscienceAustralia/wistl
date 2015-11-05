@@ -6,7 +6,7 @@ It is recommended that you create a `virtualenv` to run the `tlda` code. These i
     virtualenv -p python2.7 ~/tlda_venv
     source ~/tlda_venv/bin/activate
 
-Note, in the above, the first command `sudo apt-get -y build-dep matplotlib` installs all the build dependencies for matplotlib.
+Note, in the above, the first command `sudo apt-get -y build-dep matplotlib` installs all the build dependencies for `matplotlib`.
 
 #### Clone the repo:
 
@@ -22,7 +22,7 @@ Once inside the `virtualenv`, navigate to the `TLDA` code:
     pip install -r requirements.txt
 
 #### Inputs required to run the TLDA:
-These files are not in repo and you will need access to thse files to be able to run the code.
+These files are not in repo and you will need access to these files to be able to run the code.
 
 * Shapefiles: Hyeuk to describe.
 * glenda_reduced: Hyeuk to describe.
