@@ -6,7 +6,7 @@ import pandas as pd
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers_v13_2 import sim_towers
 from transmission.read import read_tower_GIS_information, read_velocity_profile, read_frag
-from transmission.class_Tower import Tower
+from transmission.tower import Tower
 
 
 class TestTransmission(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestTransmission(unittest.TestCase):
         file_topo_value= conf.file_topo_value
         dir_output = conf.dir_output
         (tower, sel_lines, fid_by_line, fid2name, lon, lat) = \
-            (read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, file_design_value, file_topo_value))
+            (read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value))
 
         (frag, ds_list, nds) = read_frag(file_frag)
 

@@ -12,6 +12,7 @@ import numpy as np
 from StringIO import StringIO
 import matplotlib.pyplot as plt
 from scipy.stats import lognorm
+from tower import Tower
 
 def read_topo_value(file_):
     '''
@@ -205,6 +206,7 @@ def read_cond_prob(file_):
 
     return cond_pc 
 
+
 def distance(origin, destination):
     # origin, desttination (lat, lon) tuple
     # distance in km 
@@ -221,8 +223,9 @@ def distance(origin, destination):
 
     return d
 
-def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
-    file_design_value,  file_topo_value = None, flag_figure=None, flag_load=1):
+
+def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_value,  file_topo_value=None,
+                               flag_figure=None, flag_load=1):
     """
     read geospational information of towers
 
@@ -230,30 +233,25 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
     read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, 
         flag_figure=None, flag_load = 1, sel_lines = None)
     """
+    shapes_tower, records_tower, fields_tower = read_shape_file(shape_file_tower)
+    shapes_line, records_line, fields_line = read_shape_file(shape_file_line)
 
-    (shapes_tower, records_tower, fields_tower) = read_shape_file(shape_file_tower)
-    (shapes_line, records_line, fields_line) = read_shape_file(shape_file_line)
+    sel_lines, design_value = read_design_value(file_design_value)
 
-    (sel_lines, design_value) = read_design_value(file_design_value)
-
-    if file_topo_value != None:
+    if file_topo_value:
         topo_value = read_topo_value(file_topo_value)
-        topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 
-        0: 1.0, 1: 1.1, 2: 1.2, 3: 1.3, 4: 1.45, 5: 1.6}
+        topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 0: 1.0, 1: 1.1, 2: 1.2, 3: 1.3, 4: 1.45, 5: 1.6}
 
     km2m = 1000.0
 
     # typical drag height by tower type
     height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
 
-    sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle', 
-                'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function', 
-                'LineRoute', 'Height']
+    sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle',
+                'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute', 'Height']
  
-    sel_idx = {}
-    for str_ in sel_keys:
-        sel_idx[str_] = get_field_index(fields_tower, str_)
-    
+    sel_idx = {str_: get_field_index(fields_tower, str_) for str_ in sel_keys}
+
     # processing shp file
     tower, fid2name = {}, {}
     fid, line_route, lat, lon = [], [], [], []
@@ -264,7 +262,7 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
 
         if line_route_ in sel_lines:
 
-            name_ = item[sel_idx['Name']] #
+            name_ = item[sel_idx['Name']]
             ttype_ = item[sel_idx['Type']]
             funct_ = item[sel_idx['Function']]
 
@@ -305,9 +303,6 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
     line_route = np.array(line_route)
     lat = np.array(lat, dtype=float)
     lon = np.array(lon, dtype=float)
-    #unq_line_route = np.unique(line_route)
-    #nline = len(unq_line_route)
-    nline = len(sel_lines)
 
     lineroute_line = list(get_data_per_polygon(records_line, fields_line, 
                           'LineRoute')) 
@@ -324,7 +319,6 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
         xy_pt = np.array([lon[tf], lat[tf]], dtype=float).T
 
         # need to change once line shape file is corrected
-        #i = correct_lineroute_mapping[line]
         i = lineroute_line.index(line)
         xy_line = np.array(shapes_line[i].points)
 
@@ -365,7 +359,7 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
                 pt_y.append(lat[fid==k])
 
             plt.figure()
-            plt.plot(xy_line[:,0],xy_line[:,1],'ro-',pt_x,pt_y,'b-')
+            plt.plot(xy_line[:, 0], xy_line[:, 1], 'ro-', pt_x, pt_y, 'b-')
             plt.title(line)
 
         # assign adj, actual_span, adj_design_speed    
@@ -387,7 +381,8 @@ def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
             tower[name_].actual_span = val
             tower[name_].calc_adj_collapse_wind_speed()
     
-    return (tower, sel_lines, fid_by_line, fid2name, lon, lat)
+    return tower, sel_lines, fid_by_line, fid2name, lon, lat
+
 
 def read_shape_file(file_shape):
     """
@@ -395,14 +390,13 @@ def read_shape_file(file_shape):
     """    
 
     import shapefile
-
     sf = shapefile.Reader(file_shape)
     shapes = sf.shapes()
     records = sf.records()
     fields = sf.fields
     fields = fields[1:]
     
-    return (shapes, records, fields)
+    return shapes, records, fields
 
 def get_field_index(fields, key_string):
     """

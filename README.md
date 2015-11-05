@@ -10,7 +10,7 @@ Note, in the above, the first command `sudo apt-get -y build-dep matplotlib` ins
 
 #### Clone the repo:
 
-Cloen the repo:    
+Clone the repo:    
 
     git clone https://github.com/GeoscienceAustralia/TLDA.git
     

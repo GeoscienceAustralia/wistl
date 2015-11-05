@@ -49,8 +49,8 @@ from read import (read_frag, read_cond_prob, read_tower_GIS_information,
 from compute import (cal_collapse_of_towers_analytical,
     cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading)
 
-from class_Tower import Tower
-from class_Event import Event
+from tower import Tower
+from event import Event
 
 ###############################################################################
 # main procedure
@@ -74,7 +74,7 @@ def sim_towers(conf):
 
     # read GIS information
     (tower, sel_lines, fid_by_line, fid2name, lon, lat) = \
-        read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, file_design_value, file_topo_value)
+        read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
 
     # read collapse fragility by asset type
     (frag, ds_list, nds) = read_frag(file_frag)

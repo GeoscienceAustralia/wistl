@@ -6,9 +6,8 @@ class Tower(object):
     class Tower
     Tower class represent an individual transmission tower.
     """
-    def __init__(self, fid, ttype, funct, line_route, design_speed, 
-        design_span, design_level, terrain_cat, strong_axis, dev_angle, height, 
-        height_z, adj=None):
+    def __init__(self, fid, ttype, funct, line_route, design_speed, design_span, design_level, terrain_cat, strong_axis,
+                 dev_angle, height, height_z, adj=None):
 
         self.fid = fid # integer
         self.ttype = ttype # Lattice Tower or Steel Pole
