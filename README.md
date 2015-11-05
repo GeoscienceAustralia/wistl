@@ -8,6 +8,14 @@ It is recommended that you create a `virtualenv` to run the `tlda` code. These i
 
 Note, in the above, the first command `sudo apt-get -y build-dep matplotlib` installs all the build dependencies for matplotlib.
 
+#### Clone the repo:
+
+Cloen the repo:    
+
+    git clone https://github.com/GeoscienceAustralia/TLDA.git
+    
+This will prompt for your github username and password. Once you have entered them and you have access to this repo, `TLDA` will clone in your current directory. 
+
 Once inside the `virtualenv`, navigate to the `TLDA` code:
     
     cd TLDA # This is where the requirements.txt exists
