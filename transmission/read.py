@@ -222,7 +222,7 @@ def distance(origin, destination):
     return d
 
 def read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
-    file_design_value,  file_topo_value = None, flag_figure = None, flag_load = 1):
+    file_design_value,  file_topo_value = None, flag_figure=None, flag_load=1):
     """
     read geospational information of towers
 

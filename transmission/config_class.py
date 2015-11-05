@@ -8,7 +8,7 @@ class TransmissionConfig(object):
     class to hold all configuration variables.
     Should eventually be read from a config file. Not implemented yet.
     """
-    def __init__(self):
+    def __init__(self, test=0):
         self.pdir = os.getcwd()
         self.shape_file_tower = os.path.join(
             self.pdir, 'Shapefile_2015_01/Towers_with_extra_strainers_WGS84.shp')
@@ -25,23 +25,32 @@ class TransmissionConfig(object):
         self.file_topo_value = None
         self.dir_wind_timeseries = os.path.join(self.pdir, 'glenda_reduced')
 
-        # number of simulations for MC
-        self.nsims = 5000
-
         # flag for test, no need to change
-        self.test = 0
+        self.test = test
 
-        # flag for save
         if self.test:
-            self.flag_save = 1
+            self.flag_save = 0
             self.nsims = 20
             self.dir_output = os.path.join(self.pdir, 'transmission', 'tests', 'test_output_current_glenda')
         else:
             self.flag_save = 0
+            self.nsims = 20
             self.dir_output = os.path.join(self.pdir, 'output_current_glenda')
+
+        # parallel or serial computation
+        self.parallel = 0
 
         if not os.path.exists(self.dir_output):
             os.makedirs(self.dir_output)
 
-        # parallel or serial computation
-        self.parallel = 1
+    @property
+    def test(self):
+        return self.__test
+
+    @test.setter
+    def test(self, val):
+        if val:
+            self.__test = 1
+        else:
+            self.__test = 0
+

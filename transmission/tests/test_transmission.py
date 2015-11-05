@@ -11,16 +11,13 @@ from transmission.class_Tower import Tower
 
 class TestTransmission(unittest.TestCase):
     def test_something(self):
-        conf = TransmissionConfig()
-        conf.test = 1
-        conf.parallel = 0
-        conf.nsims = 20
-
+        conf = TransmissionConfig(test=1)
         shape_file_tower = conf.shape_file_tower
         shape_file_line = conf.shape_file_line
         file_frag = conf.file_frag
         file_design_value = conf.file_design_value
         file_topo_value= conf.file_topo_value
+        test = conf.test
         dir_output = conf.dir_output
         (tower, sel_lines, fid_by_line, fid2name, lon, lat) = \
             (read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, file_design_value, file_topo_value))
@@ -54,6 +51,18 @@ class TestTransmission(unittest.TestCase):
                 npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 prob_ntower_nc_test = np.load(npy_file)
                 self.assertEqual(np.array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds]), 1)
+
+
+class TestTransmissionConfig(unittest.TestCase):
+    def test_whether_config_is_test(self):
+        conf = TransmissionConfig(test=1)
+        self.assertEqual(conf.test, 1)
+        self.assertEqual(conf.flag_save, 0)
+        self.assertEqual(conf.nsims, 20)
+
+        conf1 = TransmissionConfig(test=0)
+        self.assertEqual(conf1.test, 0)
+
 
 
 if __name__ == '__main__':
