@@ -17,7 +17,6 @@ class TestTransmission(unittest.TestCase):
         file_frag = conf.file_frag
         file_design_value = conf.file_design_value
         file_topo_value= conf.file_topo_value
-        test = conf.test
         dir_output = conf.dir_output
         (tower, sel_lines, fid_by_line, fid2name, lon, lat) = \
             (read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, file_design_value, file_topo_value))
