@@ -10,7 +10,7 @@ read
 import pandas as pd
 import numpy as np
 from StringIO import StringIO
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from scipy.stats import lognorm
 
 def read_topo_value(file_):
@@ -66,17 +66,16 @@ def read_design_value(file_):
         design_value.setdefault(lineroute_, {})['level'] = level_
 
     sel_lines = design_value.keys()
-
     return (sel_lines, design_value)
+
 
 def read_frag(file_, flag_plot=None):
     """read collapse fragility parameter values
-
     >>> txt = '''ConstType, damage, index, function, param0, param1
     ... Unknown, minor, 1, lognorm, 0.85, 0.05'''
     ... Unknown, collpase, 2, lognorm, 1.02, 0.05'''
     >>> data = read_collapse_frag(StringIO(txt))
-    >>> data
+    >>> data'''
     {'Unknown': {'collapse': {'function': 'lognorm',
        'param0': 1.02,
        'param1': 0.05},
@@ -147,7 +146,8 @@ def read_frag(file_, flag_plot=None):
                 plt.grid(1)
                 plt.savefig(ttype +'_' + func +'.png')
 
-    return (frag, ds_list, nds)
+    return frag, ds_list, nds
+
 
 def read_cond_prob(file_):
     """read condition collapse probability defined by tower function 
@@ -169,7 +169,7 @@ def read_cond_prob(file_):
     ... strainer, 5, 0.10, -2, 2'''
     ... strainer, 5, 0.10, -2, 2'''
     >>> cond_pc = read_cond_prob(StringIO(txt))
-    >>> cond_pc
+    >>> cond_pc'''
     {'strainer': {'max_adj': 2,
       (-2, -1, 0, 1): 0.025,
       (-2, -1, 0, 1, 2): 0.1,
@@ -537,13 +537,14 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
 
     Usage:
     read_velocity_profile(Wind, dir_wind_timeseries, tower)
+    Wind: Event class
     """
 
     # read velocity profile for each of the towers
 
     terrain_height = read_terrain_height_multiplier(file_terrain_height)
 
-    event = {}
+    event = dict()  # dictionary of event class instances
 
     for name in tower.keys():
 
@@ -581,5 +582,4 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
         except ValueError:
             print vel_file
 
-    #ntime = len(towers[towers.keys()[0]].wind['time'])
     return event

@@ -12,6 +12,9 @@ from transmission.class_Tower import Tower
 class TestTransmission(unittest.TestCase):
     def test_something(self):
         conf = TransmissionConfig()
+        conf.test = 1
+        conf.parallel = 0
+        conf.nsims = 20
 
         shape_file_tower = conf.shape_file_tower
         shape_file_line = conf.shape_file_line
@@ -30,9 +33,7 @@ class TestTransmission(unittest.TestCase):
             for (ds, _) in ds_list:
                 npy_file = dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 tf_sim_test = np.load(npy_file)
-                print tf_sim_test.shape, tf_sim_all[line][ds].shape
                 np.testing.assert_array_equal(tf_sim_test, tf_sim_all[line][ds])
-                # self.assertEqual(np.array_equal(tf_sim_test, tf_sim_all[line][ds]), 1)
 
                 csv_file = dir_output + "/pc_line_mc_" + ds + '_' + line.replace(' - ','_') + ".csv"
                 prob_sim_test = pd.read_csv(csv_file, names=prob_sim_all[line][ds].columns, header=False)  # dataframe
@@ -48,12 +49,11 @@ class TestTransmission(unittest.TestCase):
 
                 csv_file = dir_output + "/est_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".csv"
                 est_ntower_nc_test = pd.read_csv(csv_file, names=est_ntower_all[line][ds].columns, header=False)
-                np.testing.assert_array_almost_equal(est_ntower_nc_test.as_matrix(),
-                                                     est_ntower_nc_all[line][ds].as_matrix())
+                np.testing.assert_array_almost_equal(est_ntower_nc_test.as_matrix(), est_ntower_nc_all[line][ds].as_matrix())
 
                 npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
                 prob_ntower_nc_test = np.load(npy_file)
-                np.testing.assert_array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds])
+                self.assertEqual(np.array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds]), 1)
 
 
 if __name__ == '__main__':
