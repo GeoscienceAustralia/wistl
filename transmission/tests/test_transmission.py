@@ -12,6 +12,9 @@ from transmission.class_Tower import Tower
 class TestTransmission(unittest.TestCase):
     def test_something(self):
         conf = TransmissionConfig()
+        conf.test = 1
+        conf.parallel = 0
+        conf.nsims = 20
 
         shape_file_tower = conf.shape_file_tower
         shape_file_line = conf.shape_file_line

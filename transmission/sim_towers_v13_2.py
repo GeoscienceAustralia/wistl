@@ -110,26 +110,38 @@ def main(conf):
 
     # mc approach
     # realisation of tower collapse in each simulation
-    # mc_returns = parmap.map(mc_loop, sel_lines, nsims, ntime, fid_by_line, event, tower,
-    #                         fid2name, ds_list, nds, idx_time, dir_output, flag_save)
-
     tf_sim_all = dict()
     prob_sim_all = dict()
     est_ntower_all = dict()
     prob_ntower_all = dict()
     est_ntower_nc_all = dict()
     prob_ntower_nc_all = dict()
+    import time
+    tic = time.clock()
+    if conf.parallel:
+        print "parallel MC run on......"
+        mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines, nsims, ntime,
+                            fid_by_line, event, tower, fid2name, ds_list, nds, idx_time, dir_output, flag_save)
 
-    for id, line in enumerate(sel_lines):
-        tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc = mc_loop(id, conf, sel_lines,
-            nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time, dir_output, flag_save)
+        for id, line in enumerate(sel_lines):
+            tf_sim_all[line] = mc_returns[id][0]
+            prob_sim_all[line] = mc_returns[id][1]
+            est_ntower_all[line] = mc_returns[id][2]
+            prob_ntower_all[line] = mc_returns[id][3]
+            est_ntower_nc_all[line] = mc_returns[id][4]
+            prob_ntower_nc_all[line] = mc_returns[id][5]
+    else:
+        for id, line in enumerate(sel_lines):
+            tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc = mc_loop(id, conf, sel_lines,
+                nsims, ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time, dir_output, flag_save)
+            tf_sim_all[line] = tf_sim
+            prob_sim_all[line] = prob_sim
+            est_ntower_all[line] = est_ntower
+            prob_ntower_all[line] = prob_ntower
+            est_ntower_nc_all[line] = est_ntower_nc
+            prob_ntower_nc_all[line] = prob_ntower_nc
+    print '------------>>>>>>time taken', time.clock() - tic
 
-        tf_sim_all[line] = tf_sim
-        prob_sim_all[line] = prob_sim
-        est_ntower_all[line] = est_ntower
-        prob_ntower_all[line] = prob_ntower
-        est_ntower_nc_all[line] = est_ntower_nc
-        prob_ntower_nc_all[line] = prob_ntower_nc
     print "MC calculation is completed"
     return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all
 
@@ -141,6 +153,7 @@ def mc_loop(id, conf, lines, nsims, ntime, fid_by_line, event, tower, fid2name, 
         print "we are in test, Loop", id
         prng = np.random.RandomState(id)
     else:
+        print "MC sim, Loop:", id
         prng = np.random.RandomState()
     rv = prng.uniform(size=(nsims, ntime))  # perfect correlation within a single line
 
