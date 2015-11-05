@@ -38,7 +38,7 @@ class TransmissionConfig(object):
             self.dir_output = os.path.join(self.pdir, 'output_current_glenda')
 
         # parallel or serial computation
-        self.parallel = 0
+        self.parallel = 1
 
         if not os.path.exists(self.dir_output):
             os.makedirs(self.dir_output)

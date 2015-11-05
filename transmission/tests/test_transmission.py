@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from transmission.config_class import TransmissionConfig
-from transmission.sim_towers_v13_2 import main
+from transmission.sim_towers_v13_2 import sim_towers
 from transmission.read import read_tower_GIS_information, read_velocity_profile, read_frag
 from transmission.class_Tower import Tower
 
@@ -24,7 +24,7 @@ class TestTransmission(unittest.TestCase):
 
         (frag, ds_list, nds) = read_frag(file_frag)
 
-        tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all = main(conf)
+        tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all = sim_towers(conf)
 
         for line in sel_lines:
             for (ds, _) in ds_list:

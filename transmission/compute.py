@@ -6,13 +6,13 @@ functions to compute collapse probability of tranmission towers
 - pc_adj_towers
 
 - mc_adj
-
--  
+-
 '''
 
 import numpy as np
 import pandas as pd
 from scipy.stats import itemfreq
+
 
 def cal_collapse_of_towers_analytical(list_fid, event, fid2name, ds_list, idx_time, ntime):
     """
@@ -148,7 +148,7 @@ def cal_collapse_of_towers_mc(list_fid, event, fid2name, ds_list, nsims, idx_tim
     #     prob_sim[ds] = pd.DataFrame(temp.T, 
     #         columns = [fid2name[x] for x in list_fid], index = idx_time)
 
-    return (tf_sim, prob_sim)
+    return tf_sim, prob_sim
 
 
 def cal_exp_std_no_cascading(list_fid, event, fid2name, ds_list, nsims, idx_time, ntime):
@@ -170,9 +170,9 @@ def cal_exp_std_no_cascading(list_fid, event, fid2name, ds_list, nsims, idx_time
 
         tf_sim_line[ds] = np.copy(tmp)    
 
-    (est_ntower, prob_ntower) = cal_exp_std(tf_sim_line, ds_list, idx_time)
+    est_ntower, prob_ntower = cal_exp_std(tf_sim_line, ds_list, idx_time)
 
-    return (est_ntower, prob_ntower)
+    return est_ntower, prob_ntower
 
 
 def cal_exp_std(tf_sim_line, ds_list, idx_time):
@@ -186,26 +186,26 @@ def cal_exp_std(tf_sim_line, ds_list, idx_time):
 
     for ds in tf_sim_line.keys():
 
-        (ntowers, nsims, ntime) = tf_sim_line[ds].shape
+        ntowers, nsims, ntime = tf_sim_line[ds].shape
 
         # mean and standard deviation
         x_ = np.array(range(ntowers+1))[:,np.newaxis] # (ntowers, 1)
         x2_= np.power(x_,2.0)
 
-        no_ds_acr_towers = np.sum(tf_sim_line[ds],axis=0) #(nsims, ntime)
-        no_freq = np.zeros((ntime, ntowers+1)) # (ntime, ntowers)
+        no_ds_acr_towers = np.sum(tf_sim_line[ds],axis=0)  # (nsims, ntime)
+        no_freq = np.zeros((ntime, ntowers+1))  # (ntime, ntowers)
 
         for i in range(ntime):
             val = itemfreq(no_ds_acr_towers[:, i]) # (value, freq)
             no_freq[i, [int(x) for x in val[:,0]]] = val[:,1]
 
-        prob = no_freq / float(nsims) # (ntime, ntowers)
+        prob = no_freq / float(nsims)  # (ntime, ntowers)
 
-        exp_ntower = np.dot(prob,x_)
-        std_ntower = np.sqrt(np.dot(prob,x2_) - np.power(exp_ntower, 2))
+        exp_ntower = np.dot(prob, x_)
+        std_ntower = np.sqrt(np.dot(prob, x2_) - np.power(exp_ntower, 2))
 
         est_ntower[ds] = pd.DataFrame(np.hstack((exp_ntower, std_ntower)), columns=['mean', 'std'], index=idx_time)
 
         prob_ntower[ds] = prob
 
-    return (est_ntower, prob_ntower)
+    return est_ntower, prob_ntower
