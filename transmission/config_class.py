@@ -11,19 +11,19 @@ class TransmissionConfig(object):
     def __init__(self, test=0):
         self.pdir = os.getcwd()
         self.shape_file_tower = os.path.join(
-            self.pdir, 'Shapefile_2015_01/Towers_with_extra_strainers_WGS84.shp')
+            self.pdir, 'gis_data', 'Towers_with_extra_strainers_WGS84.shp')
         self.shape_file_line = os.path.join(
-            self.pdir, 'Shapefile_2015_01/Lines_NGCP_with_synthetic_attributes_WGS84.shp')
+            self.pdir, 'gis_data', 'Lines_NGCP_with_synthetic_attributes_WGS84.shp')
 
-        self.file_frag = os.path.join(self.pdir, 'input/fragility_GA.csv')
-        self.file_cond_pc = os.path.join(self.pdir, 'input/cond_collapse_prob_NGCP.csv')
-        self.file_terrain_height = os.path.join(self.pdir, 'input/terrain_height_multiplier.csv')
-        self.flag_strainer = ['Strainer', 'dummy'] # consider strainer
+        self.file_frag = os.path.join(self.pdir, 'input', 'fragility_GA.csv')
+        self.file_cond_pc = os.path.join(self.pdir, 'input' ,'cond_collapse_prob_NGCP.csv')
+        self.file_terrain_height = os.path.join(self.pdir, 'input', 'terrain_height_multiplier.csv')
+        self.flag_strainer = ['Strainer', 'dummy']  # consider strainer
 
-        self.file_design_value = os.path.join(self.pdir, 'input/design_value_current.csv')
+        self.file_design_value = os.path.join(self.pdir, 'input', 'design_value_current.csv')
         #file_topo_value = os.path.join(pdir, 'input/topo_value_scenario_50yr.csv')
         self.file_topo_value = None
-        self.dir_wind_timeseries = os.path.join(self.pdir, 'glenda_reduced')
+        self.dir_wind_timeseries = os.path.join(self.pdir, 'wind_scenario', 'glenda_reduced')
 
         # flag for test, no need to change
         self.test = test

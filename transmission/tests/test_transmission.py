@@ -58,10 +58,10 @@ class TestTransmission(unittest.TestCase):
 
 class TestTransmissionConfig(unittest.TestCase):
     def test_whether_config_is_test(self):
-        conf = TransmissionConfig(test=1)
-        self.assertEqual(conf.test, 1)
-        self.assertEqual(conf.flag_save, 0)
-        self.assertEqual(conf.nsims, 20)
+        #conf = TransmissionConfig(test=1)
+        #self.assertEqual(conf.test, 1)
+        #self.assertEqual(conf.flag_save, 0)
+        #self.assertEqual(conf.nsims, 20)
 
         conf1 = TransmissionConfig(test=0)
         self.assertEqual(conf1.test, 0)
