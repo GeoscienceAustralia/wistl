@@ -9,10 +9,14 @@ read
 
 import pandas as pd
 import numpy as np
+import os
 from StringIO import StringIO
 import matplotlib.pyplot as plt
 from scipy.stats import lognorm
+from geopy.distance import great_circle
+
 from tower import Tower
+from event import Event
 
 def read_topo_value(file_):
     '''
@@ -212,7 +216,7 @@ def distance(origin, destination):
     # distance in km 
     lat1, lon1 = origin
     lat2, lon2 = destination
-    radius = 6371.0 # km
+    radius = 6371.0  # km
  
     dlat = np.radians(lat2-lat1)
     dlon = np.radians(lon2-lon1)
@@ -224,14 +228,19 @@ def distance(origin, destination):
     return d
 
 
-def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_value,  file_topo_value=None,
+def read_tower_gis_information(shape_file_tower, shape_file_line, file_design_value,  file_topo_value=None,
                                flag_figure=None, flag_load=1):
     """
     read geospational information of towers
 
     Usage:
-    read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, 
+    read_tower_gis_information(shape_file_tower, shape_file_line,
         flag_figure=None, flag_load = 1, sel_lines = None)
+
+    :returns
+        tower = Dictionary of towers
+        sel_lines =  line names provided in the input file.
+        TODO: Hyeuk please describe: fid_by_line, fid2name, lon, lat
     """
     shapes_tower, records_tower, fields_tower = read_shape_file(shape_file_tower)
     shapes_line, records_line, fields_line = read_shape_file(shape_file_line)
@@ -242,7 +251,7 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
         topo_value = read_topo_value(file_topo_value)
         topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 0: 1.0, 1: 1.1, 2: 1.2, 3: 1.3, 4: 1.45, 5: 1.6}
 
-    km2m = 1000.0
+    # km2m = 1000.0
 
     # typical drag height by tower type
     height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
@@ -310,7 +319,6 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
     # generate connectivity for each of line routes
     fid_by_line = {}
 
-    #for line in unq_line_route:
     for line in sel_lines:
 
         # pts
@@ -325,14 +333,17 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
         idx_sorted = []
         for item in xy_line:
 
-            diff = xy_pt - np.ones((xy_pt.shape[0],1))*item[np.newaxis,:]
-            temp = diff[:,0]*diff[:,0]+diff[:,1]*diff[:,1]
+            diff = xy_pt - np.ones((xy_pt.shape[0], 1))*item[np.newaxis, :]
+            temp = diff[:, 0]*diff[:, 0]+diff[:, 1]*diff[:, 1]
             idx = np.argmin(temp)
             tf_ = np.allclose(temp[idx], 0.0, 1.0e-4)
-            if tf_ == True:
+            if tf_:
                 idx_sorted.append(fid_pt[idx])
             else:
-                print 'Something wrong %s, %s, %s' %(line, item, xy_pt[idx])    
+                print 'Something wrong in {}, {}, or {}'.format(line, item, xy_pt[idx])
+                # import inspect
+                # return {'error': 'Something wrong in {}, {}, or {} in function {}'.format(line, item, xy_pt[idx],
+                #                                                                        inspect.stack()[0][3])}
 
         fid_by_line[line] = idx_sorted
 
@@ -348,8 +359,8 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
             pt0 = (lat[j0], lon[j0])
             pt1 = (lat[j1], lon[j1])
 
-            temp = distance(pt0, pt1)*km2m
-
+            # temp = distance(pt0, pt1)*km2m
+            temp = great_circle(pt0, pt1).meters
             dist_forward.append(temp)
 
         if flag_figure:
@@ -508,6 +519,7 @@ def dir_wind_speed(speed, bearing, t0):
 
     return dir_speed
 
+
 def convert_10_to_z(asset, terrain_height):
     """
     Mz,cat(h=10)/Mz,cat(h=z)
@@ -519,40 +531,42 @@ def convert_10_to_z(asset, terrain_height):
         mzcat_z = np.interp(asset.height_z, terrain_height['height'], terrain_height[tc_str])
     except KeyError:
         print "%s is not defined" %tc_str
+        return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
 
     mzcat_10 = terrain_height[tc_str][terrain_height['height'].index(10)]
 
-    return (mzcat_z/mzcat_10)
+    return mzcat_z/mzcat_10
 
 
-def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height):
+def read_velocity_profile(dir_wind_timeseries, tower, file_terrain_height):
     """
     read velocity time history at each tower location
 
     Usage:
     read_velocity_profile(Wind, dir_wind_timeseries, tower)
-    Wind: Event class
+    :return
+     event: dictionary of event classes
     """
 
     # read velocity profile for each of the towers
-
     terrain_height = read_terrain_height_multiplier(file_terrain_height)
 
     event = dict()  # dictionary of event class instances
 
     for name in tower.keys():
 
-        vel_file = dir_wind_timeseries + '/ts.' + name + '.csv'
+        file_name = 'ts.' + name + '.csv'
+        vel_file = os.path.join(dir_wind_timeseries, file_name)
 
         try:
-            event[name] = Wind(tower[name].fid)
+            event[name] = Event(tower[name].fid)
 
             # Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure
             data = pd.read_csv(vel_file, header=0, parse_dates=[0], index_col=[0],
-                usecols=[0,3,6],names=['','','','speed','','','bearing',''])
+                usecols=[0, 3, 6], names=['', '', '', 'speed', '', '', 'bearing', ''])
 
             speed = data['speed'].values
-            bearing = np.deg2rad(data['bearing'].values) # degree
+            bearing = np.deg2rad(data['bearing'].values)  # degree
 
             # angle of conductor relative to NS
             t0 = np.deg2rad(tower[name].strong_axis) - np.pi/2.0 
@@ -565,15 +579,19 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
 
             # convert velocity at 10m to dragt height z
 
-            #data['EW'] = pd.Series(speed*np.cos(bearing+np.pi/2.0), 
+            #data['EW'] = pd.Series(speed*np.cos(bearing+np.pi/2.0),
             #             index=data.index) # x coord
-            #data['NS'] = pd.Series(speed*np.sin(bearing-np.pi/2.0), 
+            #data['NS'] = pd.Series(speed*np.sin(bearing-np.pi/2.0),
             #             index=data.index) # y coord
             data['dir_speed'] = pd.Series(dir_speed, index=data.index)
-
             event[name].wind = data
 
-        except ValueError:
-            print 'did not find', vel_file
+        except IOError:
+            print 'File not found:', vel_file
+            import inspect
+            return {'error': 'File {} not found in function {}'.format(vel_file, inspect.stack()[0][3])}
+        except Exception as e:
+            print e
+            raise
 
     return event

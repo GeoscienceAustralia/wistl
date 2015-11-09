@@ -40,9 +40,10 @@ from scipy.optimize import minimize_scalar
 import numpy as np
 import parmap
 
-from read import read_frag, read_cond_prob, read_tower_GIS_information, read_velocity_profile
+from read import read_frag, read_cond_prob, read_tower_gis_information, read_velocity_profile
 from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
 from event import Event
+from shapefile import ShapefileException
 
 ###############################################################################
 # main procedure
@@ -65,11 +66,11 @@ def sim_towers(conf):
     nsims = conf.nsims
 
     # read GIS information
-    (tower, sel_lines, fid_by_line, fid2name, lon, lat) = \
-        read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
+    tower, sel_lines, fid_by_line, fid2name, lon, lat = \
+        read_tower_gis_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
 
     # read collapse fragility by asset type
-    (frag, ds_list, nds) = read_frag(file_frag)
+    frag, ds_list, nds = read_frag(file_frag)
 
     # read conditional collapse probability
     cond_pc = read_cond_prob(file_cond_pc)
@@ -80,7 +81,10 @@ def sim_towers(conf):
         tower[i].cal_cond_pc_adj(cond_pc, fid2name)
 
     # read wind profile and design wind speed
-    event = read_velocity_profile(Event, dir_wind_timeseries, tower, file_terrain_height)
+    event = read_velocity_profile(dir_wind_timeseries, tower, file_terrain_height)
+    if 'error' in event:
+        return event
+
     idx_time = event[event.keys()[0]].wind.index
     ntime = len(idx_time)
 

@@ -7,7 +7,8 @@ import os, sys
 
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers_v13_2 import sim_towers
-from transmission.read import read_tower_GIS_information, read_frag
+from transmission.read import read_tower_gis_information, read_frag
+from transmission.read import distance
 
 
 class TestTransmission(unittest.TestCase):
@@ -20,13 +21,23 @@ class TestTransmission(unittest.TestCase):
         file_design_value = conf.file_design_value
         file_topo_value= conf.file_topo_value
         dir_output = conf.dir_output
-        tower, sel_lines, fid_by_line, fid2name, lon, lat = \
-            read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
+        try:
+            tower, sel_lines, fid_by_line, fid2name, lon, lat = \
+                read_tower_gis_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
+        except ValueError:
+            self.assertEquals(True, False, 'Something went wrong in function {}'.format(
+                read_tower_gis_information.__name__))
+            return
 
         frag, ds_list, nds = read_frag(file_frag)
 
-        tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
+        try:
+            tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
                                     est_ntower_nc_all, prob_ntower_nc_all = sim_towers(conf)
+        except ValueError:
+            self.assertEquals(True, False, 'Something went wrong in function {}'.format(
+                read_tower_gis_information.__name__))
+            return
 
         for line in sel_lines:
             for (ds, _) in ds_list:
@@ -76,6 +87,14 @@ class TestTransmissionConfig(unittest.TestCase):
         conf1 = TransmissionConfig(test=0)
         self.assertEqual(conf1.test, 0)
 
+
+class TestReadDotPy(unittest.TestCase):
+    def test_distance(self):
+        from geopy.distance import great_circle
+        newport_ri = (41.49008, -71.312796)
+        cleveland_oh = (41.499498, -81.695391)
+        self.assertAlmostEqual(distance(newport_ri, cleveland_oh), great_circle(newport_ri, cleveland_oh).kilometers,
+                               places=0)
 
 if __name__ == '__main__':
     unittest.main()
