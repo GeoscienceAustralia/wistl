@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Tower(object):
 
     """
@@ -9,28 +10,28 @@ class Tower(object):
     def __init__(self, fid, ttype, funct, line_route, design_speed, design_span, design_level, terrain_cat, strong_axis,
                  dev_angle, height, height_z, adj=None):
 
-        self.fid = fid # integer
-        self.ttype = ttype # Lattice Tower or Steel Pole
-        self.funct = funct # e.g., suspension, terminal, strainer
-        self.line_route = line_route # string
-        self.no_curcuit = 2 # double circuit (default value)
-        self.design_speed = design_speed # design wind speed
-        self.design_span = design_span # design wind span
-        self.terrain_cat = terrain_cat # Terrain Cateogry
-        self.design_level = design_level # design level
-        self.strong_axis = strong_axis # azimuth of strong axis relative to North (deg)
-        self.dev_angle = dev_angle # deviation angle
+        self.fid = fid  # integer
+        self.ttype = ttype  # Lattice Tower or Steel Pole
+        self.funct = funct  # e.g., suspension, terminal, strainer
+        self.line_route = line_route  # string
+        self.no_curcuit = 2  # double circuit (default value)
+        self.design_speed = design_speed  # design wind speed
+        self.design_span = design_span  # design wind span
+        self.terrain_cat = terrain_cat  # Terrain Cateogry
+        self.design_level = design_level  # design level
+        self.strong_axis = strong_axis  # azimuth of strong axis relative to North (deg)
+        self.dev_angle = dev_angle  # deviation angle
         self.height = height
-        self.height_z = height_z # drag height (FIXME: typical value by type, but vary across towers)
+        self.height_z = height_z  # drag height (FIXME: typical value by type, but vary across towers)
 
         # to be assigned
-        self.actual_span = None # actual wind span on eith side
-        self.adj = adj #(left, right)
-        self.adj_list = None # (23,24,0,25,26) ~ idfy_adj_list (function specific)
+        self.actual_span = None  # actual wind span on eith side
+        self.adj = adj  # (left, right)
+        self.adj_list = None  # (23,24,0,25,26) ~ idfy_adj_list (function specific)
         self.adj_design_speed = None
         self.max_no_adj_towers = None # 
-        self.cond_pc_adj = None # dict ~ cal_cond_pc_adj
-        self.cond_pc_adj_mc = {'rel_idx': None, 'cum_prob': None} # ~ cal_cond_pc_adj
+        self.cond_pc_adj = None  # dict ~ cal_cond_pc_adj
+        self.cond_pc_adj_mc = {'rel_idx': None, 'cum_prob': None}  # ~ cal_cond_pc_adj
 
     def calc_adj_collapse_wind_speed(self):
         """
@@ -47,17 +48,14 @@ class Tower(object):
 
         # calculate utilization factor
         try:
-            #print "%s, %s, %s" %(self.fid, self.sd, self.sw)
             u = min(1.0, 1.0 - k_factor[self.no_curcuit]*
-            (1.0 - self.actual_span/self.design_span)) # 1 in case sw/sd > 1
+                (1.0 - self.actual_span/self.design_span))  # 1 in case sw/sd > 1
         except KeyError:
-            print "no. of curcuit %s is not valid: %s" %(self.fid, self.no_curcuit)    
-
+            return {'error': "no. of curcuit %s is not valid: %s" % (self.fid, self.no_curcuit)}
         self.u_val = 1.0/np.sqrt(u)
         vc = self.design_speed/np.sqrt(u)
 
         self.adj_design_speed = vc
-
         return
 
     def idfy_adj_list(self, tower, fid2name, cond_pc, flag_strainer=None):

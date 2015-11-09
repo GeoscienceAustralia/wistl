@@ -40,16 +40,8 @@ from scipy.optimize import minimize_scalar
 import numpy as np
 import parmap
 
-#from compute import compute_
-#import read
-from read import (read_frag, read_cond_prob, read_tower_GIS_information, 
-                 read_velocity_profile)
-
-#import compute
-from compute import (cal_collapse_of_towers_analytical,
-    cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading)
-
-from tower import Tower
+from read import read_frag, read_cond_prob, read_tower_GIS_information, read_velocity_profile
+from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
 from event import Event
 
 ###############################################################################

@@ -552,6 +552,6 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
             event[name].wind = data
 
         except ValueError:
-            print vel_file
+            print 'did not find', vel_file
 
     return event
