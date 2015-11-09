@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 
 
 class Tower(object):
@@ -7,31 +8,37 @@ class Tower(object):
     class Tower
     Tower class represent an individual transmission tower.
     """
-    def __init__(self, fid, ttype, funct, line_route, design_speed, design_span, design_level, terrain_cat, strong_axis,
-                 dev_angle, height, height_z, adj=None):
+    fid_gen = itertools.count()
 
-        self.fid = fid  # integer
-        self.ttype = ttype  # Lattice Tower or Steel Pole
-        self.funct = funct  # e.g., suspension, terminal, strainer
+    def __init__(self, line_route, design_speed, design_span, design_level, terrain_cat, sel_idx, item, adj=None):
+        self.fid = next(self.fid_gen)
+        self.ttype = item[sel_idx['Type']]  # Lattice Tower or Steel Pole
+        self.funct = item[sel_idx['Function']]  # e.g., suspension, terminal, strainer
         self.line_route = line_route  # string
-        self.no_curcuit = 2  # double circuit (default value)
+        self.no_circuit = 2  # double circuit (default value)
         self.design_speed = design_speed  # design wind speed
         self.design_span = design_span  # design wind span
         self.terrain_cat = terrain_cat  # Terrain Cateogry
         self.design_level = design_level  # design level
-        self.strong_axis = strong_axis  # azimuth of strong axis relative to North (deg)
-        self.dev_angle = dev_angle  # deviation angle
-        self.height = height
-        self.height_z = height_z  # drag height (FIXME: typical value by type, but vary across towers)
+        self.strong_axis = item[sel_idx['AxisAz']]  # azimuth of strong axis relative to North (deg)
+        self.dev_angle = item[sel_idx['DevAngle']]  # deviation angle
+        self.height = float(item[sel_idx['Height']])
+        self.height_z = self.height_z_based_on_tower_funct()
 
         # to be assigned
         self.actual_span = None  # actual wind span on eith side
         self.adj = adj  # (left, right)
         self.adj_list = None  # (23,24,0,25,26) ~ idfy_adj_list (function specific)
         self.adj_design_speed = None
-        self.max_no_adj_towers = None # 
+        self.max_no_adj_towers = None  #
         self.cond_pc_adj = None  # dict ~ cal_cond_pc_adj
         self.cond_pc_adj_mc = {'rel_idx': None, 'cum_prob': None}  # ~ cal_cond_pc_adj
+
+    def height_z_based_on_tower_funct(self):
+        # typical drag height by tower type
+        # drag height (FIXME: typical value by type, but vary across towers)
+        height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
+        return height_z_dic[self.funct]
 
     def calc_adj_collapse_wind_speed(self):
         """
@@ -48,10 +55,10 @@ class Tower(object):
 
         # calculate utilization factor
         try:
-            u = min(1.0, 1.0 - k_factor[self.no_curcuit]*
+            u = min(1.0, 1.0 - k_factor[self.no_circuit]*
                 (1.0 - self.actual_span/self.design_span))  # 1 in case sw/sd > 1
         except KeyError:
-            return {'error': "no. of curcuit %s is not valid: %s" % (self.fid, self.no_curcuit)}
+            return {'error': "no. of curcuit %s is not valid: %s" % (self.fid, self.no_circuit)}
         self.u_val = 1.0/np.sqrt(u)
         vc = self.design_speed/np.sqrt(u)
 

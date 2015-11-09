@@ -22,53 +22,28 @@ Todo:
     -. with our without cascading effect (mc simulation) - priority
 """
 
-'''
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-#import matplotlib.cm as cm
-#from mpl_toolkits.basemap import Basemap
-from scipy import stats
-import shapefile
-import csv
-import time
-import cPickle as pickle
-import simplekml
-import pandas as pd
-from scipy.optimize import minimize_scalar
-'''
 import numpy as np
 import parmap
 
-from read import read_frag, read_cond_prob, read_tower_gis_information, read_velocity_profile
+from read import read_frag, read_cond_prob, read_velocity_profile
 from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
-from event import Event
-from shapefile import ShapefileException
-
-###############################################################################
-# main procedure
-###############################################################################
+from read import TransmissionNetwork
 
 
 def sim_towers(conf):
-    print "==============>conf.test:", conf.test
-    shape_file_tower = conf.shape_file_tower
-    shape_file_line = conf.shape_file_line
-    dir_wind_timeseries = conf.dir_wind_timeseries
+    if conf.test:
+        print "==============>testing"
     file_frag = conf.file_frag
     file_cond_pc = conf.file_cond_pc
-    file_design_value = conf.file_design_value
-    file_terrain_height = conf.file_terrain_height
-    file_topo_value= conf.file_topo_value
     flag_strainer = conf.flag_strainer
     flag_save = conf.flag_save
     dir_output = conf.dir_output
-    nsims = conf.nsims
 
     # read GIS information
-    tower, sel_lines, fid_by_line, fid2name, lon, lat = \
-        read_tower_gis_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
+    network = TransmissionNetwork(conf)
+    tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information(conf)
 
+    print tower
     # read collapse fragility by asset type
     frag, ds_list, nds = read_frag(file_frag)
 
@@ -81,7 +56,7 @@ def sim_towers(conf):
         tower[i].cal_cond_pc_adj(cond_pc, fid2name)
 
     # read wind profile and design wind speed
-    event = read_velocity_profile(dir_wind_timeseries, tower, file_terrain_height)
+    event = read_velocity_profile(conf, tower)
     if 'error' in event:
         return event
 
@@ -120,12 +95,10 @@ def sim_towers(conf):
                                 fid_by_line, event, tower, fid2name, ds_list, nds, idx_time)
 
         for id, line in enumerate(sel_lines):
-            tf_sim_all[line] = mc_returns[id][0]
-            prob_sim_all[line] = mc_returns[id][1]
-            est_ntower_all[line] = mc_returns[id][2]
-            prob_ntower_all[line] = mc_returns[id][3]
-            est_ntower_nc_all[line] = mc_returns[id][4]
-            prob_ntower_nc_all[line] = mc_returns[id][5]
+            tf_sim_all[line], prob_sim_all[line], est_ntower_all[line], prob_ntower_all[line], \
+            est_ntower_nc_all[line], prob_ntower_nc_all[line] = \
+                mc_returns[id][0], mc_returns[id][1], mc_returns[id][2], mc_returns[id][3], \
+                mc_returns[id][4], mc_returns[id][5]
     else:
         for id, line in enumerate(sel_lines):
             tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc = mc_loop(id, conf, sel_lines,
@@ -139,7 +112,7 @@ def sim_towers(conf):
     print '------------>>>>>>time taken', time.clock() - tic
 
     print "MC calculation is completed"
-    return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all
+    return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all, sel_lines
 
 
 def mc_loop(id, conf, lines, ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time):

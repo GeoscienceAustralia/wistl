@@ -7,36 +7,27 @@ import os, sys
 
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers_v13_2 import sim_towers
-from transmission.read import read_tower_gis_information, read_frag
+from transmission.read import read_frag
 from transmission.read import distance
+from transmission.read import TransmissionNetwork
 
 
 class TestTransmission(unittest.TestCase):
 
     def test_transmission(self):
         conf = TransmissionConfig(test=1)
-        shape_file_tower = conf.shape_file_tower
-        shape_file_line = conf.shape_file_line
         file_frag = conf.file_frag
-        file_design_value = conf.file_design_value
-        file_topo_value= conf.file_topo_value
         dir_output = conf.dir_output
-        try:
-            tower, sel_lines, fid_by_line, fid2name, lon, lat = \
-                read_tower_gis_information(shape_file_tower, shape_file_line, file_design_value, file_topo_value)
-        except ValueError:
-            self.assertEquals(True, False, 'Something went wrong in function {}'.format(
-                read_tower_gis_information.__name__))
-            return
+        network = TransmissionNetwork(conf)
 
         frag, ds_list, nds = read_frag(file_frag)
 
         try:
             tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
-                                    est_ntower_nc_all, prob_ntower_nc_all = sim_towers(conf)
+                                    est_ntower_nc_all, prob_ntower_nc_all, sel_lines = sim_towers(conf)
         except ValueError:
             self.assertEquals(True, False, 'Something went wrong in function {}'.format(
-                read_tower_gis_information.__name__))
+                network.read_tower_gis_information.__name__))
             return
 
         for line in sel_lines:
@@ -89,6 +80,10 @@ class TestTransmissionConfig(unittest.TestCase):
 
 
 class TestReadDotPy(unittest.TestCase):
+    '''
+    Tests Hyeuk's distance function with that of geopy.distance.great_circle
+    Hyeuk's function is not used in the code anymore. Instead the geopy.distance.great_circle is used.
+    '''
     def test_distance(self):
         from geopy.distance import great_circle
         newport_ri = (41.49008, -71.312796)

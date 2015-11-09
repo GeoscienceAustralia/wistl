@@ -61,17 +61,20 @@ def u(v):
         # For python 2 assume str passed in and return str.
         return v
 
+
 def is_string(v):
     if PYTHON3:
         return isinstance(v, str)
     else:
         return isinstance(v, basestring)
 
+
 class _Array(array.array):
     """Converts python tuples to lits of the appropritate type.
     Used to unpack different shapefile header parts."""
     def __repr__(self):
         return str(self.tolist())
+
 
 class _Shape:
     def __init__(self, shapeType=None):
@@ -87,15 +90,18 @@ class _Shape:
         self.shapeType = shapeType
         self.points = []
 
+
 class _ShapeRecord:
     """A shape object of any type."""
     def __init__(self, shape=None, record=None):
         self.shape = shape
         self.record = record
 
+
 class ShapefileException(Exception):
     """An exception to handle shapefile specific problems."""
     pass
+
 
 class Reader:
     """Reads the three files of a shapefile as a unit or

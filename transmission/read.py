@@ -17,19 +17,22 @@ from geopy.distance import great_circle
 
 from tower import Tower
 from event import Event
+import shapefile
+
 
 def read_topo_value(file_):
     '''
     read topograhpic multipler value 
     '''
     data = pd.read_csv(file_, header=0, usecols=[0,9,10],
-        names=['Name','','','','','','','','','Mh','Mhopp'])
-    data['topo'] = np.max([data['Mh'].values, data['Mhopp'].values],axis=0)
+        names=['Name', '', '', '', '', '', '', '', '', 'Mh', 'Mhopp'])
+    data['topo'] = np.max([data['Mh'].values, data['Mhopp'].values], axis=0)
 
     val = {}
     for item in data['Name']:
         val[item] = data[data['Name']==item]['topo'].values[0]
     return val
+
 
 def read_terrain_height_multiplier(file_):
     """read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
@@ -117,11 +120,9 @@ def read_frag(file_, flag_plot=None):
                     frag[ttype][func][j+1][ds_]['param1'] = param1_
                     frag[ttype][func][j+1][ds_]['cdf'] = cdf_
 
-    ds_list = [(x, frag[ttype][func][1][x]['idx']) 
-              for x in frag[ttype][func][1].keys()]
+    ds_list = [(x, frag[ttype][func][1][x]['idx']) for x in frag[ttype][func][1].keys()]
 
-    ds_list.sort(key=lambda tup:tup[1]) # sort by ids
-    #ds_list = [('minor', 1), ('collapse', 2)]
+    ds_list.sort(key=lambda tup:tup[1])  # sort by ids
 
     nds = len(ds_list)
 
@@ -149,7 +150,7 @@ def read_frag(file_, flag_plot=None):
                 plt.title(ttype+':'+func)
                 plt.yticks(np.arange(0,1.1,0.1))
                 plt.grid(1)
-                plt.savefig(ttype +'_' + func +'.png')
+                plt.savefig(ttype + '_' + func + '.png')
 
     return frag, ds_list, nds
 
@@ -228,209 +229,187 @@ def distance(origin, destination):
     return d
 
 
-def read_tower_gis_information(shape_file_tower, shape_file_line, file_design_value,  file_topo_value=None,
-                               flag_figure=None, flag_load=1):
+class TransmissionNetwork(object):
     """
-    read geospational information of towers
-
-    Usage:
-    read_tower_gis_information(shape_file_tower, shape_file_line,
-        flag_figure=None, flag_load = 1, sel_lines = None)
-
-    :returns
-        tower = Dictionary of towers
-        sel_lines =  line names provided in the input file.
-        TODO: Hyeuk please describe: fid_by_line, fid2name, lon, lat
+    Tranmission Network which contains towers and GIS information
     """
-    shapes_tower, records_tower, fields_tower = read_shape_file(shape_file_tower)
-    shapes_line, records_line, fields_line = read_shape_file(shape_file_line)
 
-    sel_lines, design_value = read_design_value(file_design_value)
+    def __init__(self, conf):
+        self.conf = conf
 
-    if file_topo_value:
-        topo_value = read_topo_value(file_topo_value)
-        topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 0: 1.0, 1: 1.1, 2: 1.2, 3: 1.3, 4: 1.45, 5: 1.6}
+    def read_tower_gis_information(self, flag_figure=None, flag_load=1):
+        """
+        read geospational information of towers
 
-    # km2m = 1000.0
+        Usage:
+        read_tower_gis_information(shape_file_tower, shape_file_line,
+            flag_figure=None, flag_load = 1, sel_lines = None)
 
-    # typical drag height by tower type
-    height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
+        :returns
+            tower = Dictionary of towers
+            sel_lines =  line names provided in the input file.
+            TODO: Hyeuk please describe: fid_by_line, fid2name, lon, lat
+        """
+        shapes_tower, records_tower, fields_tower = read_shape_file(self.conf.shape_file_tower)
+        shapes_line, records_line, fields_line = read_shape_file(self.conf.shape_file_line)
 
-    sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle',
-                'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute', 'Height']
- 
-    sel_idx = {str_: get_field_index(fields_tower, str_) for str_ in sel_keys}
+        sel_lines, design_value = read_design_value(self.conf.file_design_value)
 
-    # processing shp file
-    tower, fid2name = {}, {}
-    fid, line_route, lat, lon = [], [], [], []
-    fid_ = 0
-    for item in records_tower:
+        if self.conf.file_topo_value:
+            topo_value = read_topo_value(self.conf.file_topo_value)
+            topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 0: 1.0, 1: 1.1, 2: 1.2,
+                        3: 1.3, 4: 1.45, 5: 1.6}
 
-        line_route_ = item[sel_idx['LineRoute']]
+        sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle',
+                    'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute', 'Height']
 
-        if line_route_ in sel_lines:
+        sel_idx = {str_: get_field_index(fields_tower, str_) for str_ in sel_keys}
 
-            name_ = item[sel_idx['Name']]
-            ttype_ = item[sel_idx['Type']]
-            funct_ = item[sel_idx['Function']]
+        # processing shp file
+        tower, fid2name = {}, {}
+        fid, line_route, lat, lon = [], [], [], []
+        fid_ = 0
+        for item in records_tower:
 
-            lat_ = item[sel_idx['Latitude']]
-            lon_ = item[sel_idx['Longitude']]
-            strong_axis_ = item[sel_idx['AxisAz']]
-            dev_angle_ = item[sel_idx['DevAngle']]
-            height_ = float(item[sel_idx['Height']])
+            line_route_ = item[sel_idx['LineRoute']]
 
-            # FIXME
-            height_z_ = height_z_dic[funct_] 
+            if line_route_ in sel_lines:
 
-            if file_topo_value:
-                idx_topo = np.sum(topo_value[name_] >= topo_dic['threshold'])
-                designSpeed_ = design_value[line_route_]['speed']*topo_dic[idx_topo]
-            else:
-                designSpeed_ = design_value[line_route_]['speed']               
+                name_ = item[sel_idx['Name']]
+                lat_ = item[sel_idx['Latitude']]
+                lon_ = item[sel_idx['Longitude']]
 
-            designSpan_ = design_value[line_route_]['span']
-            terrainCat_ = design_value[line_route_]['cat']
-            designLevel_ = design_value[line_route_]['level']
+                if self.conf.file_topo_value:
+                    idx_topo = np.sum(topo_value[name_] >= topo_dic['threshold'])
+                    design_speed = design_value[line_route_]['speed']*topo_dic[idx_topo]
+                else:
+                    design_speed = design_value[line_route_]['speed']
 
-            tower[name_] = Tower(fid_, ttype_, funct_, 
-                                 line_route_, designSpeed_, designSpan_, designLevel_,  
-                                 terrainCat_, strong_axis_, dev_angle_, height_, height_z_)
+                design_span = design_value[line_route_]['span']
+                terrain_cat = design_value[line_route_]['cat']
+                design_level = design_value[line_route_]['level']
 
-            #print "%s, %s, %s" %(name_, tower[name_].sd, sd_)
+                tower[name_] = Tower(line_route_, design_speed, design_span, design_level, terrain_cat, sel_idx, item)
 
-            fid2name[fid_] = name_
-            fid.append(fid_)
-            line_route.append(line_route_)
-            lat.append(lat_)
-            lon.append(lon_)
+                fid2name[fid_] = name_
+                fid.append(fid_)
+                line_route.append(line_route_)
+                lat.append(lat_)
+                lon.append(lon_)
+                fid_ += 1
 
-            fid_ += 1 # increase by 1
+        fid = np.array(fid)
+        line_route = np.array(line_route)
+        lat = np.array(lat, dtype=float)
+        lon = np.array(lon, dtype=float)
 
-    fid = np.array(fid)
-    line_route = np.array(line_route)
-    lat = np.array(lat, dtype=float)
-    lon = np.array(lon, dtype=float)
+        lineroute_line = list(get_data_per_polygon(records_line, fields_line, 'LineRoute'))
 
-    lineroute_line = list(get_data_per_polygon(records_line, fields_line, 
-                          'LineRoute')) 
+        # generate connectivity for each of line routes
+        fid_by_line = {}
 
-    # generate connectivity for each of line routes
-    fid_by_line = {}
+        for line in sel_lines:
 
-    for line in sel_lines:
+            # pts
+            tf = (line_route == line)
+            fid_pt = fid[tf]
+            xy_pt = np.array([lon[tf], lat[tf]], dtype=float).T
 
-        # pts
-        tf = (line_route == line)
-        fid_pt = fid[tf]
-        xy_pt = np.array([lon[tf], lat[tf]], dtype=float).T
+            # need to change once line shape file is corrected
+            i = lineroute_line.index(line)
+            xy_line = np.array(shapes_line[i].points)
 
-        # need to change once line shape file is corrected
-        i = lineroute_line.index(line)
-        xy_line = np.array(shapes_line[i].points)
+            idx_sorted = []
+            for item in xy_line:
 
-        idx_sorted = []
-        for item in xy_line:
+                diff = xy_pt - np.ones((xy_pt.shape[0], 1))*item[np.newaxis, :]
+                temp = diff[:, 0]*diff[:, 0]+diff[:, 1]*diff[:, 1]
+                idx = np.argmin(temp)
+                tf_ = np.allclose(temp[idx], 0.0, 1.0e-4)
+                if tf_:
+                    idx_sorted.append(fid_pt[idx])
+                else:
+                    print 'Something wrong in {}, {}, or {}'.format(line, item, xy_pt[idx])
 
-            diff = xy_pt - np.ones((xy_pt.shape[0], 1))*item[np.newaxis, :]
-            temp = diff[:, 0]*diff[:, 0]+diff[:, 1]*diff[:, 1]
-            idx = np.argmin(temp)
-            tf_ = np.allclose(temp[idx], 0.0, 1.0e-4)
-            if tf_:
-                idx_sorted.append(fid_pt[idx])
-            else:
-                print 'Something wrong in {}, {}, or {}'.format(line, item, xy_pt[idx])
-                # import inspect
-                # return {'error': 'Something wrong in {}, {}, or {} in function {}'.format(line, item, xy_pt[idx],
-                #                                                                        inspect.stack()[0][3])}
+            fid_by_line[line] = idx_sorted
 
-        fid_by_line[line] = idx_sorted
+            # calculate distance between towers
+            ntower_sel = sum(tf)
+            dist_forward = []
 
-        # calculate distance between towers
-        ntower_sel = sum(tf)
-        dist_forward = []
+            for i in range(ntower_sel-1):
 
-        for i in range(ntower_sel-1):
+                j0 = fid_by_line[line][i]
+                j1 = fid_by_line[line][i+1]
+                pt0 = (lat[j0], lon[j0])
+                pt1 = (lat[j1], lon[j1])
 
-            j0 = fid_by_line[line][i]
-            j1 = fid_by_line[line][i+1]
+                dist_forward.append(great_circle(pt0, pt1).meters)
 
-            pt0 = (lat[j0], lon[j0])
-            pt1 = (lat[j1], lon[j1])
+            if flag_figure:
+                pt_x, pt_y = [], []
+                for k in idx_sorted:
+                    pt_x.append(lon[fid == k])
+                    pt_y.append(lat[fid == k])
 
-            # temp = distance(pt0, pt1)*km2m
-            temp = great_circle(pt0, pt1).meters
-            dist_forward.append(temp)
+                plt.figure()
+                plt.plot(xy_line[:, 0], xy_line[:, 1], 'ro-', pt_x, pt_y, 'b-')
+                plt.title(line)
 
-        if flag_figure:
-            pt_x, pt_y = [], []
-            for k in idx_sorted:
-                pt_x.append(lon[fid==k])
-                pt_y.append(lat[fid==k])
+            # assign adj, actual_span, adj_design_speed
+            idx_sorted = np.insert(idx_sorted, 0, -1)  # start
+            idx_sorted = np.append(idx_sorted, -1)  # end
 
-            plt.figure()
-            plt.plot(xy_line[:, 0], xy_line[:, 1], 'ro-', pt_x, pt_y, 'b-')
-            plt.title(line)
+            for j in range(1, ntower_sel+1):
+                name_ = fid2name[idx_sorted[j]]
+                tower[name_].adj = (idx_sorted[j-1], idx_sorted[j+1])
 
-        # assign adj, actual_span, adj_design_speed    
-        idx_sorted = np.insert(idx_sorted, 0, -1) # start 
-        idx_sorted = np.append(idx_sorted, -1) # end
+                # compute actual wind span
+                if j == 1:
+                    val = 0.5*dist_forward[0]
+                elif j == ntower_sel:
+                    val = 0.5*dist_forward[ntower_sel-2]
+                else:
+                    val = 0.5*(dist_forward[j-2]+dist_forward[j-1])
 
-        for j in range(1, ntower_sel+1):
-            name_ = fid2name[idx_sorted[j]]
-            tower[name_].adj = (idx_sorted[j-1], idx_sorted[j+1])
+                tower[name_].actual_span = val
+                tower[name_].calc_adj_collapse_wind_speed()
 
-            # compute actual wind span
-            if j == 1:
-                val = 0.5*dist_forward[0]
-            elif j == ntower_sel:
-                val = 0.5*dist_forward[ntower_sel-2]
-            else:
-                val = 0.5*(dist_forward[j-2]+dist_forward[j-1])
-
-            tower[name_].actual_span = val
-            tower[name_].calc_adj_collapse_wind_speed()
-    
-    return tower, sel_lines, fid_by_line, fid2name, lon, lat
+        return tower, sel_lines, fid_by_line, fid2name, lon, lat
 
 
 def read_shape_file(file_shape):
     """
     read shape file
-    """    
-
-    import shapefile
+    """
     sf = shapefile.Reader(file_shape)
     shapes = sf.shapes()
     records = sf.records()
     fields = sf.fields
     fields = fields[1:]
-    
+
     return shapes, records, fields
+
 
 def get_field_index(fields, key_string):
     """
     retrieve field index
     """
-    i, tf = -1, False
-    while (tf == False) and (i < len(fields)-1):
-        i += 1
-        tf = fields[i][0] == key_string
-    if tf == True:
-        return i
-    else:
-        return np.NaN
+    f = False
+    j = np.NaN
+    for j, f in enumerate(fields):
+        if f[0] == key_string:
+            break
+    if f[0] == key_string:
+        return j
+
 
 def get_data_per_polygon(records, fields, key_string):
     """
     retrieve field data
     """
-    x = []
-    i = get_field_index(fields, key_string)
-    for item in records:
-        x.append(item[i])
-    return np.array(x)
+    return np.array(map(lambda y: y[get_field_index(fields, key_string)], records))
+
 
 def check_shape_files_tower_line(shape_file_tower, shape_file_line):
 
@@ -502,6 +481,7 @@ def check_shape_files_tower_line(shape_file_tower, shape_file_line):
 
     return (fid, name, line_route)
 
+
 def dir_wind_speed(speed, bearing, t0):
 
     # angle between wind direction and tower conductor
@@ -525,7 +505,7 @@ def convert_10_to_z(asset, terrain_height):
     Mz,cat(h=10)/Mz,cat(h=z)
     tc: terrain category (defined by line route)
     """
-    tc_str = 'tc' + str(asset.terrain_cat) # Terrain 
+    tc_str = 'tc' + str(asset.terrain_cat)  # Terrain
 
     try:
         mzcat_z = np.interp(asset.height_z, terrain_height['height'], terrain_height[tc_str])
@@ -538,7 +518,7 @@ def convert_10_to_z(asset, terrain_height):
     return mzcat_z/mzcat_10
 
 
-def read_velocity_profile(dir_wind_timeseries, tower, file_terrain_height):
+def read_velocity_profile(conf, tower):
     """
     read velocity time history at each tower location
 
@@ -549,14 +529,14 @@ def read_velocity_profile(dir_wind_timeseries, tower, file_terrain_height):
     """
 
     # read velocity profile for each of the towers
-    terrain_height = read_terrain_height_multiplier(file_terrain_height)
+    terrain_height = read_terrain_height_multiplier(conf.file_terrain_height)
 
     event = dict()  # dictionary of event class instances
 
-    for name in tower.keys():
+    for name in tower:
 
         file_name = 'ts.' + name + '.csv'
-        vel_file = os.path.join(dir_wind_timeseries, file_name)
+        vel_file = os.path.join(conf.dir_wind_timeseries, file_name)
 
         try:
             event[name] = Event(tower[name].fid)
@@ -595,3 +575,9 @@ def read_velocity_profile(dir_wind_timeseries, tower, file_terrain_height):
             raise
 
     return event
+
+
+if __name__ == '__main__':
+    from config_class import TransmissionConfig
+    conf = TransmissionConfig()
+
