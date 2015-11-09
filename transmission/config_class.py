@@ -25,7 +25,8 @@ class TransmissionConfig(object):
 
         self.file_design_value = os.path.join(self.pdir, 'input',
                                               'design_value_current.csv')
-        #file_topo_value = os.path.join(pdir, 'input/topo_value_scenario_50yr.csv')
+        #file_topo_value = os.path.join(pdir,
+        #                                'input/topo_value_scenario_50yr.csv')
         self.file_topo_value = None
         self.dir_wind_timeseries = os.path.join(self.pdir, 'wind_scenario',
                                                 'glenda_reduced')

@@ -130,62 +130,31 @@ def read_frag(file_, flag_plot=None):
 
 def read_cond_prob(file_):
     """read condition collapse probability defined by tower function
-
-    >>> txt = '''FunctionType, # of collapse, probability, start, end
-    ... suspension, 1, 0.075, 0, 1
-    ... suspension, 1, 0.075, -1, 0
-    ... suspension, 2, 0.35, -1, 1
-    ... suspension, 3, 0.025, -1, 2
-    ... suspension, 3, 0.025, -2, 1
-    ... suspension, 4, 0.10, -2, 2
-    ... strainer, 1, 0.075, 0, 1
-    ... strainer, 1, 0.075, -1, 0
-    ... strainer, 2, 0.35, -1, 1
-    ... strainer, 3, 0.025, -1, 2
-    ... strainer, 3, 0.025, -2, 1
-    ... strainer, 4, 0.10, -2, 2'''
-    ... strainer, 5, 0.10, -2, 2'''
-    ... strainer, 5, 0.10, -2, 2'''
-    ... strainer, 5, 0.10, -2, 2'''
-    >>> cond_pc = read_cond_prob(StringIO(txt))
-    >>> cond_pc'''
-    {'strainer': {'max_adj': 2,
-      (-2, -1, 0, 1): 0.025,
-      (-2, -1, 0, 1, 2): 0.1,
-      (-1, 0): 0.075,
-      (-1, 0, 1): 0.35,
-      (-1, 0, 1, 2): 0.025,
-      (0, 1): 0.075},
-     'suspension': {'max_adj': 2,
-      (-2, -1, 0, 1): 0.025,
-      (-2, -1, 0, 1, 2): 0.1,
-      (-1, 0): 0.075,
-      (-1, 0, 1): 0.35,
-      (-1, 0, 1, 2): 0.025,
-      (0, 1): 0.075}}
     """
 
     data = pd.read_csv(file_, skipinitialspace=1)
     cond_pc = {}
     for line in data.iterrows():
-        func, cls_str, thr, pb, n0, n1 = [ line[1][x] for x in
-                           ['FunctionType', 'class', 'threshold', 'probability', 'start', 'end']]
+        func, cls_str, thr, pb, n0, n1 = [
+            line[1][x] for x in ['FunctionType', 'class', 'threshold',
+                                 'probability', 'start', 'end']]
         list_ = range(int(n0), int(n1)+1)
-        cond_pc.setdefault(func,{})['threshold'] = thr
-        cond_pc[func].setdefault(cls_str,{}).setdefault('prob',{})[tuple(list_)] = float(pb)
+        cond_pc.setdefault(func, {})['threshold'] = thr
+        cond_pc[func].setdefault(cls_str, {}).setdefault('prob', {})[
+            tuple(list_)] = float(pb)
 
     for func in cond_pc.keys():
         cls_str = cond_pc[func].keys()
         cls_str.remove('threshold')
         for cls in cls_str:
-            max_no_adj_towers = np.max(np.abs([j for k in cond_pc[func][cls]['prob'].keys()
-                            for j in k]))
+            max_no_adj_towers = np.max(np.abs([
+                j for k in cond_pc[func][cls]['prob'].keys() for j in k]))
             cond_pc[func][cls]['max_adj'] = max_no_adj_towers
 
     return cond_pc
 
 
-def distance(origin, destination):
+def compute_distance(origin, destination):
     # origin, desttination (lat, lon) tuple
     # distance in km
     lat1, lon1 = origin
@@ -326,7 +295,7 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
             pt0 = (lat[j0], lon[j0])
             pt1 = (lat[j1], lon[j1])
 
-            temp = distance(pt0, pt1)*km2m
+            temp = compute_distance(pt0, pt1)*km2m
 
             dist_forward.append(temp)
 
@@ -374,7 +343,8 @@ def read_shape_file(file_shape):
     fields = sf.fields
     fields = fields[1:]
 
-    return shapes, records, fields
+    return (shapes, records, fields)
+
 
 def get_field_index(fields, key_string):
     """
