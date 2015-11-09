@@ -1,5 +1,5 @@
 '''
-read 
+read
     - collapse fragility
     - conditional proability
     - shape file
@@ -14,60 +14,38 @@ import matplotlib.pyplot as plt
 from scipy.stats import lognorm
 from tower import Tower
 
-def read_topo_value(file_):
-    '''
-    read topograhpic multipler value 
-    '''
-    data = pd.read_csv(file_, header=0, usecols=[0,9,10],
-        names=['Name','','','','','','','','','Mh','Mhopp'])
-    data['topo'] = np.max([data['Mh'].values, data['Mhopp'].values],axis=0)
 
-    val = {}
-    for item in data['Name']:
-        val[item] = data[data['Name']==item]['topo'].values[0]
-    return val
+def read_topo_value(file_):
+    """read topograhpic multipler value from the input file
+    :param file_: input file
+    :type file_: string
+
+    :returns: topography value at each site
+    :rtype: dict
+    """
+    names_str = ['Name', '', '', '', '', '', '', '', '', 'Mh', 'Mhopp']
+    data = pd.read_csv(file_, usecols=[0, 9, 10], skiprows=1,
+                       names=names_str)
+    data['topo'] = data[['Mh', 'Mhopp']].max(axis=1)
+    return data.set_index('Name').to_dict()['topo']
+
 
 def read_terrain_height_multiplier(file_):
     """read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
     """
-
-    data = pd.read_csv(file_, header=0, skipinitialspace = True)
-    height, cat1, cat2, cat3, cat4 = [], [], [], [], []
-    for line in data.iterrows():
-        height_, cat1_, cat2_, cat3_, cat4_ = [ line[1][x] for x in 
-        ['height(m)', 'terrain category 1', 'terrain category 2', 
-        'terrain category 3', 'terrain category 4']]
-        height.append(height_)
-        cat1.append(cat1_)
-        cat2.append(cat2_)
-        cat3.append(cat3_)
-        cat4.append(cat4_)
-
-    terrain_height = {}
-    terrain_height['height'] = height
-    terrain_height['tc1'] = cat1
-    terrain_height['tc2'] = cat2
-    terrain_height['tc3'] = cat3
-    terrain_height['tc4'] = cat4
-
-    return terrain_height
+    data = pd.read_csv(file_, skipinitialspace=True, skiprows=1,
+                       names=['height', 'tc1', 'tc2', 'tc3', 'tc4'])
+    return data.to_dict('list')
 
 
 def read_design_value(file_):
     """read design values by line
     """
-    data = pd.read_csv(file_, skipinitialspace=1)
-    design_value = {}
-    for line in data.iterrows():
-        lineroute_, speed_, span_, cat_, level_ = [ line[1][x] for x in 
-        ['lineroute', 'design wind speed', 'design wind span', 'terrain category', 'design level']]
-        design_value.setdefault(lineroute_, {})['speed'] = speed_
-        design_value.setdefault(lineroute_, {})['span'] = span_
-        design_value.setdefault(lineroute_, {})['cat'] = cat_
-        design_value.setdefault(lineroute_, {})['level'] = level_
+    data = pd.read_csv(file_, skipinitialspace=True, skiprows=1,
+                       names=['lineroute', 'speed', 'span', 'cat', 'level'], index_col=0)
 
-    sel_lines = design_value.keys()
-    return (sel_lines, design_value)
+    design_value = data.transpose().to_dict()
+    return (design_value.keys(), design_value)
 
 
 def read_frag(file_, flag_plot=None):
@@ -113,7 +91,7 @@ def read_frag(file_, flag_plot=None):
                     frag[ttype][func][j+1][ds_]['param1'] = param1_
                     frag[ttype][func][j+1][ds_]['cdf'] = cdf_
 
-    ds_list = [(x, frag[ttype][func][1][x]['idx']) 
+    ds_list = [(x, frag[ttype][func][1][x]['idx'])
               for x in frag[ttype][func][1].keys()]
 
     ds_list.sort(key=lambda tup:tup[1]) # sort by ids
@@ -151,7 +129,7 @@ def read_frag(file_, flag_plot=None):
 
 
 def read_cond_prob(file_):
-    """read condition collapse probability defined by tower function 
+    """read condition collapse probability defined by tower function
 
     >>> txt = '''FunctionType, # of collapse, probability, start, end
     ... suspension, 1, 0.075, 0, 1
@@ -190,7 +168,7 @@ def read_cond_prob(file_):
     data = pd.read_csv(file_, skipinitialspace=1)
     cond_pc = {}
     for line in data.iterrows():
-        func, cls_str, thr, pb, n0, n1 = [ line[1][x] for x in 
+        func, cls_str, thr, pb, n0, n1 = [ line[1][x] for x in
                            ['FunctionType', 'class', 'threshold', 'probability', 'start', 'end']]
         list_ = range(int(n0), int(n1)+1)
         cond_pc.setdefault(func,{})['threshold'] = thr
@@ -199,21 +177,21 @@ def read_cond_prob(file_):
     for func in cond_pc.keys():
         cls_str = cond_pc[func].keys()
         cls_str.remove('threshold')
-        for cls in cls_str:    
-            max_no_adj_towers = np.max(np.abs([j for k in cond_pc[func][cls]['prob'].keys() 
+        for cls in cls_str:
+            max_no_adj_towers = np.max(np.abs([j for k in cond_pc[func][cls]['prob'].keys()
                             for j in k]))
             cond_pc[func][cls]['max_adj'] = max_no_adj_towers
 
-    return cond_pc 
+    return cond_pc
 
 
 def distance(origin, destination):
     # origin, desttination (lat, lon) tuple
-    # distance in km 
+    # distance in km
     lat1, lon1 = origin
     lat2, lon2 = destination
     radius = 6371.0 # km
- 
+
     dlat = np.radians(lat2-lat1)
     dlon = np.radians(lon2-lon1)
     a = np.sin(dlat/2) * np.sin(dlat/2) + np.cos(np.radians(lat1)) \
@@ -230,7 +208,7 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
     read geospational information of towers
 
     Usage:
-    read_tower_GIS_information(Tower, shape_file_tower, shape_file_line, 
+    read_tower_GIS_information(Tower, shape_file_tower, shape_file_line,
         flag_figure=None, flag_load = 1, sel_lines = None)
     """
     shapes_tower, records_tower, fields_tower = read_shape_file(shape_file_tower)
@@ -249,7 +227,7 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
 
     sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle',
                 'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute', 'Height']
- 
+
     sel_idx = {str_: get_field_index(fields_tower, str_) for str_ in sel_keys}
 
     # processing shp file
@@ -273,20 +251,20 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
             height_ = float(item[sel_idx['Height']])
 
             # FIXME
-            height_z_ = height_z_dic[funct_] 
+            height_z_ = height_z_dic[funct_]
 
             if file_topo_value:
                 idx_topo = np.sum(topo_value[name_] >= topo_dic['threshold'])
                 designSpeed_ = design_value[line_route_]['speed']*topo_dic[idx_topo]
             else:
-                designSpeed_ = design_value[line_route_]['speed']               
+                designSpeed_ = design_value[line_route_]['speed']
 
             designSpan_ = design_value[line_route_]['span']
             terrainCat_ = design_value[line_route_]['cat']
             designLevel_ = design_value[line_route_]['level']
 
-            tower[name_] = Tower(fid_, ttype_, funct_, 
-                                 line_route_, designSpeed_, designSpan_, designLevel_,  
+            tower[name_] = Tower(fid_, ttype_, funct_,
+                                 line_route_, designSpeed_, designSpan_, designLevel_,
                                  terrainCat_, strong_axis_, dev_angle_, height_, height_z_)
 
             #print "%s, %s, %s" %(name_, tower[name_].sd, sd_)
@@ -304,8 +282,8 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
     lat = np.array(lat, dtype=float)
     lon = np.array(lon, dtype=float)
 
-    lineroute_line = list(get_data_per_polygon(records_line, fields_line, 
-                          'LineRoute')) 
+    lineroute_line = list(get_data_per_polygon(records_line, fields_line,
+                          'LineRoute'))
 
     # generate connectivity for each of line routes
     fid_by_line = {}
@@ -332,7 +310,7 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
             if tf_ == True:
                 idx_sorted.append(fid_pt[idx])
             else:
-                print 'Something wrong %s, %s, %s' %(line, item, xy_pt[idx])    
+                print 'Something wrong %s, %s, %s' %(line, item, xy_pt[idx])
 
         fid_by_line[line] = idx_sorted
 
@@ -362,8 +340,8 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
             plt.plot(xy_line[:, 0], xy_line[:, 1], 'ro-', pt_x, pt_y, 'b-')
             plt.title(line)
 
-        # assign adj, actual_span, adj_design_speed    
-        idx_sorted = np.insert(idx_sorted, 0, -1) # start 
+        # assign adj, actual_span, adj_design_speed
+        idx_sorted = np.insert(idx_sorted, 0, -1) # start
         idx_sorted = np.append(idx_sorted, -1) # end
 
         for j in range(1, ntower_sel+1):
@@ -380,14 +358,14 @@ def read_tower_GIS_information(shape_file_tower, shape_file_line, file_design_va
 
             tower[name_].actual_span = val
             tower[name_].calc_adj_collapse_wind_speed()
-    
+
     return tower, sel_lines, fid_by_line, fid2name, lon, lat
 
 
 def read_shape_file(file_shape):
     """
     read shape file
-    """    
+    """
 
     import shapefile
     sf = shapefile.Reader(file_shape)
@@ -395,7 +373,7 @@ def read_shape_file(file_shape):
     records = sf.records()
     fields = sf.fields
     fields = fields[1:]
-    
+
     return shapes, records, fields
 
 def get_field_index(fields, key_string):
@@ -428,8 +406,8 @@ def check_shape_files_tower_line(shape_file_tower, shape_file_line):
     (shapes_tower, records_tower, fields_tower) = read_shape_file(shape_file_tower)
     (shapes_line, records_line, fields_line) = read_shape_file(shape_file_line)
 
-    sel_keys = ['Name', 'Latitude', 'Longitude', 'POINT_X', 
-                     'POINT_Y', 'Mun', 'Barangay', 'ConstType', 'Function', 
+    sel_keys = ['Name', 'Latitude', 'Longitude', 'POINT_X',
+                     'POINT_Y', 'Mun', 'Barangay', 'ConstType', 'Function',
                      'LineRoute']
 
     sel_idx = {}
@@ -440,7 +418,7 @@ def check_shape_files_tower_line(shape_file_tower, shape_file_line):
 
     fid, name, line_route, lat, lon = [], [], [], [], []
     for fid_, item in enumerate(records_tower):
-        name_ = item[sel_idx['Name']] #        
+        name_ = item[sel_idx['Name']] #
         line_route_ = item[sel_idx['LineRoute']]
         lat_ = item[sel_idx['Latitude']]
         lon_ = item[sel_idx['Longitude']]
@@ -482,7 +460,7 @@ def check_shape_files_tower_line(shape_file_tower, shape_file_line):
             tf = np.allclose(abs_diff, 0.0, 1.0e-4)
 
             if tf == True:
-                print "line: %s, LineRoute: %s, line ID: %s" %(line, records_line[i][5], str(i))  
+                print "line: %s, LineRoute: %s, line ID: %s" %(line, records_line[i][5], str(i))
                 #orig_list.remove(i)
                 correct_lineroute_mapping[line] = i
                 break
@@ -496,7 +474,7 @@ def dir_wind_speed(speed, bearing, t0):
     # angle between wind direction and tower conductor
     phi = np.abs(bearing-t0)
 
-    tf = (phi <= np.pi/4) | (phi > np.pi/4*7) | ((phi > np.pi/4*3) & 
+    tf = (phi <= np.pi/4) | (phi > np.pi/4*7) | ((phi > np.pi/4*3) &
         (phi <= np.pi/4*5))
 
     cos_ = abs(np.cos(np.pi/4.0-phi))
@@ -504,7 +482,7 @@ def dir_wind_speed(speed, bearing, t0):
 
     adj = speed*np.max(np.vstack((cos_, sin_)), axis=0)
 
-    dir_speed = np.where(tf,adj,speed) # adj if true, otherwise speed 
+    dir_speed = np.where(tf,adj,speed) # adj if true, otherwise speed
 
     return dir_speed
 
@@ -513,7 +491,7 @@ def convert_10_to_z(asset, terrain_height):
     Mz,cat(h=10)/Mz,cat(h=z)
     tc: terrain category (defined by line route)
     """
-    tc_str = 'tc' + str(asset.terrain_cat) # Terrain 
+    tc_str = 'tc' + str(asset.terrain_cat) # Terrain
 
     try:
         mzcat_z = np.interp(asset.height_z, terrain_height['height'], terrain_height[tc_str])
@@ -555,7 +533,7 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
             bearing = np.deg2rad(data['bearing'].values) # degree
 
             # angle of conductor relative to NS
-            t0 = np.deg2rad(tower[name].strong_axis) - np.pi/2.0 
+            t0 = np.deg2rad(tower[name].strong_axis) - np.pi/2.0
 
             convert_factor = convert_10_to_z(tower[name], terrain_height)
 
@@ -565,9 +543,9 @@ def read_velocity_profile(Wind, dir_wind_timeseries, tower, file_terrain_height)
 
             # convert velocity at 10m to dragt height z
 
-            #data['EW'] = pd.Series(speed*np.cos(bearing+np.pi/2.0), 
+            #data['EW'] = pd.Series(speed*np.cos(bearing+np.pi/2.0),
             #             index=data.index) # x coord
-            #data['NS'] = pd.Series(speed*np.sin(bearing-np.pi/2.0), 
+            #data['NS'] = pd.Series(speed*np.sin(bearing-np.pi/2.0),
             #             index=data.index) # y coord
             data['dir_speed'] = pd.Series(dir_speed, index=data.index)
 
