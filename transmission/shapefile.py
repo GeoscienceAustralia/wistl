@@ -155,7 +155,6 @@ class Reader:
         object. Normally this method would be called by the
         constructor with the file object or file name as an
         argument."""
-        print shapefile
         if shapefile:
             (shapeName, ext) = os.path.splitext(shapefile)
             self.shapeName = shapeName

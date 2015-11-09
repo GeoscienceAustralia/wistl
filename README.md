@@ -2,7 +2,7 @@
 It is recommended that you create a `virtualenv` to run the `tlda` code. These instructions are for `ubuntu 14.04` and is expected to work for most newer versions of `ubuntu`. The `virtualenv` and the requirements can be installed using the following steps.
 
     sudo pip install virtualenv
-    sudo apt-get -y build-dep matplotlib  # then enter you root password
+    sudo apt-get -y build-dep matplotlib  # then enter your root password
     virtualenv -p python2.7 ~/tlda_venv
     source ~/tlda_venv/bin/activate
 
@@ -34,7 +34,7 @@ These files are not in repo and you will need access to these files to be able t
 Running the TLDA code is simple.
     
     cd TLDA
-    python transmission/set_data_current_glenda.py 
+    python transmission/sim_towers_v13_2.py 
 
 #### Run tests
 To run tests use either `nose` or `unittest`:
@@ -42,4 +42,7 @@ To run tests use either `nose` or `unittest`:
     cd TLDA
     python -m unittest discover transmission/tests/
     or
-    nosetest
+    nosetests
+
+#### Parallel vs Serial run
+A dedicated config file has not been implemented yet and the configuration is managed by the `TransmissionConfig` class inside the `config_class.py`. The value `self.parallel = 1` indicates that Monte Carlo simulations will be performed in parallel using all the (hyperthreaded) cores available on the computer. To change to serial computation, simply change to `self.parallel = 0` instead.

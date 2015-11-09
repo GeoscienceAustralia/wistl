@@ -18,10 +18,9 @@ class TransmissionConfig(object):
         self.file_frag = os.path.join(self.pdir, 'input/fragility_GA.csv')
         self.file_cond_pc = os.path.join(self.pdir, 'input/cond_collapse_prob_NGCP.csv')
         self.file_terrain_height = os.path.join(self.pdir, 'input/terrain_height_multiplier.csv')
-        self.flag_strainer = ['Strainer', 'dummy'] # consider strainer
+        self.flag_strainer = ['Strainer', 'dummy']  # consider strainer
 
         self.file_design_value = os.path.join(self.pdir, 'input/design_value_current.csv')
-        #file_topo_value = os.path.join(pdir, 'input/topo_value_scenario_50yr.csv')
         self.file_topo_value = None
         self.dir_wind_timeseries = os.path.join(self.pdir, 'glenda_reduced')
 
