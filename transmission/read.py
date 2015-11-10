@@ -10,11 +10,8 @@ read
 import pandas as pd
 import numpy as np
 import os
-from StringIO import StringIO
 import matplotlib.pyplot as plt
-from scipy.stats import lognorm
 from geopy.distance import great_circle
-
 from tower import Tower
 from event import Event
 import shapefile
@@ -244,79 +241,6 @@ def get_data_per_polygon(records, fields, key_string):
     retrieve field data
     """
     return map(lambda y: y[get_field_index(fields, key_string)], records)
-
-
-def check_shape_files_tower_line(shape_file_tower, shape_file_line):
-
-    """
-    check consistency of shape files of tower and line
-    Not used at the moment?
-    """
-
-    (shapes_tower, records_tower, fields_tower) = read_shape_file(shape_file_tower)
-    (shapes_line, records_line, fields_line) = read_shape_file(shape_file_line)
-
-    sel_keys = ['Name', 'Latitude', 'Longitude', 'POINT_X',
-                     'POINT_Y', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute']
-
-    sel_idx = {}
-    for str_ in sel_keys:
-        sel_idx[str_] = get_field_index(fields_tower, str_)
-
-    # processing shp file
-
-    fid, name, line_route, lat, lon = [], [], [], [], []
-    for fid_, item in enumerate(records_tower):
-        name_ = item[sel_idx['Name']] #
-        line_route_ = item[sel_idx['LineRoute']]
-        lat_ = item[sel_idx['Latitude']]
-        lon_ = item[sel_idx['Longitude']]
-
-        fid.append(fid_)
-        name.append(name_)
-        line_route.append(line_route_)
-        lat.append(lat_)
-        lon.append(lon_)
-
-    fid = np.array(fid)
-    name = np.array(name)
-    line_route = np.array(line_route)
-    lat = np.array(lat, dtype=float)
-    lon = np.array(lon, dtype=float)
-
-    unq_line_route = np.unique(line_route)
-    nline = len(unq_line_route)
-
-    # validate line route information stored in line shapefile
-    # unnecessary if line shape file corrected
-    orig_list = range(len(records_line))
-    correct_lineroute_mapping = {}
-
-    for line in unq_line_route:
-
-        idx = np.where(line_route == line)[0]
-        idx = np.random.choice(idx,1)[0]
-
-        lon_sel, lat_sel = lon[idx], lat[idx]
-
-        for i in orig_list:
-
-            xy = np.array(shapes_line[i].points)
-            #print xy.shape, lon_sel, lat_sel
-
-            diff = xy - np.ones((xy.shape[0],1))*np.array([[lon_sel, lat_sel]])
-            abs_diff = np.min(diff[:,0]*diff[:,0]+diff[:,1]*diff[:,1])
-            tf = np.allclose(abs_diff, 0.0, 1.0e-4)
-
-            if tf == True:
-                print "line: %s, LineRoute: %s, line ID: %s" %(line, records_line[i][5], str(i))
-                #orig_list.remove(i)
-                correct_lineroute_mapping[line] = i
-                break
-            else:
-                pass
-
-    return fid, name, line_route
 
 
 def read_velocity_profile(conf, tower):

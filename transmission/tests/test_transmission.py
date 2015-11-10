@@ -16,18 +16,11 @@ class TestTransmission(unittest.TestCase):
 
     def test_transmission(self):
         conf = TransmissionConfig(test=1)
-        # file_frag = conf.file_frag
         dir_output = conf.dir_output
-        network = TransmissionNetwork(conf)
 
-        # frag, ds_list, nds = read_frag(file_frag)
         # read GIS information
+        network = TransmissionNetwork(conf)
         tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information(conf)
-        name = tower.keys()[0]
-        file_name = 'ts.' + name + '.csv'
-        vel_file = os.path.join(conf.dir_wind_timeseries, file_name)
-
-        frag, ds_list, nds = Event(tower[name], vel_file).read_frag()
 
         try:
             tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
@@ -38,14 +31,14 @@ class TestTransmission(unittest.TestCase):
             return
 
         for line in sel_lines:
-            for (ds, _) in ds_list:
+            for (ds, _) in conf.ds_list:
                 try:
                     self.check_file_consistency(dir_output, ds, est_ntower_all, est_ntower_nc_all, line,
                                                 prob_ntower_all, prob_ntower_nc_all, prob_sim_all, tf_sim_all)
                 except IOError:
                     conf.flag_save = 1  # if the test files don't exist, e.g., when run for the fist time
                     tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
-                                    est_ntower_nc_all, prob_ntower_nc_all = sim_towers(conf)
+                                    est_ntower_nc_all, prob_ntower_nc_all, sel_lines = sim_towers(conf)
                     self.check_file_consistency(dir_output, ds, est_ntower_all, est_ntower_nc_all, line,
                                                 prob_ntower_all, prob_ntower_nc_all, prob_sim_all, tf_sim_all)
 
@@ -70,9 +63,6 @@ class TestTransmission(unittest.TestCase):
         npy_file = dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ', '_') + ".npy"
         prob_ntower_nc_test = np.load(npy_file)
         self.assertEqual(np.array_equal(prob_ntower_nc_test, prob_ntower_nc_all[line][ds]), 1)
-
-    def test_something_else(self):
-        self.assertEqual(True, True)
 
 
 class TestTransmissionConfig(unittest.TestCase):
