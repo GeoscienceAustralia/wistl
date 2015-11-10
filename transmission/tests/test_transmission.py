@@ -7,20 +7,27 @@ import os, sys
 
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers_v13_2 import sim_towers
-from transmission.read import read_frag
 from transmission.read import distance
 from transmission.read import TransmissionNetwork
+from transmission.event import Event
 
 
 class TestTransmission(unittest.TestCase):
 
     def test_transmission(self):
         conf = TransmissionConfig(test=1)
-        file_frag = conf.file_frag
+        # file_frag = conf.file_frag
         dir_output = conf.dir_output
         network = TransmissionNetwork(conf)
 
-        frag, ds_list, nds = read_frag(file_frag)
+        # frag, ds_list, nds = read_frag(file_frag)
+        # read GIS information
+        tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information(conf)
+        name = tower.keys()[0]
+        file_name = 'ts.' + name + '.csv'
+        vel_file = os.path.join(conf.dir_wind_timeseries, file_name)
+
+        frag, ds_list, nds = Event(tower[name], vel_file).read_frag()
 
         try:
             tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \

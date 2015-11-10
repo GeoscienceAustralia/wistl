@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.stats import lognorm
 import pandas as pd
+import matplotlib.pyplot as plt
+
 
 def dir_wind_speed(speed, bearing, t0):
 
@@ -28,13 +30,14 @@ class Event(object):
     vel_file: velocity file containing velocity time history at this tower location.
     """
     def __init__(self, tower, vel_file):
-
         self.tower = tower
         self.vel_file = vel_file
-        self.pc_wind = None  # pd.DataFrame <- cal_pc_wind
+        self.vratio = self.wind.dir_speed.values/tower.adj_design_speed
         self.pc_adj = None  # dict (ntime,) <- cal_pc_adj_towers
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict
+        self.idx_time = self.wind.index
+        # self.frag, self.ds_list, self.nds = self.read_frag()
 
     @property
     def wind(self):
@@ -72,8 +75,8 @@ class Event(object):
         mzcat_10 = terrain_height[tc_str][terrain_height['height'].index(10)]
         return mzcat_z/mzcat_10
 
-    # originally a part of Tower class but moved wind to pandas timeseries
-    def cal_pc_wind(self, asset, frag, ntime, ds_list, nds):
+    @property
+    def pc_wind(self):
         """
         compute probability of damage due to wind
         - asset: instance of Tower object
@@ -82,30 +85,24 @@ class Event(object):
         - ds_list: [('collapse', 2), ('minor', 1)]
         - nds:
         """
-
-        pc_wind = np.zeros((ntime, nds))
-
-        vratio = self.wind.dir_speed.values/asset.adj_design_speed
-
-        self.vratio = vratio
+        frag, ds_list, nds = self.read_frag()
+        pc_wind = np.zeros(shape=(len(self.idx_time), nds))
 
         try:
-            fragx = frag[asset.ttype][asset.funct]
-            idf = np.sum(fragx['dev_angle'] <= asset.dev_angle)
+            fragx = frag[self.tower.ttype][self.tower.funct]
+            idf = np.sum(fragx['dev_angle'] <= self.tower.dev_angle)
 
-            for (ds, ids) in ds_list: # damage state
+            for (ds, ids) in ds_list:  # damage state
                 med = fragx[idf][ds]['param0']
                 sig = fragx[idf][ds]['param1']
 
-                temp = lognorm.cdf(vratio, sig, scale=med)
-                pc_wind[:,ids-1] = temp # 2->1
+                temp = lognorm.cdf(self.vratio, sig, scale=med)
+                pc_wind[:, ids-1] = temp  # 2->1
 
         except KeyError:        
-                print "fragility is not defined for %s" %asset.const_type
+                print "fragility is not defined for %s" % self.tower.const_type
 
-        self.pc_wind = pd.DataFrame(pc_wind, columns=[x[0] for x in ds_list], index=self.wind.index)
-                
-        return
+        return pd.DataFrame(pc_wind, columns=[x[0] for x in ds_list], index=self.wind.index)
 
     def cal_pc_adj(self, asset, cond_pc):  # only for analytical approach
         """
@@ -195,3 +192,145 @@ class Event(object):
         self.mc_wind = mc_wind
         self.mc_adj = mc_adj
         return
+
+    @property
+    def cond_pc(self):
+        """read condition collapse probability defined by tower function
+
+        >>> txt = '''FunctionType, # of collapse, probability, start, end
+        ... suspension, 1, 0.075, 0, 1
+        ... suspension, 1, 0.075, -1, 0
+        ... suspension, 2, 0.35, -1, 1
+        ... suspension, 3, 0.025, -1, 2
+        ... suspension, 3, 0.025, -2, 1
+        ... suspension, 4, 0.10, -2, 2
+        ... strainer, 1, 0.075, 0, 1
+        ... strainer, 1, 0.075, -1, 0
+        ... strainer, 2, 0.35, -1, 1
+        ... strainer, 3, 0.025, -1, 2
+        ... strainer, 3, 0.025, -2, 1
+        ... strainer, 4, 0.10, -2, 2'''
+        ... strainer, 5, 0.10, -2, 2'''
+        ... strainer, 5, 0.10, -2, 2'''
+        ... strainer, 5, 0.10, -2, 2'''
+        >>> cond_pc = read_cond_prob(StringIO(txt))
+        >>> cond_pc'''
+        {'strainer': {'max_adj': 2,
+          (-2, -1, 0, 1): 0.025,
+          (-2, -1, 0, 1, 2): 0.1,
+          (-1, 0): 0.075,
+          (-1, 0, 1): 0.35,
+          (-1, 0, 1, 2): 0.025,
+          (0, 1): 0.075},
+         'suspension': {'max_adj': 2,
+          (-2, -1, 0, 1): 0.025,
+          (-2, -1, 0, 1, 2): 0.1,
+          (-1, 0): 0.075,
+          (-1, 0, 1): 0.35,
+          (-1, 0, 1, 2): 0.025,
+          (0, 1): 0.075}}
+        """
+
+        data = pd.read_csv(self.tower.conf.file_frag, skipinitialspace=1)
+        cond_pc = {}
+        for line in data.iterrows():
+            func, cls_str, thr, pb, n0, n1 = [line[1][x] for x in
+                                    ['FunctionType', 'class', 'threshold', 'probability', 'start', 'end']]
+            list_ = range(int(n0), int(n1)+1)
+            cond_pc.setdefault(func, {})['threshold'] = thr
+            cond_pc[func].setdefault(cls_str, {}).setdefault('prob', {})[tuple(list_)] = float(pb)
+
+        for func in cond_pc.keys():
+            cls_str = cond_pc[func].keys()
+            cls_str.remove('threshold')
+            for cls in cls_str:
+                max_no_adj_towers = np.max(np.abs([j for k in cond_pc[func][cls]['prob'].keys()
+                                for j in k]))
+                cond_pc[func][cls]['max_adj'] = max_no_adj_towers
+
+        return cond_pc
+
+    def read_frag(self, flag_plot=None):
+        """read collapse fragility parameter values
+        >>> txt = '''ConstType, damage, index, function, param0, param1
+        ... Unknown, minor, 1, lognorm, 0.85, 0.05'''
+        ... Unknown, collpase, 2, lognorm, 1.02, 0.05'''
+        >>> data = read_collapse_frag(StringIO(txt))
+        >>> data'''
+        {'Unknown': {'collapse': {'function': 'lognorm',
+           'param0': 1.02,
+           'param1': 0.05},
+          'minor': {'function': 'lognorm', 'param0': 0.85, 'param1': 0.05}}}
+        """
+
+        data = pd.read_csv(self.tower.conf.file_frag, skipinitialspace=1)
+
+        frag = {}
+        for ttype in data['tower type'].unique():
+            for func in data['function'].unique():
+                idx = (data['tower type'] == ttype) & (data['function'] == func)
+                dev0_ = data['dev0'].ix[idx].unique()
+                dev1_ = data['dev1'].ix[idx].unique()
+                dev_ = np.sort(np.union1d(dev0_, dev1_))
+
+                frag.setdefault(ttype, {}).setdefault(func, {})['dev_angle'] = dev_
+
+                for j, val in enumerate(dev0_):
+
+                    idx2 = np.where(idx & (data['dev0'] == val))[0]
+
+                    for k in idx2:
+                        ds_ = data.ix[k]['damage']
+                        idx_ = data.ix[k]['index']
+                        cdf_ = data.ix[k]['cdf']
+                        param0_ = data.ix[k]['param0']
+                        param1_ = data.ix[k]['param1']
+
+                        # dev_angle (0, 5, 15, 30, 360) <= tower_angle 0.0 => index
+                        # angle is less than 360. if 360 then 0.
+                        frag[ttype][func].setdefault(j+1, {}).setdefault(ds_, {})['idx'] = idx_
+                        frag[ttype][func][j+1][ds_]['param0'] = param0_
+                        frag[ttype][func][j+1][ds_]['param1'] = param1_
+                        frag[ttype][func][j+1][ds_]['cdf'] = cdf_
+
+        ds_list = [(x, frag[ttype][func][1][x]['idx']) for x in frag[ttype][func][1].keys()]
+        ds_list.sort(key=lambda tup: tup[1])  # sort by ids
+
+        nds = len(ds_list)
+
+        if flag_plot:
+            x = np.arange(0.5, 1.5, 0.01)
+            line_style = {'minor': '--', 'collapse': '-'}
+
+            for ttype in frag.keys():
+                for func in frag[ttype].keys():
+                    plt.figure()
+
+                    for idx in frag[ttype][func].keys():
+                        try:
+                            for ds in frag[ttype][func][idx].keys():
+                                med = frag[ttype][func][idx][ds]['param0']
+                                sig = frag[ttype][func][idx][ds]['param1']
+                                y = lognorm.cdf(x, sig, scale=med)
+                                plt.plot(x,y, line_style[ds])
+                        except AttributeError:
+                            print "no"
+
+                    plt.legend(['collapse', 'minor'], 2)
+                    plt.xlabel('Ratio of wind speed to adjusted design wind speed')
+                    plt.ylabel('Probability of exceedance')
+                    plt.title(ttype+':'+func)
+                    plt.yticks(np.arange(0, 1.1, 0.1))
+                    plt.grid(1)
+                    plt.savefig(ttype + '_' + func + '.png')
+
+        return frag, ds_list, nds
+
+
+if __name__ == '__main__':
+    from config_class import TransmissionConfig
+    conf = TransmissionConfig()
+    from read import TransmissionNetwork
+    network = TransmissionNetwork(conf)
+    tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information(conf)
+
