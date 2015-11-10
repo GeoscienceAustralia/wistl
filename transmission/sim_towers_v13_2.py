@@ -24,6 +24,7 @@ Todo:
 
 import numpy as np
 import parmap
+import time
 
 from read import read_frag, read_cond_prob, read_velocity_profile
 from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
@@ -43,7 +44,6 @@ def sim_towers(conf):
     network = TransmissionNetwork(conf)
     tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information(conf)
 
-    print tower
     # read collapse fragility by asset type
     frag, ds_list, nds = read_frag(file_frag)
 
@@ -70,8 +70,7 @@ def sim_towers(conf):
     # analytical approach
     pc_collapse = {}
     for line in sel_lines:
-        pc_collapse[line] = cal_collapse_of_towers_analytical(fid_by_line[line], 
-            event, fid2name, ds_list, idx_time, ntime)       
+        pc_collapse[line] = cal_collapse_of_towers_analytical(fid_by_line[line], event, fid2name, ds_list, idx_time)
         if flag_save:
             for (ds, _) in ds_list:
                 csv_file = dir_output + "/pc_line_" + ds + '_' + line.replace(' - ','_') + ".csv"
@@ -87,11 +86,10 @@ def sim_towers(conf):
     prob_ntower_all = dict()
     est_ntower_nc_all = dict()
     prob_ntower_nc_all = dict()
-    import time
     tic = time.clock()
     if conf.parallel:
         print "parallel MC run on......"
-        mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines, ntime,
+        mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines,
                                 fid_by_line, event, tower, fid2name, ds_list, nds, idx_time)
 
         for id, line in enumerate(sel_lines):
@@ -102,20 +100,21 @@ def sim_towers(conf):
     else:
         for id, line in enumerate(sel_lines):
             tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc = mc_loop(id, conf, sel_lines,
-                ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time)
+                fid_by_line, event, tower, fid2name, ds_list, nds, idx_time)
             tf_sim_all[line] = tf_sim
             prob_sim_all[line] = prob_sim
             est_ntower_all[line] = est_ntower
             prob_ntower_all[line] = prob_ntower
             est_ntower_nc_all[line] = est_ntower_nc
             prob_ntower_nc_all[line] = prob_ntower_nc
-    print '------------>>>>>>time taken', time.clock() - tic
+    print 'MC simulation took {} seconds'.format(time.clock() - tic)
 
     print "MC calculation is completed"
     return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all, sel_lines
 
 
-def mc_loop(id, conf, lines, ntime, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time):
+def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, ds_list, nds, idx_time):
+    ntime = len(idx_time)
     line = lines[id]
     if conf.test:
         print "we are in test, Loop", id
@@ -130,13 +129,13 @@ def mc_loop(id, conf, lines, ntime, fid_by_line, event, tower, fid2name, ds_list
 
     # compute estimated number and probability of towers without considering
     # cascading effect
-    (est_ntower_nc, prob_ntower_nc) = cal_exp_std_no_cascading(
+    est_ntower_nc, prob_ntower_nc = cal_exp_std_no_cascading(
         fid_by_line[line], event, fid2name, ds_list, conf.nsims, idx_time, ntime)
 
     # compute collapse of tower considering cascading effect
-    (tf_sim, prob_sim) = (cal_collapse_of_towers_mc(fid_by_line[line], event,
+    tf_sim, prob_sim = (cal_collapse_of_towers_mc(fid_by_line[line], event,
                                                     fid2name, ds_list, conf.nsims, idx_time, ntime))
-    (est_ntower, prob_ntower) = cal_exp_std(tf_sim, ds_list, idx_time)
+    est_ntower, prob_ntower = cal_exp_std(tf_sim, idx_time)
     if conf.flag_save:
         for (ds, _) in ds_list:
             npy_file = conf.dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"

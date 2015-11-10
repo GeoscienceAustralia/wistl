@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import itertools
 
 
@@ -10,16 +11,17 @@ class Tower(object):
     """
     fid_gen = itertools.count()
 
-    def __init__(self, line_route, design_speed, design_span, design_level, terrain_cat, sel_idx, item, adj=None):
+    def __init__(self, conf, line_route, design_speed, design_value, sel_idx, item, adj=None):
         self.fid = next(self.fid_gen)
+        self.conf = conf
         self.ttype = item[sel_idx['Type']]  # Lattice Tower or Steel Pole
         self.funct = item[sel_idx['Function']]  # e.g., suspension, terminal, strainer
         self.line_route = line_route  # string
         self.no_circuit = 2  # double circuit (default value)
         self.design_speed = design_speed  # design wind speed
-        self.design_span = design_span  # design wind span
-        self.terrain_cat = terrain_cat  # Terrain Cateogry
-        self.design_level = design_level  # design level
+        self.design_span = design_value[line_route]['span']  # design wind span
+        self.terrain_cat = design_value[line_route]['cat']  # Terrain Cateogry
+        self.design_level = design_value[line_route]['level']  # design level
         self.strong_axis = item[sel_idx['AxisAz']]  # azimuth of strong axis relative to North (deg)
         self.dev_angle = item[sel_idx['DevAngle']]  # deviation angle
         self.height = float(item[sel_idx['Height']])
@@ -40,6 +42,32 @@ class Tower(object):
         height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
         return height_z_dic[self.funct]
 
+    @property
+    def terrain_height(self):
+        """
+        read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
+        """
+        data = pd.read_csv(self.conf.file_terrain_height, header=0, skipinitialspace = True)
+        height, cat1, cat2, cat3, cat4 = [], [], [], [], []
+        for line in data.iterrows():
+            height_, cat1_, cat2_, cat3_, cat4_ = [ line[1][x] for x in
+                    ['height(m)', 'terrain category 1', 'terrain category 2',
+                    'terrain category 3', 'terrain category 4']]
+            height.append(height_)
+            cat1.append(cat1_)
+            cat2.append(cat2_)
+            cat3.append(cat3_)
+            cat4.append(cat4_)
+
+        terrain_height = dict()
+        terrain_height['height'] = height
+        terrain_height['tc1'] = cat1
+        terrain_height['tc2'] = cat2
+        terrain_height['tc3'] = cat3
+        terrain_height['tc4'] = cat4
+
+        return terrain_height
+
     def calc_adj_collapse_wind_speed(self):
         """
         calculate adjusted collapse wind speed for a tower
@@ -58,7 +86,7 @@ class Tower(object):
             u = min(1.0, 1.0 - k_factor[self.no_circuit]*
                 (1.0 - self.actual_span/self.design_span))  # 1 in case sw/sd > 1
         except KeyError:
-            return {'error': "no. of curcuit %s is not valid: %s" % (self.fid, self.no_circuit)}
+            return {'error': "no. of circuit %s is not valid: %s" % (self.fid, self.no_circuit)}
         self.u_val = 1.0/np.sqrt(u)
         vc = self.design_speed/np.sqrt(u)
 
@@ -117,8 +145,7 @@ class Tower(object):
         if flag_strainer is None:
             self.adj_list = list_left[::-1] + [self.fid] + list_right
         else:
-            self.adj_list = (mod_list_idx(list_left)[::-1] + [self.fid] +
-                             mod_list_idx(list_right))
+            self.adj_list = (mod_list_idx(list_left)[::-1] + [self.fid] + mod_list_idx(list_right))
 
         return
 
@@ -166,11 +193,9 @@ class Tower(object):
         if cond_prob.has_key((0,)): 
             cond_prob.pop((0,))
 
-        # sort by cond. prob                
-        rel_idx, prob = [], []
-        for w in sorted(cond_prob, key=cond_prob.get):
-            rel_idx.append(w)
-            prob.append(cond_prob[w])
+        # sort by cond. prob
+        rel_idx = sorted(cond_prob, key=cond_prob.get)
+        prob = map(lambda v: cond_prob[v], rel_idx)
 
         cum_prob = np.cumsum(np.array(prob))
 
@@ -178,17 +203,17 @@ class Tower(object):
         self.cond_pc_adj_mc['cum_prob'] = cum_prob
         
         # sum by node
-        cond_pc_adj = {}
-        for key_ in cond_prob.keys():
+        cond_pc_adj = dict()
+        for key_ in cond_prob:
             for i in key_:
                 try:
                     cond_pc_adj[i] += cond_prob[key_]
                 except KeyError:
                     cond_pc_adj[i] = cond_prob[key_]
 
-        if cond_pc_adj.has_key(0):
+        if 0 in cond_pc_adj:
             cond_pc_adj.pop(0)
-        
+
         self.cond_pc_adj = cond_pc_adj
 
         return

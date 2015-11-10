@@ -34,32 +34,6 @@ def read_topo_value(file_):
     return val
 
 
-def read_terrain_height_multiplier(file_):
-    """read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
-    """
-
-    data = pd.read_csv(file_, header=0, skipinitialspace = True)
-    height, cat1, cat2, cat3, cat4 = [], [], [], [], []
-    for line in data.iterrows():
-        height_, cat1_, cat2_, cat3_, cat4_ = [ line[1][x] for x in 
-        ['height(m)', 'terrain category 1', 'terrain category 2', 
-        'terrain category 3', 'terrain category 4']]
-        height.append(height_)
-        cat1.append(cat1_)
-        cat2.append(cat2_)
-        cat3.append(cat3_)
-        cat4.append(cat4_)
-
-    terrain_height = {}
-    terrain_height['height'] = height
-    terrain_height['tc1'] = cat1
-    terrain_height['tc2'] = cat2
-    terrain_height['tc3'] = cat3
-    terrain_height['tc4'] = cat4
-
-    return terrain_height
-
-
 def read_design_value(file_):
     """read design values by line
     """
@@ -98,11 +72,11 @@ def read_frag(file_, flag_plot=None):
             idx = (data['tower type'] == ttype) & (data['function'] == func)
             dev0_ = data['dev0'].ix[idx].unique()
             dev1_ = data['dev1'].ix[idx].unique()
-            dev_ = np.sort(np.union1d(dev0_,dev1_))
+            dev_ = np.sort(np.union1d(dev0_, dev1_))
 
-            frag.setdefault(ttype, {}).setdefault(func,{})['dev_angle'] = dev_
+            frag.setdefault(ttype, {}).setdefault(func, {})['dev_angle'] = dev_
 
-            for (j, val) in enumerate(dev0_):
+            for j, val in enumerate(dev0_):
 
                 idx2 = np.where(idx & (data['dev0'] == val))[0]
 
@@ -115,20 +89,19 @@ def read_frag(file_, flag_plot=None):
 
                     # dev_angle (0, 5, 15, 30, 360) <= tower_angle 0.0 => index
                     # angle is less than 360. if 360 then 0.
-                    frag[ttype][func].setdefault(j+1,{}).setdefault(ds_,{})['idx'] = idx_
+                    frag[ttype][func].setdefault(j+1, {}).setdefault(ds_, {})['idx'] = idx_
                     frag[ttype][func][j+1][ds_]['param0'] = param0_
                     frag[ttype][func][j+1][ds_]['param1'] = param1_
                     frag[ttype][func][j+1][ds_]['cdf'] = cdf_
 
     ds_list = [(x, frag[ttype][func][1][x]['idx']) for x in frag[ttype][func][1].keys()]
-
-    ds_list.sort(key=lambda tup:tup[1])  # sort by ids
+    ds_list.sort(key=lambda tup: tup[1])  # sort by ids
 
     nds = len(ds_list)
 
     if flag_plot:
         x = np.arange(0.5, 1.5, 0.01)
-        line_style = {'minor':'--','collapse':'-'}
+        line_style = {'minor': '--', 'collapse': '-'}
 
         for ttype in frag.keys():
             for func in frag[ttype].keys():
@@ -144,11 +117,11 @@ def read_frag(file_, flag_plot=None):
                     except AttributeError:
                         print "no"
 
-                plt.legend(['collapse','minor'],2)
+                plt.legend(['collapse', 'minor'], 2)
                 plt.xlabel('Ratio of wind speed to adjusted design wind speed')
                 plt.ylabel('Probability of exceedance')
                 plt.title(ttype+':'+func)
-                plt.yticks(np.arange(0,1.1,0.1))
+                plt.yticks(np.arange(0, 1.1, 0.1))
                 plt.grid(1)
                 plt.savefig(ttype + '_' + func + '.png')
 
@@ -237,7 +210,7 @@ class TransmissionNetwork(object):
     def __init__(self, conf):
         self.conf = conf
 
-    def read_tower_gis_information(self, flag_figure=None, flag_load=1):
+    def read_tower_gis_information(self, flag_figure=None):
         """
         read geospational information of towers
 
@@ -285,11 +258,7 @@ class TransmissionNetwork(object):
                 else:
                     design_speed = design_value[line_route_]['speed']
 
-                design_span = design_value[line_route_]['span']
-                terrain_cat = design_value[line_route_]['cat']
-                design_level = design_value[line_route_]['level']
-
-                tower[name_] = Tower(line_route_, design_speed, design_span, design_level, terrain_cat, sel_idx, item)
+                tower[name_] = Tower(self.conf, line_route_, design_speed, design_value, sel_idx, item)
 
                 fid2name[fid_] = name_
                 fid.append(fid_)
@@ -303,7 +272,7 @@ class TransmissionNetwork(object):
         lat = np.array(lat, dtype=float)
         lon = np.array(lon, dtype=float)
 
-        lineroute_line = list(get_data_per_polygon(records_line, fields_line, 'LineRoute'))
+        lineroute_line = get_data_per_polygon(records_line, fields_line, 'LineRoute')
 
         # generate connectivity for each of line routes
         fid_by_line = {}
@@ -408,19 +377,21 @@ def get_data_per_polygon(records, fields, key_string):
     """
     retrieve field data
     """
-    return np.array(map(lambda y: y[get_field_index(fields, key_string)], records))
+    return map(lambda y: y[get_field_index(fields, key_string)], records)
 
 
 def check_shape_files_tower_line(shape_file_tower, shape_file_line):
 
-    """check consistency of shape files of tower and line"""
+    """
+    check consistency of shape files of tower and line
+    Not used at the moment?
+    """
 
     (shapes_tower, records_tower, fields_tower) = read_shape_file(shape_file_tower)
     (shapes_line, records_line, fields_line) = read_shape_file(shape_file_line)
 
-    sel_keys = ['Name', 'Latitude', 'Longitude', 'POINT_X', 
-                     'POINT_Y', 'Mun', 'Barangay', 'ConstType', 'Function', 
-                     'LineRoute']
+    sel_keys = ['Name', 'Latitude', 'Longitude', 'POINT_X',
+                     'POINT_Y', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute']
 
     sel_idx = {}
     for str_ in sel_keys:
@@ -430,7 +401,7 @@ def check_shape_files_tower_line(shape_file_tower, shape_file_line):
 
     fid, name, line_route, lat, lon = [], [], [], [], []
     for fid_, item in enumerate(records_tower):
-        name_ = item[sel_idx['Name']] #        
+        name_ = item[sel_idx['Name']] #
         line_route_ = item[sel_idx['LineRoute']]
         lat_ = item[sel_idx['Latitude']]
         lon_ = item[sel_idx['Longitude']]
@@ -472,50 +443,14 @@ def check_shape_files_tower_line(shape_file_tower, shape_file_line):
             tf = np.allclose(abs_diff, 0.0, 1.0e-4)
 
             if tf == True:
-                print "line: %s, LineRoute: %s, line ID: %s" %(line, records_line[i][5], str(i))  
+                print "line: %s, LineRoute: %s, line ID: %s" %(line, records_line[i][5], str(i))
                 #orig_list.remove(i)
                 correct_lineroute_mapping[line] = i
                 break
             else:
                 pass
 
-    return (fid, name, line_route)
-
-
-def dir_wind_speed(speed, bearing, t0):
-
-    # angle between wind direction and tower conductor
-    phi = np.abs(bearing-t0)
-
-    tf = (phi <= np.pi/4) | (phi > np.pi/4*7) | ((phi > np.pi/4*3) & 
-        (phi <= np.pi/4*5))
-
-    cos_ = abs(np.cos(np.pi/4.0-phi))
-    sin_ = abs(np.sin(np.pi/4.0-phi))
-
-    adj = speed*np.max(np.vstack((cos_, sin_)), axis=0)
-
-    dir_speed = np.where(tf,adj,speed) # adj if true, otherwise speed 
-
-    return dir_speed
-
-
-def convert_10_to_z(asset, terrain_height):
-    """
-    Mz,cat(h=10)/Mz,cat(h=z)
-    tc: terrain category (defined by line route)
-    """
-    tc_str = 'tc' + str(asset.terrain_cat)  # Terrain
-
-    try:
-        mzcat_z = np.interp(asset.height_z, terrain_height['height'], terrain_height[tc_str])
-    except KeyError:
-        print "%s is not defined" %tc_str
-        return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
-
-    mzcat_10 = terrain_height[tc_str][terrain_height['height'].index(10)]
-
-    return mzcat_z/mzcat_10
+    return fid, name, line_route
 
 
 def read_velocity_profile(conf, tower):
@@ -527,44 +462,13 @@ def read_velocity_profile(conf, tower):
     :return
      event: dictionary of event classes
     """
-
-    # read velocity profile for each of the towers
-    terrain_height = read_terrain_height_multiplier(conf.file_terrain_height)
-
     event = dict()  # dictionary of event class instances
 
     for name in tower:
-
         file_name = 'ts.' + name + '.csv'
         vel_file = os.path.join(conf.dir_wind_timeseries, file_name)
-
         try:
-            event[name] = Event(tower[name].fid)
-
-            # Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure
-            data = pd.read_csv(vel_file, header=0, parse_dates=[0], index_col=[0],
-                usecols=[0, 3, 6], names=['', '', '', 'speed', '', '', 'bearing', ''])
-
-            speed = data['speed'].values
-            bearing = np.deg2rad(data['bearing'].values)  # degree
-
-            # angle of conductor relative to NS
-            t0 = np.deg2rad(tower[name].strong_axis) - np.pi/2.0 
-
-            convert_factor = convert_10_to_z(tower[name], terrain_height)
-
-            dir_speed = convert_factor * dir_wind_speed(speed, bearing, t0)
-
-            event[name].convert_factor = convert_factor
-
-            # convert velocity at 10m to dragt height z
-
-            #data['EW'] = pd.Series(speed*np.cos(bearing+np.pi/2.0),
-            #             index=data.index) # x coord
-            #data['NS'] = pd.Series(speed*np.sin(bearing-np.pi/2.0),
-            #             index=data.index) # y coord
-            data['dir_speed'] = pd.Series(dir_speed, index=data.index)
-            event[name].wind = data
+            event[name] = Event(tower[name], vel_file)
 
         except IOError:
             print 'File not found:', vel_file
