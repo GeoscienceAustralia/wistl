@@ -34,8 +34,6 @@ from read import TransmissionNetwork
 def sim_towers(conf):
     if conf.test:
         print "==============>testing"
-    # file_frag = conf.file_frag
-    # file_cond_pc = conf.file_cond_pc
     flag_strainer = conf.flag_strainer
     flag_save = conf.flag_save
     dir_output = conf.dir_output
@@ -50,7 +48,9 @@ def sim_towers(conf):
         tower[name].cal_cond_pc_adj(conf.cond_pc, fid2name)
 
     # read wind profile and design wind speed
-    event = read_velocity_profile(conf, tower)
+    event = read_velocity_profile(conf, tower)  # dictionary of event class instances
+
+    # Exception handling
     if 'error' in event:
         return event
 
@@ -64,11 +64,11 @@ def sim_towers(conf):
     pc_collapse = {}
     for line in sel_lines:
         pc_collapse[line] = cal_collapse_of_towers_analytical(fid_by_line[line],
-                                                    event, fid2name, conf.ds_list, idx_time)
+                                                    event, fid2name, conf.damage_states, idx_time)
         if flag_save:
             print 'Saving....'
-            for (ds, _) in conf.ds_list:
-                csv_file = dir_output + "/pc_line_" + ds + '_' + line.replace(' - ','_') + ".csv"
+            for (ds, _) in conf.damage_states:
+                csv_file = dir_output + "/pc_line_" + ds + '_' + line.replace(' - ', '_') + ".csv"
                 pc_collapse[line][ds].to_csv(csv_file)
 
     print "Analytical calculation is completed"
@@ -80,6 +80,7 @@ def sim_towers(conf):
     prob_ntower_all = dict()
     est_ntower_nc_all = dict()
     prob_ntower_nc_all = dict()
+
     tic = time.clock()
     if conf.parallel:
         print "Parallel MC run on......"
@@ -92,6 +93,7 @@ def sim_towers(conf):
                 mc_returns[id][0], mc_returns[id][1], mc_returns[id][2], mc_returns[id][3], \
                 mc_returns[id][4], mc_returns[id][5]
     else:
+        print "Serial MC run on......"
         for id, line in enumerate(sel_lines):
             tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc = mc_loop(id, conf, sel_lines,
                 fid_by_line, event, tower, fid2name, idx_time)
@@ -101,6 +103,7 @@ def sim_towers(conf):
             prob_ntower_all[line] = prob_ntower
             est_ntower_nc_all[line] = est_ntower_nc
             prob_ntower_nc_all[line] = prob_ntower_nc
+
     print 'MC simulation took {} seconds'.format(time.clock() - tic)
 
     print "MC calculation is completed"
@@ -110,7 +113,7 @@ def sim_towers(conf):
 def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
     ntime = len(idx_time)
     line = lines[id]
-    ds_list = conf.ds_list
+    damage_states = conf.damage_states
     if conf.test:
         print "we are in test, Loop", id
         prng = np.random.RandomState(id)
@@ -121,19 +124,19 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
     rv = prng.uniform(size=(conf.nsims, ntime))  # perfect correlation within a single line
 
     for i in fid_by_line[line]:
-        event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], ds_list, rv, id)
+        event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], damage_states, rv, id)
 
     # compute estimated number and probability of towers without considering
     # cascading effect
     est_ntower_nc, prob_ntower_nc = cal_exp_std_no_cascading(
-        fid_by_line[line], event, fid2name, ds_list, conf.nsims, idx_time, ntime)
+        fid_by_line[line], event, fid2name, damage_states, conf.nsims, idx_time, ntime)
 
     # compute collapse of tower considering cascading effect
     tf_sim, prob_sim = (cal_collapse_of_towers_mc(fid_by_line[line], event,
-                                                    fid2name, ds_list, conf.nsims, idx_time, ntime))
+                                                    fid2name, damage_states, conf.nsims, idx_time, ntime))
     est_ntower, prob_ntower = cal_exp_std(tf_sim, idx_time)
     if conf.flag_save:
-        for (ds, _) in ds_list:
+        for (ds, _) in damage_states:
             npy_file = conf.dir_output + "/tf_line_mc_" + ds + '_' + line.replace(' - ','_') + ".npy"
             np.save(npy_file, tf_sim[ds])
 

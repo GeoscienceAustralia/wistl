@@ -18,34 +18,27 @@ import shapefile
 
 
 def read_topo_value(file_):
-    '''
-    read topograhpic multipler value 
-    '''
-    data = pd.read_csv(file_, header=0, usecols=[0,9,10],
-        names=['Name', '', '', '', '', '', '', '', '', 'Mh', 'Mhopp'])
-    data['topo'] = np.max([data['Mh'].values, data['Mhopp'].values], axis=0)
-
-    val = {}
-    for item in data['Name']:
-        val[item] = data[data['Name']==item]['topo'].values[0]
-    return val
+    """read topograhpic multipler value from the input file
+    :param file_: input file
+    :type file_: string
+    :returns: topography value at each site
+    :rtype: dict
+    """
+    names_str = ['Name', '', '', '', '', '', '', '', '', 'Mh', 'Mhopp']
+    data = pd.read_csv(file_, usecols=[0, 9, 10], skiprows=1,
+                       names=names_str)
+    data['topo'] = data[['Mh', 'Mhopp']].max(axis=1)
+    return data.set_index('Name').to_dict()['topo']
 
 
 def read_design_value(file_):
     """read design values by line
     """
-    data = pd.read_csv(file_, skipinitialspace=1)
-    design_value = {}
-    for line in data.iterrows():
-        lineroute_, speed_, span_, cat_, level_ = [ line[1][x] for x in 
-        ['lineroute', 'design wind speed', 'design wind span', 'terrain category', 'design level']]
-        design_value.setdefault(lineroute_, {})['speed'] = speed_
-        design_value.setdefault(lineroute_, {})['span'] = span_
-        design_value.setdefault(lineroute_, {})['cat'] = cat_
-        design_value.setdefault(lineroute_, {})['level'] = level_
+    data = pd.read_csv(file_, skipinitialspace=True, skiprows=1,
+                       names=['lineroute', 'speed', 'span', 'cat', 'level'], index_col=0)
 
-    sel_lines = design_value.keys()
-    return (sel_lines, design_value)
+    design_value = data.transpose().to_dict()
+    return design_value.keys(), design_value
 
 
 def distance(origin, destination):
@@ -122,7 +115,6 @@ class TransmissionNetwork(object):
                     design_speed = design_value[line_route_]['speed']
 
                 tower[name_] = Tower(self.conf, line_route_, design_speed, design_value, sel_idx, item)
-
                 fid2name[fid_] = name_
                 fid.append(fid_)
                 line_route.append(line_route_)
@@ -250,7 +242,7 @@ def read_velocity_profile(conf, tower):
     Usage:
     read_velocity_profile(Wind, dir_wind_timeseries, tower)
     :return
-     event: dictionary of event classes
+     event: dictionary of event class instances
     """
     event = dict()  # dictionary of event class instances
 
@@ -261,12 +253,14 @@ def read_velocity_profile(conf, tower):
             event[name] = Event(tower[name], vel_file)
 
         except IOError:
-            print 'File not found:', vel_file
             import inspect
-            return {'error': 'File {} not found in function {}'.format(vel_file, inspect.stack()[0][3])}
+            print 'File not found:', vel_file
+            return {'error': 'File {vel_file} not found in function {func}'.format(vel_file=vel_file,
+                                                                                   func=inspect.stack()[0][3])}
         except Exception as e:
+            import inspect
             print e
-            raise
+            return {'error': 'Something went wrong in {func}.'.format(func=inspect.stack()[0][3])}
 
     return event
 

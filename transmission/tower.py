@@ -47,26 +47,9 @@ class Tower(object):
         """
         read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
         """
-        data = pd.read_csv(self.conf.file_terrain_height, header=0, skipinitialspace = True)
-        height, cat1, cat2, cat3, cat4 = [], [], [], [], []
-        for line in data.iterrows():
-            height_, cat1_, cat2_, cat3_, cat4_ = [ line[1][x] for x in
-                    ['height(m)', 'terrain category 1', 'terrain category 2',
-                    'terrain category 3', 'terrain category 4']]
-            height.append(height_)
-            cat1.append(cat1_)
-            cat2.append(cat2_)
-            cat3.append(cat3_)
-            cat4.append(cat4_)
-
-        terrain_height = dict()
-        terrain_height['height'] = height
-        terrain_height['tc1'] = cat1
-        terrain_height['tc2'] = cat2
-        terrain_height['tc3'] = cat3
-        terrain_height['tc4'] = cat4
-
-        return terrain_height
+        data = pd.read_csv(self.conf.file_terrain_height, skipinitialspace=True, skiprows=1,
+                           names=['height', 'tc1', 'tc2', 'tc3', 'tc4'])
+        return data.to_dict('list')
 
     def calc_adj_collapse_wind_speed(self):
         """

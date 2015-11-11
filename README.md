@@ -34,7 +34,7 @@ These files are not in repo and you will need access to these files to be able t
 Running the TLDA code is simple.
     
     cd TLDA
-    python transmission/sim_towers_v13_2.py 
+    python transmission/sim_towers.py
 
 #### Run tests
 To run tests use either `nose` or `unittest`:

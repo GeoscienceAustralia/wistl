@@ -6,7 +6,7 @@ import pandas as pd
 import os, sys
 
 from transmission.config_class import TransmissionConfig
-from transmission.sim_towers_v13_2 import sim_towers
+from transmission.sim_towers import sim_towers
 from transmission.read import distance
 from transmission.read import TransmissionNetwork
 from transmission.event import Event
@@ -31,7 +31,7 @@ class TestTransmission(unittest.TestCase):
             return
 
         for line in sel_lines:
-            for (ds, _) in conf.ds_list:
+            for (ds, _) in conf.damage_states:
                 try:
                     self.check_file_consistency(dir_output, ds, est_ntower_all, est_ntower_nc_all, line,
                                                 prob_ntower_all, prob_ntower_nc_all, prob_sim_all, tf_sim_all)
