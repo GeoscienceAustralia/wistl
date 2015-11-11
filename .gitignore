@@ -66,3 +66,7 @@ input/
 wind_scenario/
 transmission/tests/test_output_current_glenda/
 gis_data/
+
+# OS X specific
+.DS_Store
+*.sublime-*
