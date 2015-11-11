@@ -25,6 +25,7 @@ Todo:
 import numpy as np
 import parmap
 import time
+import gc
 
 from read import read_velocity_profile
 from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
@@ -40,7 +41,7 @@ def sim_towers(conf):
 
     # read GIS information
     network = TransmissionNetwork(conf)
-    tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information(conf)
+    tower, sel_lines, fid_by_line, fid2name, lon, lat = network.read_tower_gis_information()
 
     # calculate conditional collapse probability
     for i, name in enumerate(tower.keys()):
@@ -82,6 +83,7 @@ def sim_towers(conf):
     prob_ntower_nc_all = dict()
 
     tic = time.clock()
+
     if conf.parallel:
         print "Parallel MC run on......"
         mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines,
@@ -154,7 +156,6 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
 
             npy_file = conf.dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ','_') + ".npy"
             np.save(npy_file, prob_ntower_nc[ds])
-
     return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc
 
 
@@ -162,3 +163,4 @@ if __name__ == '__main__':
     from config_class import TransmissionConfig
     conf = TransmissionConfig()
     sim_towers(conf)
+
