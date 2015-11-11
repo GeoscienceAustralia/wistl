@@ -29,7 +29,7 @@ import time
 from read import read_velocity_profile
 from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
 from read import TransmissionNetwork
-
+import gc
 
 def sim_towers(conf):
     if conf.test:
@@ -159,6 +159,11 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
 
 
 if __name__ == '__main__':
+    tic = time.clock()
     from config_class import TransmissionConfig
     conf = TransmissionConfig()
     sim_towers(conf)
+    print time.clock() - tic
+    tic = time.clock()
+    gc.collect()
+    print time.clock() - tic

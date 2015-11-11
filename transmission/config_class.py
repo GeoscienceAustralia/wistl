@@ -37,11 +37,12 @@ class TransmissionConfig(object):
             self.dir_output = os.path.join(self.pdir, 'transmission', 'tests', 'test_output_current_glenda')
         else:
             self.flag_save = 0
-            self.nsims = 20
+            self.nsims = 200
             self.dir_output = os.path.join(self.pdir, 'output_current_glenda')
 
         # parallel or serial computation
-        self.parallel = 1
+        self.parallel = 0
+        self.parallel_time_level = 1
 
         if not os.path.exists(self.dir_output):
             os.makedirs(self.dir_output)
