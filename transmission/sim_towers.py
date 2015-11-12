@@ -151,7 +151,7 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
 
             npy_file = conf.dir_output + "/prob_ntower_nc_" + ds + '_' + line.replace(' - ', '_') + ".npy"
             np.save(npy_file, prob_ntower_nc[ds])
-    print 'loop finished'
+    print 'loop {} finished'.format(id)
     return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, prob_ntower_nc
 
 
