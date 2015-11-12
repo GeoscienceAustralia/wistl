@@ -3,6 +3,8 @@ __author__ = 'Sudipta Basak'
 import os
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import lognorm
 

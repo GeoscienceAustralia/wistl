@@ -10,6 +10,8 @@ read
 import pandas as pd
 import numpy as np
 import os
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 from geopy.distance import great_circle
 from tower import Tower
