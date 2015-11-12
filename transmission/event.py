@@ -122,14 +122,13 @@ class Event(object):
         """
 
         # 1. determine damage state of tower due to wind
-        val = np.array([rv < self.pc_wind[ds[0]].values for ds in damage_states]) # (nds, nsims, ntime)
+        val = np.array([rv < self.pc_wind[ds[0]].values for ds in damage_states])  # (nds, nsims, ntime)
 
-        ds_wind = np.sum(val, axis=0) # (nsims, ntime) 0(non), 1, 2 (collapse)
+        ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
 
         mc_wind = dict()
-        for (ds, ids) in damage_states:
-            (mc_wind.setdefault(ds, {})['isim'],
-             mc_wind.setdefault(ds, {})['itime']) = np.where(ds_wind == ids)
+        for ds, ids in damage_states:
+            mc_wind.setdefault(ds, {})['isim'], mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
 
         # for collapse
         unq_itime = np.unique(mc_wind['collapse']['itime'])
@@ -137,23 +136,19 @@ class Event(object):
 
         mc_adj = {}  # impact on adjacent towers
 
+        if idx:
+            prng = np.random.RandomState(idx)
+        else:
+            prng = np.random.RandomState()
+
         if nprob > 0:
-
             for jtime in unq_itime:
-
                 jdx = np.where(mc_wind['collapse']['itime'] == jtime)[0]
                 idx_sim = mc_wind['collapse']['isim'][jdx]  # index of simulation
                 nsims = len(idx_sim)
-                if idx:
-                    prng = np.random.RandomState(idx)
-                else:
-                    prng = np.random.RandomState()
                 rv = prng.uniform(size=nsims)
 
-                list_idx_cond = []
-                for rv_ in rv:
-                    idx_cond = sum(rv_ >= asset.cond_pc_adj_mc['cum_prob'])
-                    list_idx_cond.append(idx_cond)
+                list_idx_cond = map(lambda rv_: sum(rv_ >= asset.cond_pc_adj_mc['cum_prob']), rv)
 
                 # ignore simulation where none of adjacent tower collapses    
                 unq_list_idx_cond = set(list_idx_cond) - set([nprob])
@@ -164,8 +159,7 @@ class Event(object):
                     rel_idx = asset.cond_pc_adj_mc['rel_idx'][idx_cond]
 
                     # convert relative to absolute fid
-                    abs_idx = [asset.adj_list[j + asset.max_no_adj_towers] for 
-                               j in rel_idx]
+                    abs_idx = [asset.adj_list[j + asset.max_no_adj_towers] for j in rel_idx]
 
                     # filter simulation          
                     isim = [i for i, x in enumerate(list_idx_cond) if x == idx_cond]
