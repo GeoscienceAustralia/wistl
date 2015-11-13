@@ -11,7 +11,8 @@ class Tower(object):
     """
     fid_gen = itertools.count()
 
-    def __init__(self, conf, line_route, design_speed, design_value, sel_idx, item, adj=None):
+    def __init__(self, conf, line_route, design_speed, design_value, sel_idx,
+                 item, adj=None):
         self.fid = next(self.fid_gen)
         self.conf = conf
         self.ttype = item[sel_idx['Type']]  # Lattice Tower or Steel Pole
@@ -47,7 +48,8 @@ class Tower(object):
         """
         read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
         """
-        data = pd.read_csv(self.conf.file_terrain_height, skipinitialspace=True, skiprows=1,
+        data = pd.read_csv(self.conf.file_terrain_height, skipinitialspace=True,
+                           skiprows=1,
                            names=['height', 'tc1', 'tc2', 'tc3', 'tc4'])
         return data.to_dict('list')
 
@@ -55,21 +57,22 @@ class Tower(object):
         """
         calculate adjusted collapse wind speed for a tower
         Vc = Vd(h=z)/sqrt(u)
-        where u = 1-k(1-Sw/Sd) 
-        Sw: actual wind span 
+        where u = 1-k(1-Sw/Sd)
+        Sw: actual wind span
         Sd: design wind span (defined by line route)
         k: 0.33 for a single, 0.5 for double circuit
         """
 
         # k: 0.33 for a single, 0.5 for double circuit
-        k_factor = {1: 0.33, 2: 0.5} 
+        k_factor = {1: 0.33, 2: 0.5}
 
         # calculate utilization factor
         try:
-            u = min(1.0, 1.0 - k_factor[self.no_circuit]*
-                (1.0 - self.actual_span/self.design_span))  # 1 in case sw/sd > 1
+            u = min(1.0, 1.0 - k_factor[self.no_circuit] *
+                (1.0 - self.actual_span / self.design_span))  # 1 in case sw/sd > 1
         except KeyError:
-            return {'error': "no. of circuit %s is not valid: %s" % (self.fid, self.no_circuit)}
+            return {'error': "no. of circuit {} is not valid: {}"
+                    .format(self.fid, self.no_circuit)}
         self.u_val = 1.0/np.sqrt(u)
         vc = self.design_speed/np.sqrt(u)
 
@@ -85,7 +88,7 @@ class Tower(object):
             """
                 create list of adjacent towers in each direction (flag=+/-1)
             """
-            
+
             list_idx = []
             for i in range(nsteps):
                 try:
@@ -106,21 +109,24 @@ class Tower(object):
                     try:
                         tf = tower[fid2name[item]].funct in flag_strainer
                     except KeyError:
-                        print "KeyError %s" %fid2name[item]
+                        print "KeyError {}".format(fid2name[item])
 
-                    if tf == True:
+                    if tf is True:
                         list_[i] = -1
             return list_
 
         if self.funct == 'Strainer':
-            self.max_no_adj_towers = cond_pc['Strainer'][self.design_level]['max_adj']
+            self.max_no_adj_towers =\
+                cond_pc['Strainer'][self.design_level]['max_adj']
 
-        else: # Suspension or Terminal                
+        else:  # Suspension or Terminal
             thr = float(cond_pc['Suspension']['threshold'])
             if self.height > thr:
-                self.max_no_adj_towers = cond_pc['Suspension']['higher']['max_adj']
+                self.max_no_adj_towers =\
+                    cond_pc['Suspension']['higher']['max_adj']
             else:
-                self.max_no_adj_towers = cond_pc['Suspension']['lower']['max_adj']    
+                self.max_no_adj_towers =\
+                    cond_pc['Suspension']['lower']['max_adj']
 
         list_left = create_list_idx(self.fid, self.max_no_adj_towers, 0)
         list_right = create_list_idx(self.fid, self.max_no_adj_towers, 1)
@@ -128,7 +134,8 @@ class Tower(object):
         if flag_strainer is None:
             self.adj_list = list_left[::-1] + [self.fid] + list_right
         else:
-            self.adj_list = (mod_list_idx(list_left)[::-1] + [self.fid] + mod_list_idx(list_right))
+            self.adj_list = (mod_list_idx(list_left)[::-1] + [self.fid] +
+                             mod_list_idx(list_right))
 
         return
 
@@ -141,14 +148,14 @@ class Tower(object):
         if self.funct == 'Strainer':
             cond_pc_ = cond_pc['Strainer'][self.design_level]['prob']
 
-        else: # Suspension or Terminal                
+        else: # Suspension or Terminal
             thr = float(cond_pc['Suspension']['threshold'])
             if self.height > thr:
                 cond_pc_ = cond_pc['Suspension']['higher']['prob']
             else:
                 cond_pc_ = cond_pc['Suspension']['lower']['prob']
 
-        idx_m1 = np.array([i for i in range(len(self.adj_list)) 
+        idx_m1 = np.array([i for i in range(len(self.adj_list))
             if self.adj_list[i] == -1]) - self.max_no_adj_towers # rel_index
 
         try:
@@ -161,7 +168,7 @@ class Tower(object):
         except ValueError:
             min_pos = self.max_no_adj_towers + 1
 
-        bound_ = set(range(max_neg, min_pos))    
+        bound_ = set(range(max_neg, min_pos))
 
         cond_prob = {}
         for item in cond_pc_.keys():
@@ -171,9 +178,9 @@ class Tower(object):
             if cond_prob.has_key(w):
                 cond_prob[w] += cond_pc_[item]
             else:
-                cond_prob[w] = cond_pc_[item] 
+                cond_prob[w] = cond_pc_[item]
 
-        if cond_prob.has_key((0,)): 
+        if cond_prob.has_key((0,)):
             cond_prob.pop((0,))
 
         # sort by cond. prob
@@ -184,7 +191,7 @@ class Tower(object):
 
         self.cond_pc_adj_mc['rel_idx'] = rel_idx
         self.cond_pc_adj_mc['cum_prob'] = cum_prob
-        
+
         # sum by node
         cond_pc_adj = dict()
         for key_ in cond_prob:

@@ -14,7 +14,8 @@ import pandas as pd
 from scipy.stats import itemfreq
 
 
-def cal_collapse_of_towers_analytical(list_fid, event, fid2name, ds_list, idx_time):
+def cal_collapse_of_towers_analytical(list_fid, event, fid2name, ds_list,
+                                      idx_time):
     """
     calculate collapse of towers analytically
 
@@ -47,20 +48,24 @@ def cal_collapse_of_towers_analytical(list_fid, event, fid2name, ds_list, idx_ti
         for index, i in enumerate(list_fid):
 
             val = (event[fid2name[i]].pc_wind[ds].values
-                    - event[fid2name[i]].pc_wind.collapse.values + pc_collapse[index, :])
+                   - event[fid2name[i]].pc_wind.collapse.values
+                   + pc_collapse[index, :])
 
             val = np.where(val > 1.0, 1.0, val)
 
             temp[index, :] = val
 
-        prob[ds] = pd.DataFrame(temp.T, columns=[fid2name[x] for x in list_fid], index=idx_time)
+        prob[ds] = pd.DataFrame(temp.T, columns=[fid2name[x] for x in list_fid],
+                                index=idx_time)
 
-    prob['collapse'] = pd.DataFrame(pc_collapse.T, columns=[fid2name[x] for x in list_fid], index=idx_time)
-
+    prob['collapse'] = pd.DataFrame(pc_collapse.T,
+                                    columns=[fid2name[x] for x in list_fid],
+                                    index=idx_time)
     return prob
 
 
-def cal_collapse_of_towers_mc(list_fid, event, fid2name, ds_list, nsims, idx_time, ntime):
+def cal_collapse_of_towers_mc(list_fid, event, fid2name, ds_list, nsims,
+                              idx_time, ntime):
 
     ntower = len(list_fid)
     cds_list = ds_list[:]
@@ -77,7 +82,7 @@ def cal_collapse_of_towers_mc(list_fid, event, fid2name, ds_list, nsims, idx_tim
 
                 isim = event[fid2name[i]].mc_adj[j][k]
 
-                for l in k: # each fid
+                for l in k:  # each fid
 
                     tf_ds[list_fid.index(l), isim, j] = True
 
@@ -86,19 +91,23 @@ def cal_collapse_of_towers_mc(list_fid, event, fid2name, ds_list, nsims, idx_tim
     # append damage stae by direct wind
     for ds, _ in cds_list:
         for i in list_fid:
-            for (j1, k1) in zip(event[fid2name[i]].mc_wind[ds]['isim'], event[fid2name[i]].mc_wind[ds]['itime']):
+            for (j1, k1) in zip(event[fid2name[i]].mc_wind[ds]['isim'],
+                                event[fid2name[i]].mc_wind[ds]['itime']):
                 tf_ds[list_fid.index(i), j1, k1] = True
 
         temp = np.sum(tf_ds, axis=1)/float(nsims)
-    
-        prob_sim[ds] = pd.DataFrame(temp.T, columns=[fid2name[x] for x in list_fid], index=idx_time)
+
+        prob_sim[ds] = pd.DataFrame(temp.T,
+                                    columns=[fid2name[x] for x in list_fid],
+                                    index=idx_time)
 
         tf_sim[ds] = np.copy(tf_ds)
 
     return tf_sim, prob_sim
 
 
-def cal_exp_std_no_cascading(list_fid, event, fid2name, ds_list, nsims, idx_time, ntime):
+def cal_exp_std_no_cascading(list_fid, event, fid2name, ds_list, nsims,
+                             idx_time, ntime):
 
     tf_sim_line = {}
 
@@ -113,7 +122,7 @@ def cal_exp_std_no_cascading(list_fid, event, fid2name, ds_list, nsims, idx_time
             itime = event[fid2name[i]].mc_wind[ds]['itime']
             tmp[list_fid.index(i), isim, itime] = True
 
-        tf_sim_line[ds] = np.copy(tmp)    
+        tf_sim_line[ds] = np.copy(tmp)
 
     est_ntower, prob_ntower = cal_exp_std(tf_sim_line, idx_time)
 
@@ -149,7 +158,8 @@ def cal_exp_std(tf_sim_line, idx_time):
         exp_ntower = np.dot(prob, x_)
         std_ntower = np.sqrt(np.dot(prob, x2_) - np.power(exp_ntower, 2))
 
-        est_ntower[ds] = pd.DataFrame(np.hstack((exp_ntower, std_ntower)), columns=['mean', 'std'], index=idx_time)
+        est_ntower[ds] = pd.DataFrame(np.hstack((exp_ntower, std_ntower)),
+                                      columns=['mean', 'std'], index=idx_time)
 
         prob_ntower[ds] = prob
 

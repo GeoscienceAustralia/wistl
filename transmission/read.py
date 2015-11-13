@@ -1,5 +1,5 @@
 '''
-read 
+read
     - collapse fragility
     - conditional proability
     - shape file
@@ -37,28 +37,32 @@ def read_design_value(file_):
     """read design values by line
     """
     data = pd.read_csv(file_, skipinitialspace=True, skiprows=1,
-                       names=['lineroute', 'speed', 'span', 'cat', 'level'], index_col=0)
+                       names=['lineroute', 'speed', 'span', 'cat', 'level'],
+                       index_col=0)
 
     design_value = data.transpose().to_dict()
     return design_value.keys(), design_value
 
+def read_adjust_by_topo(file_):
+    """read topographic multipler for design speed adjustment
+    :param file_: input file
+    :type file_: string
 
-def distance(origin, destination):
-    # origin, desttination (lat, lon) tuple
-    # distance in km 
-    lat1, lon1 = origin
-    lat2, lon2 = destination
-    radius = 6371.0  # km
- 
-    dlat = np.radians(lat2-lat1)
-    dlon = np.radians(lon2-lon1)
-    a = np.sin(dlat/2) * np.sin(dlat/2) + np.cos(np.radians(lat1)) \
-        * np.cos(np.radians(lat2)) * np.sin(dlon/2) * np.sin(dlon/2)
-    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
-    d = radius * c
+    :returns: design speed adjustment factor
+    :rtype: dict
 
-    return d
+    """
 
+    # design speed adjustment factor
+    temp = pd.read_csv(file_, skiprows=2)
+    data = temp.set_index('key').to_dict()['value']
+
+    # threshold
+    temp = pd.read_csv(file_, skiprows=1)
+    data['threshold'] = np.array([float(x) for x in temp.columns])
+
+    assert len(data['threshold']) == len(data.keys()) - 2
+    return data
 
 class TransmissionNetwork(object):
     """
@@ -73,7 +77,7 @@ class TransmissionNetwork(object):
         read geospational information of towers
 
         Usage:
-        read_tower_gis_information(shape_file_tower, shape_file_line,
+        read_tower_gis_information(file_shape_tower, file_shape_line,
             flag_figure=None, flag_load = 1, sel_lines = None)
 
         :returns
@@ -81,20 +85,23 @@ class TransmissionNetwork(object):
             sel_lines =  line names provided in the input file.
             TODO: Hyeuk please describe: fid_by_line, fid2name, lon, lat
         """
-        shapes_tower, records_tower, fields_tower = read_shape_file(self.conf.shape_file_tower)
-        shapes_line, records_line, fields_line = read_shape_file(self.conf.shape_file_line)
+        shapes_tower, records_tower, fields_tower =\
+            read_shape_file(self.conf.file_shape_tower)
+        shapes_line, records_line, fields_line =\
+            read_shape_file(self.conf.file_shape_line)
 
         sel_lines, design_value = read_design_value(self.conf.file_design_value)
 
         if self.conf.file_topo_value:
             topo_value = read_topo_value(self.conf.file_topo_value)
-            topo_dic = {'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45]), 0: 1.0, 1: 1.1, 2: 1.2,
-                        3: 1.3, 4: 1.45, 5: 1.6}
+            adjust_by_topo = read_adjust_by_topo(self.conf.file_adjust_by_topo)
 
         sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle',
-                    'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function', 'LineRoute', 'Height']
+                    'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function',
+                    'LineRoute', 'Height']
 
-        sel_idx = {str_: get_field_index(fields_tower, str_) for str_ in sel_keys}
+        sel_idx = {str_: get_field_index(fields_tower, str_)
+                   for str_ in sel_keys}
 
         # processing shp file
         tower, fid2name = {}, {}
@@ -111,12 +118,15 @@ class TransmissionNetwork(object):
                 lon_ = item[sel_idx['Longitude']]
 
                 if self.conf.file_topo_value:
-                    idx_topo = np.sum(topo_value[name_] >= topo_dic['threshold'])
-                    design_speed = design_value[line_route_]['speed']*topo_dic[idx_topo]
+                    idx_topo = np.sum(topo_value[name_] >=
+                                      adjust_by_topo['threshold'])
+                    design_speed = design_value[line_route_]['speed'] *\
+                        adjust_by_topo[idx_topo]
                 else:
                     design_speed = design_value[line_route_]['speed']
 
-                tower[name_] = Tower(self.conf, line_route_, design_speed, design_value, sel_idx, item)
+                tower[name_] = Tower(self.conf, line_route_, design_speed,
+                                     design_value, sel_idx, item)
                 fid2name[fid_] = name_
                 fid.append(fid_)
                 line_route.append(line_route_)
@@ -129,7 +139,8 @@ class TransmissionNetwork(object):
         lat = np.array(lat, dtype=float)
         lon = np.array(lon, dtype=float)
 
-        lineroute_line = get_data_per_polygon(records_line, fields_line, 'LineRoute')
+        lineroute_line = get_data_per_polygon(records_line, fields_line,
+                                              'LineRoute')
 
         # generate connectivity for each of line routes
         fid_by_line = {}
@@ -155,7 +166,8 @@ class TransmissionNetwork(object):
                 if tf_:
                     idx_sorted.append(fid_pt[idx])
                 else:
-                    print 'Something wrong in {}, {}, or {}'.format(line, item, xy_pt[idx])
+                    print 'Something wrong in {}, {}, or {}'.format(line, item,
+                                                                    xy_pt[idx])
 
             fid_by_line[line] = idx_sorted
 
@@ -257,12 +269,13 @@ def read_velocity_profile(conf, tower):
         except IOError:
             import inspect
             print 'File not found:', vel_file
-            return {'error': 'File {vel_file} not found in function {func}'.format(vel_file=vel_file,
-                                                                                   func=inspect.stack()[0][3])}
+            return {'error': 'File {vel_file} not found in function {func}'
+                    .format(vel_file=vel_file, func=inspect.stack()[0][3])}
         except Exception as e:
             import inspect
             print e
-            return {'error': 'Something went wrong in {func}.'.format(func=inspect.stack()[0][3])}
+            return {'error': 'Something went wrong in {func}.'
+                    .format(func=inspect.stack()[0][3])}
 
     return event
 
@@ -270,4 +283,3 @@ def read_velocity_profile(conf, tower):
 if __name__ == '__main__':
     from config_class import TransmissionConfig
     conf = TransmissionConfig()
-
