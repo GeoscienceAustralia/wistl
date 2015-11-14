@@ -25,6 +25,7 @@ Todo:
 import numpy as np
 import parmap
 import time
+import os
 
 from read import read_velocity_profile
 from compute import cal_collapse_of_towers_analytical,\

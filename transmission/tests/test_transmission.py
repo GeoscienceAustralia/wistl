@@ -65,7 +65,7 @@ class TestTransmission(unittest.TestCase):
                                 'pc_line_mc_{}_{}.csv'.format(ds, line_))
         prob_sim_test = pd.read_csv(csv_file,
                                     names=prob_sim_all[line][ds].columns,
-                                    header=False)  # dataframe
+                                    header=0)  # dataframe
         np.testing.assert_array_almost_equal(prob_sim_test.as_matrix(),
                                              prob_sim_all[line][ds].as_matrix())
 
@@ -73,7 +73,7 @@ class TestTransmission(unittest.TestCase):
                                 'est_ntower_{}_{}.csv'.format(ds, line_))
         est_ntower_test = pd.read_csv(csv_file,
                                       names=est_ntower_all[line][ds].columns,
-                                      header=False)
+                                      header=0)
         np.testing.assert_array_almost_equal(est_ntower_test.as_matrix(),
                                              est_ntower_all[line][ds].as_matrix())
 
@@ -87,7 +87,7 @@ class TestTransmission(unittest.TestCase):
                                 'est_ntower_nc_{}_{}.csv'.format(ds, line_))
         est_ntower_nc_test = pd.read_csv(csv_file,
                                          names=est_ntower_all[line][ds].columns,
-                                         header=False)
+                                         header=0)
         np.testing.assert_array_almost_equal(est_ntower_nc_test.as_matrix(),
                                              est_ntower_nc_all[line][ds].as_matrix())
 
