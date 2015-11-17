@@ -42,6 +42,7 @@ class TransmissionConfig(object):
 
         # parallel or serial computation
         self.parallel = 0
+        self.parallel_towers = 0
 
         if not os.path.exists(self.dir_output):
             os.makedirs(self.dir_output)

@@ -29,6 +29,7 @@ import time
 from read import read_velocity_profile
 from compute import cal_collapse_of_towers_analytical, cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
 from read import TransmissionNetwork
+from event import cal_mc_adj
 
 
 def sim_towers(conf):
@@ -107,7 +108,7 @@ def sim_towers(conf):
     return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, est_ntower_nc_all, prob_ntower_nc_all, sel_lines
 
 
-def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
+def mc_loop(id, conf, lines, fid_by_line, events, tower, fid2name, idx_time):
     ntime = len(idx_time)
     line = lines[id]
     damage_states = conf.damage_states
@@ -120,16 +121,28 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
         id = None  # required for true random inside cal_mc_adj
     rv = prng.uniform(size=(conf.nsims, ntime))  # perfect correlation within a single line
 
-    for i in fid_by_line[line]:
-        event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], damage_states, rv, id)
+
+    # for i in fid_by_line[line]:
+    #     print '------------>>>>', i, fid2name[i]
+    #     event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], damage_states, rv, id)
+
+    tower_ids = [fid2name[l] for l in fid_by_line[line]]
+
+    if conf.parallel_towers:
+        events_list = parmap.map(cal_mc_adj, tower_ids, events, tower, damage_states, rv, id)
+        events = {t: events_list[i] for i, t in enumerate(tower_ids)}
+    else:
+        for i, l in enumerate(fid_by_line[line]):
+            tower_id = fid2name[l]
+            events[tower_id] = cal_mc_adj(tower_id, events, tower, damage_states, rv, id)
 
     # compute estimated number and probability of towers without considering
     # cascading effect
     est_ntower_nc, prob_ntower_nc = cal_exp_std_no_cascading(
-        fid_by_line[line], event, fid2name, damage_states, conf.nsims, idx_time, ntime)
+        fid_by_line[line], events, fid2name, damage_states, conf.nsims, idx_time, ntime)
 
     # compute collapse of tower considering cascading effect
-    tf_sim, prob_sim = (cal_collapse_of_towers_mc(fid_by_line[line], event,
+    tf_sim, prob_sim = (cal_collapse_of_towers_mc(fid_by_line[line], events,
                                                     fid2name, damage_states, conf.nsims, idx_time, ntime))
     est_ntower, prob_ntower = cal_exp_std(tf_sim, idx_time)
     if conf.flag_save:

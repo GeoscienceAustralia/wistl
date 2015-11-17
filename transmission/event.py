@@ -114,60 +114,63 @@ class Event(object):
 
         self.pc_adj = pc_adj
 
-    def cal_mc_adj(self, asset, damage_states, rv, idx):
-        """
-        2. determine if adjacent tower collapses or not due to pull by the tower
-        jtime: time index (array)
-        idx: multiprocessing thread id
-        """
 
-        # 1. determine damage state of tower due to wind
-        val = np.array([rv < self.pc_wind[ds[0]].values for ds in damage_states])  # (nds, nsims, ntime)
+def cal_mc_adj(tower_id, events, towers, damage_states, rv, idx):
+    """
+    2. determine if adjacent tower collapses or not due to pull by the tower
+    jtime: time index (array)
+    idx: multiprocessing thread id
+    assets: a dict of towers
+    """
+    tower = towers[tower_id]
+    event = events[tower_id]
+    # 1. determine damage state of tower due to wind
+    val = np.array([rv < event.pc_wind[ds[0]].values for ds in damage_states])  # (nds, nsims, ntime)
 
-        ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
+    ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
 
-        mc_wind = dict()
-        for ds, ids in damage_states:
-            mc_wind.setdefault(ds, {})['isim'], mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
+    mc_wind = dict()
+    for ds, ids in damage_states:
+        mc_wind.setdefault(ds, {})['isim'], mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
 
-        # for collapse
-        unq_itime = np.unique(mc_wind['collapse']['itime'])
-        nprob = len(asset.cond_pc_adj_mc['cum_prob'])  #
+    # for collapse
+    unq_itime = np.unique(mc_wind['collapse']['itime'])
+    nprob = len(tower.cond_pc_adj_mc['cum_prob'])  #
 
-        mc_adj = {}  # impact on adjacent towers
+    mc_adj = {}  # impact on adjacent towers
 
-        if idx:
-            prng = np.random.RandomState(idx)
-        else:
-            prng = np.random.RandomState()
+    if idx:
+        prng = np.random.RandomState(idx)
+    else:
+        prng = np.random.RandomState()
 
-        if nprob > 0:
-            for jtime in unq_itime:
-                jdx = np.where(mc_wind['collapse']['itime'] == jtime)[0]
-                idx_sim = mc_wind['collapse']['isim'][jdx]  # index of simulation
-                nsims = len(idx_sim)
-                rv = prng.uniform(size=nsims)
+    if nprob > 0:
+        for jtime in unq_itime:
+            jdx = np.where(mc_wind['collapse']['itime'] == jtime)[0]
+            idx_sim = mc_wind['collapse']['isim'][jdx]  # index of simulation
+            nsims = len(idx_sim)
+            rv = prng.uniform(size=nsims)
 
-                list_idx_cond = map(lambda rv_: sum(rv_ >= asset.cond_pc_adj_mc['cum_prob']), rv)
+            list_idx_cond = map(lambda rv_: sum(rv_ >= tower.cond_pc_adj_mc['cum_prob']), rv)
 
-                # ignore simulation where none of adjacent tower collapses    
-                unq_list_idx_cond = set(list_idx_cond) - set([nprob])
+            # ignore simulation where none of adjacent tower collapses
+            unq_list_idx_cond = set(list_idx_cond) - set([nprob])
 
-                for idx_cond in unq_list_idx_cond:
+            for idx_cond in unq_list_idx_cond:
 
-                    # list of idx of adjacent towers in collapse
-                    rel_idx = asset.cond_pc_adj_mc['rel_idx'][idx_cond]
+                # list of idx of adjacent towers in collapse
+                rel_idx = tower.cond_pc_adj_mc['rel_idx'][idx_cond]
 
-                    # convert relative to absolute fid
-                    abs_idx = [asset.adj_list[j + asset.max_no_adj_towers] for j in rel_idx]
+                # convert relative to absolute fid
+                abs_idx = [tower.adj_list[j + tower.max_no_adj_towers] for j in rel_idx]
 
-                    # filter simulation          
-                    isim = [i for i, x in enumerate(list_idx_cond) if x == idx_cond]
-                    mc_adj.setdefault(jtime, {})[tuple(abs_idx)] = idx_sim[isim]
+                # filter simulation
+                isim = [i for i, x in enumerate(list_idx_cond) if x == idx_cond]
+                mc_adj.setdefault(jtime, {})[tuple(abs_idx)] = idx_sim[isim]
 
-        self.mc_wind = mc_wind
-        self.mc_adj = mc_adj
-        return
+    event.mc_wind = mc_wind
+    event.mc_adj = mc_adj
+    return event
 
 if __name__ == '__main__':
     from config_class import TransmissionConfig
