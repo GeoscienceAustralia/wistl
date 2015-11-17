@@ -3,19 +3,18 @@ __author__ = 'sudipta'
 import unittest
 import numpy as np
 import pandas as pd
-import os, sys
+import os
 
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers import sim_towers
 #from transmission.read import distance
 from transmission.read import TransmissionNetwork
-from transmission.event import Event
 
 
 class TestTransmission(unittest.TestCase):
 
     def test_transmission(self):
-        conf = TransmissionConfig(test=1)
+        conf = TransmissionConfig(cfg_file='./transmission/tests/test.cfg')
         dir_output = conf.dir_output
 
         # read GIS information
@@ -25,8 +24,7 @@ class TestTransmission(unittest.TestCase):
 
         try:
             tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
-                est_ntower_nc_all, prob_ntower_nc_all, sel_lines\
-                   = sim_towers(conf)
+                est_ntower_nc_all, prob_ntower_nc_all, sel_lines = sim_towers(conf)
         except ValueError:
             self.assertEquals(True, False, 'Something went wrong in function {}'
                               .format(network.read_tower_gis_information.__name__))
@@ -100,13 +98,13 @@ class TestTransmission(unittest.TestCase):
 
 class TestTransmissionConfig(unittest.TestCase):
     def test_whether_config_is_test(self):
-        conf = TransmissionConfig(test=1)
+        conf = TransmissionConfig(cfg_file='./transmission/tests/test.cfg')
         self.assertEqual(conf.test, 1)
         self.assertEqual(conf.flag_save, 0)
         self.assertEqual(conf.nsims, 20)
 
-        conf1 = TransmissionConfig(test=0)
-        self.assertEqual(conf1.test, 0)
+        #conf1 = TransmissionConfig(test=0)
+        #self.assertEqual(conf1.test, 0)
 
 
 # class TestReadDotPy(unittest.TestCase):

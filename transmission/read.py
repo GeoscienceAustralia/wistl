@@ -43,6 +43,7 @@ def read_design_value(file_):
     design_value = data.transpose().to_dict()
     return design_value.keys(), design_value
 
+
 def read_adjust_by_topo(file_):
     """read topographic multipler for design speed adjustment
     :param file_: input file
@@ -63,6 +64,7 @@ def read_adjust_by_topo(file_):
 
     assert len(data['threshold']) == len(data.keys()) - 2
     return data
+
 
 class TransmissionNetwork(object):
     """
@@ -92,9 +94,9 @@ class TransmissionNetwork(object):
 
         sel_lines, design_value = read_design_value(self.conf.file_design_value)
 
-        if self.conf.file_topo_value:
-            topo_value = read_topo_value(self.conf.file_topo_value)
-            adjust_by_topo = read_adjust_by_topo(self.conf.file_adjust_by_topo)
+        # if self.flag_adjust_design_by_topography:
+        #     topo_value = read_topo_value(self.conf.file_topo_value)
+        #     adjust_by_topo = read_adjust_by_topo(self.conf.file_adjust_by_topo)
 
         sel_keys = ['Type', 'Name', 'Latitude', 'Longitude', 'DevAngle',
                     'AxisAz', 'Mun', 'Barangay', 'ConstType', 'Function',
@@ -117,7 +119,7 @@ class TransmissionNetwork(object):
                 lat_ = item[sel_idx['Latitude']]
                 lon_ = item[sel_idx['Longitude']]
 
-                if self.conf.file_topo_value:
+                if self.conf.flag_adjust_design_by_topo:
                     idx_topo = np.sum(topo_value[name_] >=
                                       adjust_by_topo['threshold'])
                     design_speed = design_value[line_route_]['speed'] *\
@@ -278,7 +280,6 @@ def read_velocity_profile(conf, tower):
                     .format(func=inspect.stack()[0][3])}
 
     return event
-
 
 if __name__ == '__main__':
     from config_class import TransmissionConfig

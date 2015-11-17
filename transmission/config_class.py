@@ -1,8 +1,11 @@
 #!/usr/bin/env python
-__author__ = 'Sudipta Basak'
+__author__ = 'Sudipta Basak, Hyeuk Ryu'
 import os
+import sys
 import numpy as np
 import pandas as pd
+import ConfigParser
+
 #import matplotlib as mpl
 #mpl.use('Agg')
 #import matplotlib.pyplot as plt
@@ -12,69 +15,136 @@ import pandas as pd
 class TransmissionConfig(object):
     """
     class to hold all configuration variables.
-    Should eventually be read from a config file. Not implemented yet.
     """
-    def __init__(self, test=0):
-        self.pdir = os.getcwd()
-        self.file_shape_tower = os.path.join(
-            self.pdir,
-            'gis_data',
-            'Towers_with_extra_strainers_WGS84.shp')
-        self.file_shape_line = os.path.join(
-            self.pdir,
-            'gis_data',
-            'Lines_NGCP_with_synthetic_attributes_WGS84.shp')
-        self.file_frag = os.path.join(self.pdir, 'input', 'fragility_GA.csv')
-        self.file_cond_pc = os.path.join(self.pdir, 'input',
-                                         'cond_collapse_prob_NGCP.csv')
-        self.file_terrain_height = os.path.join(self.pdir, 'input',
-                                                'terrain_height_multiplier.csv')
-        self.flag_strainer = ['Strainer', 'dummy']  # consider strainer
+    def __init__(self, cfg_file=None):
 
-        self.file_design_value = os.path.join(self.pdir, 'input',
-                                              'design_value_current.csv')
-        #file_topo_value = os.path.join(pdir,
-        #                                'input/topo_value_scenario_50yr.csv')
-        self.file_topo_value = None
-        #self.file_adjust_by_topo = os.path.join(self.pdir, 'input',
-        #                                        'adjust_by_topo.txt')
-        self.file_adjust_by_topo = None
-        self.dir_wind_timeseries = os.path.join(self.pdir, 'wind_scenario',
-                                                'glenda_reduced')
+        if not os.path.exists(cfg_file):
+            print "Error: configuration file {} not found".format(cfg_file)
+            sys.exit()
+
+        conf = ConfigParser.ConfigParser()
+        conf.read(cfg_file)
+        conf_dic = conf._sections
+
+        # run_type
+        self.test = conf.getboolean('run_type', 'flag_test')
+        self.parallel = conf.getboolean('run_type', 'flag_parallel')
+        self.flag_save = conf.getboolean('run_type', 'flag_save')
+
+        # run_parameters
+        self.nsims = conf.getint('run_parameters', 'num_simulations')
+        self.flag_adjust_design_by_topo =\
+            conf.getboolean('run_parameters', 'adjust_design_by_topography')
+        strainer_ = conf.get('run_parameters', 'Strainer')
+        self.flag_strainer = [x.strip(' ') for x in strainer_.split(',')]
+
+        # directories
+        self.pdir = conf.get('directories', 'project')
+
+        try:
+            path_gis_data = conf.get('directories', 'gis_data')
+        except ValueError:
+            path_gis_data = self.get_path(
+                conf.get('directories', 'gis_data', 1), conf_dic)
+        try:
+            self.dir_wind_timeseries = conf.get('directories', 'wind_scenario')
+        except ValueError:
+            self.dir_wind_timeseries = self.get_path(
+                conf.get('directories', 'wind_scenario', 1), conf_dic)
+
+        try:
+            path_input = conf.get('directories', 'input')
+        except ValueError:
+            path_input = self.get_path(
+                conf.get('directories', 'input', 1), conf_dic)
+
+        try:
+            self.dir_output = conf.get('directories', 'output')
+        except ValueError:
+            self.dir_output = self.get_path(
+                conf.get('directories', 'output', 1), conf_dic)
+
+        # gis_data
+        self.file_shape_tower = os.path.join(path_gis_data,
+                                             conf.get('gis_data',
+                                                      'shape_tower'))
+
+        self.file_shape_line = os.path.join(path_gis_data,
+                                            conf.get('gis_data',
+                                                     'shape_line'))
+
+        # wind_scenario
+        #self.file_name_ = os.path.join(path_gis_data,
+        #                                    conf.get('gis_data',
+        #                                             'shape_line'))
+
+        # input
+        self.file_frag = os.path.join(path_input,
+                                      conf.get('input', 'fragility'))
+
+        self.file_cond_pc = os.path.join(
+            path_input, conf.get('input', 'conditional_collapse_probability'))
+
+        self.file_terrain_height = os.path.join(
+            path_input, conf.get('input', 'terrain_height_multiplier'))
+
+        self.file_design_value = os.path.join(path_input,
+                                              conf.get('input',
+                                                       'design_value'))
+
+        self.file_drag_height_by_type = os.path.join(
+            path_input, conf.get('input', 'drag_height_by_type'))
+
+        if self.flag_adjust_design_by_topo:
+            self.file_topo_value = os.path.join(
+                path_input, conf.get('input', 'topographic_multiplier'))
+            self.file_adjust_by_topo = os.path.join(
+                path_input, conf.get('input', 'adjust_design_by_topography'))
 
         # flag for test, no need to change
-        self.test = test
+        # self.test = test
 
-        if self.test:
-            self.flag_save = 0
-            self.nsims = 20
-            self.dir_output = os.path.join(self.pdir, 'transmission', 'tests',
-                                           'test_output_current_glenda')
-        else:
-            self.flag_save = 0
-            self.nsims = 3000
-            self.dir_output = os.path.join(self.pdir, 'output_current_glenda')
+        # if self.test:
+        #     self.flag_save = 0
+        #     self.nsims = 20
+        #     self.dir_output = os.path.join(self.pdir, 'transmission', 'tests',
+        #                                    'test_output_current_glenda')
+        # else:
+        #     self.flag_save = 0
+        #     self.nsims = 3000
+        #     self.dir_output = os.path.join(self.pdir, 'output_current_glenda')
 
-        # parallel or serial computation
-        self.parallel = 0
+        # # parallel or serial computation
+        # self.parallel = 0
 
         if not os.path.exists(self.dir_output):
             os.makedirs(self.dir_output)
 
+        #
         self.fragility_curve, self.damage_states, self.no_damage_states =\
             self.read_frag()
         self.cond_pc = self.get_cond_pc()
 
-    @property
-    def test(self):
-        return self.__test
+    @staticmethod
+    def get_path(path_, conf_dic):
+        '''
+        '''
+        path_split = path_.split(')/')
+        path_key = path_split[0][2:]
+        path_full = conf_dic['directories'][path_key]
 
-    @test.setter
-    def test(self, val):
-        if val:
-            self.__test = 1
-        else:
-            self.__test = 0
+        return os.path.join(path_full, path_split[1])
+
+    # @property
+    # def test(self):
+    #     return self.__test
+
+    # @test.setter
+    # def test(self, val):
+    #     if val:
+    #         self.__test = 1
+    #     else:
+    #         self.__test = 0
 
     def read_frag(self):
         """
