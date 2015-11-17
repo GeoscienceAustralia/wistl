@@ -74,9 +74,7 @@ class TransmissionConfig(object):
                                                      'shape_line'))
 
         # wind_scenario
-        #self.file_name_ = os.path.join(path_gis_data,
-        #                                    conf.get('gis_data',
-        #                                             'shape_line'))
+        self.file_name_format = conf.get('wind_scenario', 'file_name_format', 1)
 
         # input
         self.file_frag = os.path.join(path_input,

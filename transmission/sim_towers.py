@@ -25,7 +25,8 @@ Todo:
 import numpy as np
 import parmap
 import time
-import os, sys
+import os
+import sys
 import getopt
 
 from read import read_velocity_profile

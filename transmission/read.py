@@ -262,9 +262,13 @@ def read_velocity_profile(conf, tower):
     """
     event = dict()  # dictionary of event class instances
 
+    file_head = conf.file_name_format.split('%')[0]
+    file_tail = conf.file_name_format.split(')')[-1]
+
     for name in tower:
-        file_name = 'ts.' + name + '.csv'
-        vel_file = os.path.join(conf.dir_wind_timeseries, file_name)
+
+        vel_file = os.path.join(conf.dir_wind_timeseries,
+                                file_head + name + file_tail)
         try:
             event[name] = Event(tower[name], vel_file)
 
