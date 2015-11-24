@@ -2,7 +2,6 @@
 simulation of collapse of transmission towers
 based on empricially derived conditional probability
 
-
 required input
     -. tower geometry whether rectangle or squre (v) - all of them are square
     -. design wind speed (requiring new field in input) v
@@ -27,32 +26,11 @@ import parmap
 import time
 import os
 import sys
-import getopt
 
 from read import read_velocity_profile
 from compute import cal_collapse_of_towers_analytical,\
     cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
 from read import TransmissionNetwork
-
-
-def main(argv):
-
-    try:
-        opts, args = getopt.getopt(argv, 'hc', ['help', 'config-file='])
-
-    except getopt.GetoptError:
-        print 'python sim_towers.py -c <config-file>'
-        sys.exit()
-    for opt, arg in opts:
-        if opt == ('-h', '--help'):
-            print 'python sim_towers.py -c <config-file>'
-            sys.exit()
-        elif opt in ("-c", "--config-file"):
-            cfg_file = arg
-
-    from config_class import TransmissionConfig
-    conf = TransmissionConfig(cfg_file=cfg_file)
-    sim_towers(conf)
 
 
 def sim_towers(conf):
@@ -93,7 +71,7 @@ def sim_towers(conf):
             conf.damage_states,
             idx_time)
         if conf.flag_save:
-            print 'Saving....'
+            #print 'Saving....'
             line_ = line.replace(' - ', '_')
             for (ds, _) in conf.damage_states:
                 csv_file = os.path.join(conf.dir_output,
@@ -210,7 +188,13 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
-    # from config_class import TransmissionConfig
-    # conf = TransmissionConfig()
-    # sim_towers(conf)
+
+    args = sys.argv[1:]
+
+    if not args:
+        print 'python sim_towers.py <config-file>'
+        sys.exit(1)
+
+    from config_class import TransmissionConfig
+    conf = TransmissionConfig(cfg_file=args[0])
+    sim_towers(conf)
