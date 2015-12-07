@@ -37,7 +37,7 @@ class TransmissionConfig(object):
         self.flag_strainer = [x.strip() for x in strainer_.split(',')]
 
         # directories
-        self.pdir = conf.get('directories', 'project')
+        #self.wdir = conf.get('directories', 'project')
 
         try:
             path_gis_data = conf.get('directories', 'gis_data')
@@ -81,10 +81,10 @@ class TransmissionConfig(object):
                                               conf.get('input',
                                                        'design_value'))
 
-        self.file_frag = os.path.join(path_input,
-                                      conf.get('input', 'fragility'))
+        self.file_fragility = os.path.join(path_input,
+                                           conf.get('input', 'fragility'))
 
-        self.file_cond_pc = os.path.join(
+        self.file_cond_collapse_prob = os.path.join(
             path_input, conf.get('input', 'conditional_collapse_probability'))
 
         self.file_terrain_multiplier = os.path.join(
@@ -115,9 +115,9 @@ class TransmissionConfig(object):
         self.sel_lines = self.design_value.keys()
 
         self.fragility_curve, self.damage_states, self.no_damage_states =\
-            self.read_frag()
+            self.read_fragility()
 
-        self.cond_pc = self.read_cond_collapse_prob()
+        self.cond_collapse_prob = self.read_cond_collapse_prob()
 
         self.terrain_multiplier = self.read_ASNZS_terrain_multiplier()
 
@@ -172,12 +172,12 @@ class TransmissionConfig(object):
                                   'level'], index_col=0)
         return data.transpose().to_dict()
 
-    def read_frag(self):
+    def read_fragility(self):
         """
         read collapse fragility parameter values
         """
 
-        data = pd.read_csv(self.file_frag, skipinitialspace=True)
+        data = pd.read_csv(self.file_fragility, skipinitialspace=True)
         grouped = (data.groupby(['tower type', 'function'])).groups
 
         frag = dict()
@@ -217,7 +217,7 @@ class TransmissionConfig(object):
         read condition collapse probability defined by tower function
         """
 
-        data = pd.read_csv(self.file_cond_pc, skipinitialspace=1)
+        data = pd.read_csv(self.file_cond_collapse_prob, skipinitialspace=1)
 
         cond_pc = dict()
         for line in data.iterrows():
@@ -262,7 +262,6 @@ class TransmissionConfig(object):
                            names=['type', 'value'], skiprows=1, index_col=0)
         return temp['value'].to_dict()
 
-
     def read_topographic_multiplier(self):
         """read topograhpic multipler value from the input file
         :param file_: input file
@@ -277,7 +276,6 @@ class TransmissionConfig(object):
                            names=names_str)
         data['topo'] = data[['Mh', 'Mhopp']].max(axis=1)
         return data.set_index('Name').to_dict()['topo']
-
 
     def read_design_adjustment_factor_by_topography_mutliplier(self):
         """read design wind speed adjustment based on topographic multiplier
@@ -301,4 +299,3 @@ class TransmissionConfig(object):
 
         assert len(data['threshold']) == len(data.keys()) - 2
         return data
-

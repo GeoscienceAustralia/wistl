@@ -44,9 +44,9 @@ def sim_towers(conf):
 
     # calculate conditional collapse probability
     for i, name in enumerate(tower.keys()):
-        tower[name].idfy_adj_list(tower, fid2name, conf.cond_pc,
+        tower[name].idfy_adj_list(tower, fid2name, conf.cond_collapse_prob,
                                   conf.flag_strainer)
-        tower[name].cal_cond_pc_adj(conf.cond_pc, fid2name)
+        tower[name].cal_cond_pc_adj(conf.cond_collapse_prob, fid2name)
 
     # read wind profile and design wind speed
     event = read_velocity_profile(conf, tower)  # dictionary of event class instances

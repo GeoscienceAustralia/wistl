@@ -40,10 +40,10 @@ class TransmissionNetwork(object):
             TODO: Hyeuk please describe: fid_by_line, fid2name, lon, lat
         """
 
-        shapes_tower, records_tower, fields_tower =\
+        _, records_towers, fields_towers =\
             read_shape_file(self.conf.file_shape_tower)
 
-        df_towers = pd.DataFrame(records_tower, columns=fields_tower)
+        df_towers = pd.DataFrame(records_towers, columns=fields_towers)
 
         sel_lines = self.conf.sel_lines
 
