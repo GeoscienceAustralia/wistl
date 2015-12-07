@@ -62,17 +62,19 @@ class Event(object):
         tc: terrain category (defined by line route)
         asset is a Tower class instance.
         """
-        terrain_height = self.tower.terrain_height
+
         tc_str = 'tc' + str(self.tower.terrain_cat)  # Terrain
 
         try:
-            mzcat_z = np.interp(self.tower.height_z, terrain_height['height'],
-                                terrain_height[tc_str])
+            mzcat_z = np.interp(self.tower.height_z,
+                                self.tower.conf.terrain_multiplier['height'],
+                                self.tower.conf.terrain_multiplier[tc_str])
         except KeyError:
             print "{} is not defined".format(tc_str)
             return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
 
-        mzcat_10 = terrain_height[tc_str][terrain_height['height'].index(10)]
+        idx_10 = self.tower.conf.terrain_multiplier['height'].index(10)
+        mzcat_10 = self.tower.conf.terrain_multiplier[tc_str][idx_10]
         return mzcat_z/mzcat_10
 
     def cal_pc_wind(self):

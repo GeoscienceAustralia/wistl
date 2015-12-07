@@ -11,22 +11,23 @@ class Tower(object):
     """
     fid_gen = itertools.count()
 
-    def __init__(self, conf, line_route, design_speed, design_value, sel_idx,
-                 item, adj=None):
-        self.fid = next(self.fid_gen)
+    def __init__(self, conf, df_tower, adj=None):
         self.conf = conf
-        self.ttype = item[sel_idx['Type']]  # Lattice Tower or Steel Pole
-        self.funct = item[sel_idx['Function']]  # e.g., suspension, terminal, strainer
-        self.line_route = line_route  # string
+        self.df_tower = df_tower
+        self.fid = next(self.fid_gen)
+
+        self.ttype = self.df_tower['Type']  # Lattice Tower or Steel Pole
+        self.funct = self.df_tower['Function']  # e.g., suspension, terminal, strainer
+        self.line_route = self.df_tower['LineRoute']  # string
         self.no_circuit = 2  # double circuit (default value)
-        self.design_speed = design_speed  # design wind speed
-        self.design_span = design_value[line_route]['span']  # design wind span
-        self.terrain_cat = design_value[line_route]['cat']  # Terrain Cateogry
-        self.design_level = design_value[line_route]['level']  # design level
-        self.strong_axis = item[sel_idx['AxisAz']]  # azimuth of strong axis relative to North (deg)
-        self.dev_angle = item[sel_idx['DevAngle']]  # deviation angle
-        self.height = float(item[sel_idx['Height']])
-        self.height_z = self.height_z_based_on_tower_funct()
+        self.design_speed = self.determine_design_speed()  # design wind speed
+        self.design_span = self.conf.design_value[self.line_route]['span']  # design wind span
+        self.terrain_cat = self.conf.design_value[self.line_route]['cat']  # Terrain Cateogry
+        self.design_level = self.conf.design_value[self.line_route]['level']  # design level
+        self.strong_axis = self.df_tower['AxisAz']  # azimuth of strong axis relative to North (deg)
+        self.dev_angle = self.df_tower['DevAngle']  # deviation angle
+        self.height = float(self.df_tower['Height'])
+        self.height_z = conf.drag_height[self.funct]
 
         # to be assigned
         self.actual_span = None  # actual wind span on eith side
@@ -37,21 +38,23 @@ class Tower(object):
         self.cond_pc_adj = None  # dict ~ cal_cond_pc_adj
         self.cond_pc_adj_mc = {'rel_idx': None, 'cum_prob': None}  # ~ cal_cond_pc_adj
 
-    def height_z_based_on_tower_funct(self):
-        # typical drag height by tower type
-        # drag height (FIXME: typical value by type, but vary across towers)
-        height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
-        return height_z_dic[self.funct]
+    # def height_z_based_on_tower_funct(self):
+    #     # typical drag height by tower type
+    #     # drag height (FIXME: typical value by type, but vary across towers)
+    #     height_z_dic = {'Suspension': 15.4, 'Strainer': 12.2, 'Terminal': 12.2}
+    #     return height_z_dic[self.funct]
 
-    @property
-    def terrain_height(self):
-        """
-        read terrain height multiplier (ASNZ 1170.2:2011 Table 4.1)
-        """
-        data = pd.read_csv(self.conf.file_terrain_height, skipinitialspace=True,
-                           skiprows=1,
-                           names=['height', 'tc1', 'tc2', 'tc3', 'tc4'])
-        return data.to_dict('list')
+    def determine_design_speed(self):
+
+        design_speed = self.conf.design_value[self.line_route]['speed']
+
+        if self.conf.flag_adjust_design_by_topo:
+            ix_topo = np.sum(self.conf.topo_multiplier[name_] >=
+                self.conf.design_adjustment_factor_by_topo['threshold'])
+            design_speed *= self.conf.design_adjustment_factor_by_topo[ix_topo]
+
+        return design_speed
+
 
     def calc_adj_collapse_wind_speed(self):
         """

@@ -20,7 +20,7 @@ class TestTransmission(unittest.TestCase):
         # read GIS information
         network = TransmissionNetwork(conf)
         tower, sel_lines, fid_by_line, fid2name, lon, lat\
-            = network.read_tower_gis_information(conf)
+            = network.read_tower_gis_information()
 
         try:
             tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
@@ -100,7 +100,7 @@ class TestTransmissionConfig(unittest.TestCase):
     def test_whether_config_is_test(self):
         conf = TransmissionConfig(cfg_file='./transmission/tests/test.cfg')
         self.assertEqual(conf.test, 1)
-        self.assertEqual(conf.flag_save, 0)
+        #self.assertEqual(conf.flag_save, 0)
         self.assertEqual(conf.nsims, 20)
 
         #conf1 = TransmissionConfig(test=0)

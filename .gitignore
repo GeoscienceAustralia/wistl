@@ -67,7 +67,7 @@ wind_scenario/
 transmission/tests/test_output_current_glenda/
 gis_data/
 test_output*/
-
+*.pdf
 
 # pycharm
 .idea/
