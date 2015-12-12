@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
 """
 simulation of collapse of transmission towers
 based on empricially derived conditional probability
@@ -30,23 +33,23 @@ import sys
 from read import read_velocity_profile
 from compute import cal_collapse_of_towers_analytical,\
     cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
-from read import TransmissionNetwork
+#from read import TransmissionNetwork
+from transmission_line import TransmissionLine
+from transmission_network import TransmissionNetwork
 
 
 def sim_towers(conf):
     if conf.test:
-        print "==============>testing"
+        print("==============>testing")
 
     # read GIS information
     network = TransmissionNetwork(conf)
-    tower, sel_lines, fid_by_line, fid2name, lon, lat =\
-        network.read_tower_gis_information()
 
     # calculate conditional collapse probability
     for i, name in enumerate(tower.keys()):
-        tower[name].idfy_adj_list(tower, fid2name, conf.cond_collapse_prob,
+        tower[name].idfy_adj_list(tower, id2name, conf.cond_collapse_prob,
                                   conf.flag_strainer)
-        tower[name].cal_cond_pc_adj(conf.cond_collapse_prob, fid2name)
+        tower[name].cal_cond_pc_adj(conf.cond_collapse_prob, id2name)
 
     # read wind profile and design wind speed
     event = read_velocity_profile(conf, tower)  # dictionary of event class instances
@@ -67,7 +70,7 @@ def sim_towers(conf):
         pc_collapse[line] = cal_collapse_of_towers_analytical(
             fid_by_line[line],
             event,
-            fid2name,
+            id2name,
             conf.damage_states,
             idx_time)
         if conf.flag_save:
@@ -78,7 +81,7 @@ def sim_towers(conf):
                                         'pc_line_{}_{}.csv'.format(ds, line_))
                 pc_collapse[line][ds].to_csv(csv_file)
 
-    print "Analytical calculation is completed"
+    print("Analytical calculation is completed"
 
     # realisation of tower collapse in each simulation
     tf_sim_all = dict()
@@ -91,9 +94,9 @@ def sim_towers(conf):
     tic = time.time()
 
     if conf.parallel:
-        print "Parallel MC run on......"
+        print("Parallel MC run on......")
         mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines,
-                                fid_by_line, event, tower, fid2name, idx_time)
+                                fid_by_line, event, tower, id2name, idx_time)
 
         for idx, line in enumerate(sel_lines):
             tf_sim_all[line], prob_sim_all[line], est_ntower_all[line], \
@@ -102,11 +105,11 @@ def sim_towers(conf):
                 mc_returns[idx][0], mc_returns[idx][1], mc_returns[idx][2], \
                 mc_returns[idx][3], mc_returns[idx][4], mc_returns[idx][5]
     else:
-        print "Serial MC run on......"
+        print("Serial MC run on......")
         for idx, line in enumerate(sel_lines):
             tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, \
                 prob_ntower_nc = mc_loop(idx, conf, sel_lines, fid_by_line,
-                                         event, tower, fid2name, idx_time)
+                                         event, tower, id2name, idx_time)
             tf_sim_all[line] = tf_sim
             prob_sim_all[line] = prob_sim
             est_ntower_all[line] = est_ntower
@@ -114,33 +117,33 @@ def sim_towers(conf):
             est_ntower_nc_all[line] = est_ntower_nc
             prob_ntower_nc_all[line] = prob_ntower_nc
 
-    print 'MC simulation took {} seconds'.format(time.time() - tic)
+    print('MC simulation took {} seconds'.format(time.time() - tic))
 
     return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
         est_ntower_nc_all, prob_ntower_nc_all, sel_lines
 
 
-def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
+def mc_loop(id, conf, lines, fid_by_line, event, tower, id2name, idx_time):
     ntime = len(idx_time)
     line = lines[id]
     damage_states = conf.damage_states
     if conf.test:
-        print "we are in test, Loop", id
+        print('we are in test, Loop {}'.format(id))
         prng = np.random.RandomState(id)
     else:
-        print "MC sim, Loop:", id
+        print('MC sim, Loop: {}'.format(id))
         prng = np.random.RandomState()
         id = None  # required for true random inside cal_mc_adj
     rv = prng.uniform(size=(conf.nsims, ntime))  # perfect correlation within a single line
 
     for i in fid_by_line[line]:
-        event[fid2name[i]].cal_mc_adj(tower[fid2name[i]], damage_states, rv, id)
+        event[id2name[i]].cal_mc_adj(tower[id2name[i]], damage_states, rv, id)
 
     # compute estimated number and probability of towers without considering
     # cascading effect
     est_ntower_nc, prob_ntower_nc = cal_exp_std_no_cascading(fid_by_line[line],
                                                              event,
-                                                             fid2name,
+                                                             id2name,
                                                              damage_states,
                                                              conf.nsims,
                                                              idx_time,
@@ -149,7 +152,7 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
     # compute collapse of tower considering cascading effect
     tf_sim, prob_sim = cal_collapse_of_towers_mc(fid_by_line[line],
                                                  event,
-                                                 fid2name,
+                                                 id2name,
                                                  damage_states,
                                                  conf.nsims,
                                                  idx_time,
@@ -182,7 +185,7 @@ def mc_loop(id, conf, lines, fid_by_line, event, tower, fid2name, idx_time):
                                     'prob_ntower_nc_{}_{}.npy'.format(ds,
                                                                       line_))
             np.save(npy_file, prob_ntower_nc[ds])
-    print 'loop {} finished'.format(id)
+    print('loop {} finished'.format(id))
     return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc,\
         prob_ntower_nc
 
@@ -192,7 +195,7 @@ if __name__ == '__main__':
     args = sys.argv[1:]
 
     if not args:
-        print 'python sim_towers.py <config-file>'
+        print('python sim_towers.py <config-file>')
         sys.exit(1)
 
     from config_class import TransmissionConfig

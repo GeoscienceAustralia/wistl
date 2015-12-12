@@ -19,7 +19,7 @@ class TestTransmission(unittest.TestCase):
 
         # read GIS information
         network = TransmissionNetwork(conf)
-        tower, sel_lines, fid_by_line, fid2name, lon, lat\
+        tower, sel_lines, fid_by_line, id2name, lon, lat\
             = network.read_tower_gis_information()
 
         try:

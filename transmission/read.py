@@ -37,7 +37,7 @@ class TransmissionNetwork(object):
         :returns
             tower = Dictionary of towers
             sel_lines =  line names provided in the input file.
-            TODO: Hyeuk please describe: fid_by_line, fid2name, lon, lat
+            TODO: Hyeuk please describe: fid_by_line, id2name, lon, lat
         """
 
         _, records_towers, fields_towers =\
@@ -55,7 +55,7 @@ class TransmissionNetwork(object):
         #            for str_ in sel_keys}
 
         # processing shp file
-        tower, fid2name = {}, {}
+        tower, id2name = {}, {}
         fid, line_route, lat, lon = [], [], [], []
         fid_ = 0
         for _, item in df_towers.iterrows():
@@ -67,7 +67,7 @@ class TransmissionNetwork(object):
 
                 tower[name_] = Tower(self.conf, item)
 
-                fid2name[fid_] = name_
+                id2name[fid_] = name_
                 fid.append(fid_)
                 line_route.append(line_route_)
                 lat.append(item['Latitude'])
@@ -143,7 +143,7 @@ class TransmissionNetwork(object):
             idx_sorted = np.append(idx_sorted, -1)  # end
 
             for j in range(1, ntower_sel+1):
-                name_ = fid2name[idx_sorted[j]]
+                name_ = id2name[idx_sorted[j]]
                 tower[name_].adj = (idx_sorted[j-1], idx_sorted[j+1])
 
                 # compute actual wind span
@@ -157,7 +157,7 @@ class TransmissionNetwork(object):
                 tower[name_].actual_span = val
                 tower[name_].calc_adj_collapse_wind_speed()
 
-        return tower, sel_lines, fid_by_line, fid2name, lon, lat
+        return tower, sel_lines, fid_by_line, id2name, lon, lat
 
 
 def read_shape_file(file_shape):

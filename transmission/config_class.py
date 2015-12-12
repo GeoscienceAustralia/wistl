@@ -28,6 +28,7 @@ class TransmissionConfig(object):
         self.test = conf.getboolean('run_type', 'flag_test')
         self.parallel = conf.getboolean('run_type', 'flag_parallel')
         self.flag_save = conf.getboolean('run_type', 'flag_save')
+        self.flag_figure = conf.getboolean('run_type', 'flag_figure')
 
         # run_parameters
         self.nsims = conf.getint('run_parameters', 'num_simulations')

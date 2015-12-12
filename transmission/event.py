@@ -3,22 +3,6 @@ from scipy.stats import lognorm
 import pandas as pd
 
 
-def dir_wind_speed(speed, bearing, t0):
-
-    # angle between wind direction and tower conductor
-    phi = np.abs(bearing - t0)
-    tf = (phi <= np.pi/4) | (phi > np.pi/4*7) | ((phi > np.pi/4*3) &
-         (phi <= np.pi/4*5))
-
-    cos_ = abs(np.cos(np.pi/4.0-phi))
-    sin_ = abs(np.sin(np.pi/4.0-phi))
-
-    adj = speed*np.max(np.vstack((cos_, sin_)), axis=0)
-    dir_speed = np.where(tf, adj, speed)  # adj if true, otherwise speed
-
-    return dir_speed
-
-
 class Event(object):
 
     """
@@ -51,10 +35,24 @@ class Event(object):
         # angle of conductor relative to NS
         t0 = np.deg2rad(self.tower.strong_axis) - np.pi/2.0
         convert_factor = self.convert_10_to_z()
-        dir_speed = convert_factor * dir_wind_speed(speed, bearing, t0)
+        dir_speed = convert_factor * self.compute_directional_wind_speed(speed, bearing, t0)
 
         data['dir_speed'] = pd.Series(dir_speed, index=data.index)
         return data
+
+    @staticmethod
+    def compute_directional_wind_speed(speed, bearing, t0):
+
+        # angle between wind direction and tower conductor
+        phi = np.abs(bearing - t0)
+        tf = (phi <= np.pi/4) | (phi > np.pi/4*7) | ((phi > np.pi/4*3) &
+             (phi <= np.pi/4*5))
+
+        cos_ = abs(np.cos(np.pi/4.0-phi))
+        sin_ = abs(np.sin(np.pi/4.0-phi))
+
+        adj = speed*np.max(np.vstack((cos_, sin_)), axis=0)
+        return np.where(tf, adj, speed)  # adj if true, otherwise speed
 
     def convert_10_to_z(self):
         """
@@ -190,6 +188,6 @@ if __name__ == '__main__':
     conf = TransmissionConfig()
     from read import TransmissionNetwork
     network = TransmissionNetwork(conf)
-    tower, sel_lines, fid_by_line, fid2name, lon, lat =\
+    tower, sel_lines, fid_by_line, id2name, lon, lat =\
         network.read_tower_gis_information(conf)
 
