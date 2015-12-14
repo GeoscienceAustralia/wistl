@@ -47,10 +47,10 @@ class TransmissionConfig(object):
                 conf.get('directories', 'gis_data', 1), conf_dic)
 
         try:
-            self.dir_wind_timeseries = conf.get('directories', 'wind_scenario')
+            self.path_wind_timeseries = conf.get('directories', 'wind_scenario')
         except ValueError:
-            self.dir_wind_timeseries = self.get_path(
-                conf.get('directories', 'wind_scenario', 1), conf_dic)
+            xx = conf.get('directories', 'wind_scenario', 1).split(',\n')
+            self.path_wind_timeseries = [self.get_path(x, conf_dic) for x in xx]
 
         try:
             path_input = conf.get('directories', 'input')
@@ -59,9 +59,9 @@ class TransmissionConfig(object):
                 conf.get('directories', 'input', 1), conf_dic)
 
         try:
-            self.dir_output = conf.get('directories', 'output')
+            self.path_output = conf.get('directories', 'output')
         except ValueError:
-            self.dir_output = self.get_path(
+            self.path_output = self.get_path(
                 conf.get('directories', 'output', 1), conf_dic)
 
         # gis_data
@@ -139,9 +139,9 @@ class TransmissionConfig(object):
                 self.read_design_adjustment_factor_by_topography_mutliplier()
 
         # output directory
-        if not os.path.exists(self.dir_output):
-            os.makedirs(self.dir_output)
-            print('{} is created'.format(self.dir_output))
+        #if not os.path.exists(self.path_output):
+        #    os.makedirs(self.path_output)
+        #    print('{} is created'.format(self.dir_output))
 
     @staticmethod
     def get_path(path_, conf_dic):

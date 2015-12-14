@@ -36,7 +36,7 @@ from compute import cal_collapse_of_towers_analytical,\
 #from read import TransmissionNetwork
 from transmission_line import TransmissionLine
 from transmission_network import TransmissionNetwork
-
+from event_set import EventSet
 
 def sim_towers(conf):
     if conf.test:
@@ -45,43 +45,7 @@ def sim_towers(conf):
     # read GIS information
     network = TransmissionNetwork(conf)
 
-    # calculate conditional collapse probability
-    for i, name in enumerate(tower.keys()):
-        tower[name].idfy_adj_list(tower, id2name, conf.cond_collapse_prob,
-                                  conf.flag_strainer)
-        tower[name].cal_cond_pc_adj(conf.cond_collapse_prob, id2name)
-
-    # read wind profile and design wind speed
-    event = read_velocity_profile(conf, tower)  # dictionary of event class instances
-
-    # Exception handling
-    if 'error' in event:
-        return event
-
-    idx_time = event[event.keys()[0]].wind.index
-
-    for i in tower.keys():
-        event[i].cal_pc_wind()
-        event[i].call_pc_adj()
-
-    # analytical approach
-    pc_collapse = {}
-    for line in sel_lines:
-        pc_collapse[line] = cal_collapse_of_towers_analytical(
-            fid_by_line[line],
-            event,
-            id2name,
-            conf.damage_states,
-            idx_time)
-        if conf.flag_save:
-            #print 'Saving....'
-            line_ = line.replace(' - ', '_')
-            for (ds, _) in conf.damage_states:
-                csv_file = os.path.join(conf.dir_output,
-                                        'pc_line_{}_{}.csv'.format(ds, line_))
-                pc_collapse[line][ds].to_csv(csv_file)
-
-    print("Analytical calculation is completed"
+    tic = time.time()
 
     # realisation of tower collapse in each simulation
     tf_sim_all = dict()
@@ -94,19 +58,61 @@ def sim_towers(conf):
     tic = time.time()
 
     if conf.parallel:
-        print("Parallel MC run on......")
-        mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines,
-                                fid_by_line, event, tower, id2name, idx_time)
 
-        for idx, line in enumerate(sel_lines):
-            tf_sim_all[line], prob_sim_all[line], est_ntower_all[line], \
-                prob_ntower_all[line], est_ntower_nc_all[line], \
-                prob_ntower_nc_all[line] =\
-                mc_returns[idx][0], mc_returns[idx][1], mc_returns[idx][2], \
-                mc_returns[idx][3], mc_returns[idx][4], mc_returns[idx][5]
+        print("Parallel run on......")
+
+        # parmap.map(function_, list_ , arguments_)
+
+        # # calculate conditional collapse probability
+
+        # # Exception handling
+        # if 'error' in event:
+        #     return event
+
+        # idx_time = event[event.keys()[0]].wind.index
+
+        # for i in tower.keys():
+        #     event[i].cal_pc_wind()
+        #     event[i].call_pc_adj()
+
+        # # analytical approach
+        # pc_collapse = {}
+        # for line in sel_lines:
+        #     pc_collapse[line] = cal_collapse_of_towers_analytical(
+        #         fid_by_line[line],
+        #         event,
+        #         id2name,
+        #         conf.damage_states,
+        #         idx_time)
+        #     if conf.flag_save:
+        #         #print 'Saving....'
+        #         line_ = line.replace(' - ', '_')
+        #         for (ds, _) in conf.damage_states:
+        #             csv_file = os.path.join(conf.dir_output,
+        #                                     'pc_line_{}_{}.csv'.format(ds, line_))
+        #             pc_collapse[line][ds].to_csv(csv_file)
+
+        # print("Analytical calculation is completed"
+
+        # print("Parallel MC run on......")
+        # mc_returns = parmap.map(mc_loop, range(len(sel_lines)), conf, sel_lines,
+        #                         fid_by_line, event, tower, id2name, idx_time)
+
+        # for idx, line in enumerate(sel_lines):
+        #     tf_sim_all[line], prob_sim_all[line], est_ntower_all[line], \
+        #         prob_ntower_all[line], est_ntower_nc_all[line], \
+        #         prob_ntower_nc_all[line] =\
+        #         mc_returns[idx][0], mc_returns[idx][1], mc_returns[idx][2], \
+        #         mc_returns[idx][3], mc_returns[idx][4], mc_returns[idx][5]
+
     else:
-        print("Serial MC run on......")
-        for idx, line in enumerate(sel_lines):
+
+        print("Serial run on......")
+
+        # # read wind profile and design wind speed
+        event_set = EventSet(network)
+
+
             tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc, \
                 prob_ntower_nc = mc_loop(idx, conf, sel_lines, fid_by_line,
                                          event, tower, id2name, idx_time)

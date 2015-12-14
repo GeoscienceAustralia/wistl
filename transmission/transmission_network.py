@@ -17,7 +17,7 @@ class TransmissionNetwork(object):
         self.df_towers = read_shape_file(self.conf.file_shape_tower)
         self.df_lines = read_shape_file(self.conf.file_shape_line)
 
-        self.lines = {}
+        self.lines = dict()
         for name, grouped in self.df_towers.groupby('LineRoute'):
             if name in self.conf.sel_lines:
                 tf = self.df_lines['LineRoute'] == name
@@ -50,3 +50,7 @@ def read_shape_file(file_shape):
     else:
         data_frame['Shapes'] = shapes
     return data_frame
+
+# if __name__ == '__main__':
+#     from config_class import TransmissionConfig
+#     conf = TransmissionConfig()

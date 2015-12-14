@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
 import numpy as np
 from scipy.stats import lognorm
 import pandas as pd
@@ -16,18 +19,23 @@ class Event(object):
     def __init__(self, tower, vel_file):
         self.tower = tower
         self.vel_file = vel_file
+        self.wind = self.calculate_wind()
+        self.idx_time = self.wind.index
+
         self.pc_wind = None
         self.pc_adj = None  # dict (ntime,) <- cal_pc_adj_towers
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict
-        self.wind = self.calculate_wind()
-        self.idx_time = self.wind.index
 
     def calculate_wind(self):
         # Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure
-        data = pd.read_csv(self.vel_file, header=0, parse_dates=[0],
-                           index_col=[0], usecols=[0, 3, 6],
-                           names=['', '', '', 'speed', '', '', 'bearing', ''])
+        try:
+            data = pd.read_csv(self.vel_file, header=0, parse_dates=[0],
+                               index_col=[0], usecols=[0, 3, 6],
+                               names=['', '', '', 'speed', '', '', 'bearing',
+                                      ''])
+        except IOError:
+            print('file {} does not exist'.format(self.vel_file))
 
         speed = data['speed'].values
         bearing = np.deg2rad(data['bearing'].values)  # degree
@@ -35,9 +43,9 @@ class Event(object):
         # angle of conductor relative to NS
         t0 = np.deg2rad(self.tower.strong_axis) - np.pi/2.0
         convert_factor = self.convert_10_to_z()
-        dir_speed = convert_factor * self.compute_directional_wind_speed(speed, bearing, t0)
-
-        data['dir_speed'] = pd.Series(dir_speed, index=data.index)
+        data['dir_speed'] = pd.Series(
+            convert_factor * self.compute_directional_wind_speed(
+                speed, bearing, t0), index=data.index)
         return data
 
     @staticmethod
@@ -62,14 +70,13 @@ class Event(object):
         """
 
         tc_str = 'tc' + str(self.tower.terrain_cat)  # Terrain
-
         try:
             mzcat_z = np.interp(self.tower.height_z,
                                 self.tower.conf.terrain_multiplier['height'],
                                 self.tower.conf.terrain_multiplier[tc_str])
         except KeyError:
-            print "{} is not defined".format(tc_str)
-            return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
+            print('{} is not defined'.format(tc_str))
+#            return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
 
         idx_10 = self.tower.conf.terrain_multiplier['height'].index(10)
         mzcat_10 = self.tower.conf.terrain_multiplier[tc_str][idx_10]
@@ -100,7 +107,8 @@ class Event(object):
                 pc_wind[:, ids-1] = temp  # 2->1
 
         except KeyError:
-                print "fragility is not defined for %s" % self.tower.const_type
+                print('fragility is not defined for {}'.format(
+                      self.tower.const_type))
 
         self.pc_wind = pd.DataFrame(
             pc_wind,
@@ -183,11 +191,11 @@ class Event(object):
         self.mc_adj = mc_adj
         return
 
-if __name__ == '__main__':
-    from config_class import TransmissionConfig
-    conf = TransmissionConfig()
-    from read import TransmissionNetwork
-    network = TransmissionNetwork(conf)
-    tower, sel_lines, fid_by_line, id2name, lon, lat =\
-        network.read_tower_gis_information(conf)
+# if __name__ == '__main__':
+#     from config_class import TransmissionConfig
+#     conf = TransmissionConfig()
+#     from read import TransmissionNetwork
+#     network = TransmissionNetwork(conf)
+#     tower, sel_lines, fid_by_line, id2name, lon, lat =\
+#         network.read_tower_gis_information(conf)
 
