@@ -27,13 +27,15 @@ class TransmissionLine(object):
         self.id2name = dict()
         self.coord_towers = np.zeros((self.no_towers, 2))
         id_by_line_unsorted = []
+        name_by_line_unsorted = []
         for i, (key, val) in enumerate(df_towers.iterrows()):
             self.id2name[key] = val['Name']
             self.coord_towers[i, :] = val['Shapes'].points[0]  # [Lon, Lat]
             id_by_line_unsorted.append(key)
-
+            name_by_line_unsorted.append(val['Name'])
         self.sort_idx = self.sort_by_location()
         self.id_by_line = [id_by_line_unsorted[x] for x in self.sort_idx]
+        self.name_by_line = [name_by_line_unsorted[x] for x in self.sort_idx]
 
         self.towers = dict()
         for i, tid in enumerate(self.id_by_line):

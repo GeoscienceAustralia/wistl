@@ -38,7 +38,7 @@ class Tower(object):
 
         self.design_speed = self.assign_design_speed()  # design wind speed
         self.collapse_capacity = self.compute_collapse_capacity()
-        self.wind_file = self.get_wind_file()
+        self.file_wind = self.get_wind_file()
 
         cond_collapse_prob = self.get_cond_collapse_prob()
         self.cond_pc = cond_collapse_prob['prob']

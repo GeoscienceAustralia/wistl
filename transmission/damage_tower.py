@@ -6,10 +6,10 @@ from scipy.stats import lognorm
 import pandas as pd
 
 
-class Event(object):
+class DamageTower(object):
 
     """
-    class Event
+    class DamageTower
     Inputs:
     tower: instance of tower class
     vel_file: velocity file containing velocity time history
@@ -19,7 +19,7 @@ class Event(object):
     def __init__(self, tower, vel_file):
         self.tower = tower
         self.vel_file = vel_file
-        self.wind = self.calculate_wind()
+        self.wind = self.read_wind_timeseries()
         self.idx_time = self.wind.index
 
         self.pc_wind = None
@@ -27,7 +27,7 @@ class Event(object):
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict
 
-    def calculate_wind(self):
+    def read_wind_timeseries(self):
         # Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure
         try:
             data = pd.read_csv(self.vel_file, header=0, parse_dates=[0],
@@ -82,7 +82,7 @@ class Event(object):
         mzcat_10 = self.tower.conf.terrain_multiplier[tc_str][idx_10]
         return mzcat_z/mzcat_10
 
-    def cal_pc_wind(self):
+    def compute_pc_wind(self):
         """
         compute probability of damage due to wind
         - asset: instance of Tower object
@@ -93,7 +93,7 @@ class Event(object):
         """
         pc_wind = np.zeros(shape=(len(self.idx_time),
                                   self.tower.conf.no_damage_states))
-        vratio = self.wind.dir_speed.values/self.tower.adj_design_speed
+        vratio = self.wind.dir_speed.values/self.tower.collapse_capacity
 
         try:
             fragx = self.tower.conf.fragility_curve[self.tower.ttype][self.tower.funct]
@@ -115,7 +115,7 @@ class Event(object):
             columns=[x[0] for x in self.tower.conf.damage_states],
             index=self.wind.index)
 
-    def call_pc_adj(self):  # only for analytical approach
+    def compute_pc_adj(self):  # only for analytical approach
         """
         calculate collapse probability of jth tower due to pull by the tower
         Pc(j,i) = P(j|i)*Pc(i)
@@ -124,14 +124,14 @@ class Event(object):
 
         pc_adj = {}
         for rel_idx in self.tower.cond_pc_adj.keys():
-            abs_idx = self.tower.adj_list[rel_idx +
+            abs_idx = self.tower.id_adj[rel_idx +
                                           self.tower.max_no_adj_towers]
             pc_adj[abs_idx] = (self.pc_wind.collapse.values *
                                self.tower.cond_pc_adj[rel_idx])
 
         self.pc_adj = pc_adj
 
-    def cal_mc_adj(self, asset, damage_states, rv, idx):
+    def compute_mc_adj(self, asset, damage_states, rv, idx):
         """
         2. determine if adjacent tower collapses or not due to pull by the tower
         jtime: time index (array)
