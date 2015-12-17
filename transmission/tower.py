@@ -76,7 +76,7 @@ class Tower(object):
     def assign_design_speed(self):
         """ determine design speed """
         design_speed = self.conf.design_value[self.line_route]['speed']
-        if self.conf.flag_adjust_design_by_topo:
+        if self.conf.adjust_design_by_topo:
             id_topo = np.sum(self.conf.topo_multiplier[self.name] >=
                              self.conf.design_adjustment_factor_by_topo['threshold'])
             design_speed *= self.conf.design_adjustment_factor_by_topo[id_topo]

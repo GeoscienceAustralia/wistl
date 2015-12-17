@@ -27,19 +27,21 @@ class TransmissionConfig(object):
         # run_type
         self.test = conf.getboolean('run_type', 'flag_test')
         self.parallel = conf.getboolean('run_type', 'flag_parallel')
-        self.flag_save = conf.getboolean('run_type', 'flag_save')
-        self.flag_figure = conf.getboolean('run_type', 'flag_figure')
+        self.save = conf.getboolean('run_type', 'flag_save')
+        self.figure = conf.getboolean('run_type', 'flag_figure')
 
         # run_parameters
         self.nsims = conf.getint('run_parameters', 'num_simulations')
-        self.flag_adjust_design_by_topo =\
-            conf.getboolean('run_parameters', 'adjust_design_by_topography')
+        self.analytical = conf.getboolean('run_parameters', 'run_analytical')
+        self.simulation = conf.getboolean('run_parameters', 'run_simulation')
+        self.skip_non_cascading_collapse = conf.getboolean(
+            'run_parameters', 'skip_non_cascading_collapse')
+        self.adjust_design_by_topo = conf.getboolean(
+            'run_parameters', 'adjust_design_by_topography')
         strainer_ = conf.get('run_parameters', 'Strainer')
-        self.flag_strainer = [x.strip() for x in strainer_.split(',')]
+        self.strainer = [x.strip() for x in strainer_.split(',')]
 
         # directories
-        #self.wdir = conf.get('directories', 'project')
-
         try:
             path_gis_data = conf.get('directories', 'gis_data')
         except ValueError:
@@ -124,14 +126,14 @@ class TransmissionConfig(object):
 
         self.drag_height = self.read_drag_height_by_type()
 
-        if self.flag_adjust_design_by_topo:
+        if self.adjust_design_by_topo:
 
             self.file_topo_multiplier = os.path.join(
                 path_input, conf.get('input', 'topographic_multiplier'))
 
             self.file_design_adjustment_factor_by_topo = os.path.join(
-                path_input, conf.get('input',
-                                     'design_adjustment_factor_by_topography'))
+                path_input, conf.get(
+                    'input', 'design_adjustment_factor_by_topography'))
 
             self.topo_multiplier = self.read_topographic_multiplier()
 

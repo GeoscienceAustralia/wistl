@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from transmission_network import TransmissionNetwork
-from damage_tower import DamageTower
 
 
 def create_event_set(conf):
@@ -21,8 +20,10 @@ def create_event_set(conf):
     events = dict()
     for path_wind in conf.path_wind_timeseries:
         event_id = path_wind.split('/')[-1]
+
         if event_id in events:
             raise KeyError('{} is already assigned'.format(event_id))
+
         events[event_id] = DamageNetwork(network, path_wind)
     return events
 
@@ -34,73 +35,88 @@ class DamageNetwork(object):
     def __init__(self, network, path_wind):
         self.network = network
         self.path_wind = path_wind
-
         self.lines = dict()
         for key, line in self.network.lines.iteritems():
+
             if key in self.lines:
                 raise KeyError('{} is already assigned'.format(key))
+
             self.lines[key] = DamageLine(line, self.path_wind)
 
-class DamageLine(object):
-    """ class for a collectin of damage to line """
+        # assuming same time index for each tower in the same network
+        self.idx_time = self.lines[key].idx_time
 
-    def __init__(self, line, path_wind):
-        self.line = line
 
-        self.towers = dict()
-        for key, tower in self.line.towers.iteritems():
-            if key in self.towers:
-                raise KeyError('{} is already assigned'.format(key))
-            vel_file = os.path.join(path_wind, tower.file_wind)
-            self.towers[key] = DamageTower(tower, vel_file)
 
-            # compute pc_wind and pc_adj
-            self.towers[key].compute_pc_wind()
-            self.towers[key].compute_pc_adj()
 
-    def compute_collapse_of_towers_analytical(self):
-        """
-        calculate collapse of towers analytically
+    def mc_simulation_over_line(self, idx_time):
 
-        Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
-        whre Pd: collapse due to direct wind
-        Pi,j: collapse probability due to collapse of j (=Pd(j)*Pc(i|j))
-
-        pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
-        """
-
-        idx_time = self.towers[self.line.name_by_line[0]].wind.index
         ntime = len(idx_time)
-        ntower = self.line.no_towers
-        cds_list = [x[0] for x in self.line.conf.damage_states]  # only string
-        cds_list.remove('collapse')  # non-collapse
+        damage_states = conf.damage_states
 
-        pc_adj_agg = np.zeros((ntower, ntower, ntime))
+        if conf.test:
+            print('we are in test, Loop {}'.format(id))
+            prng = np.random.RandomState(id)
+        else:
+            print('MC sim, Loop: {}'.format(id))
+            prng = np.random.RandomState()
+            id = None  # required for true random inside cal_mc_adj
 
-        for irow, name in enumerate(self.line.name_by_line):
-            for j in self.towers[name].pc_adj.keys():
-                jcol = self.line.id_by_line.index(j)
-                pc_adj_agg[irow, jcol, :] = self.towers[name].pc_adj[j]
-            pc_adj_agg[irow, irow, :] = self.towers[name].pc_wind.collapse.values
+        rv = prng.uniform(size=(conf.nsims, network.))  # perfect correlation within a single line
 
-        pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)  # (ntower, ntime)
+        for i in fid_by_line[line]:
+            event[id2name[i]].cal_mc_adj(tower[id2name[i]], damage_states, rv, id)
 
-        # prob of non-collapse damage
-        df_prob = {}
-        for ds in cds_list:
-            temp = np.zeros_like(pc_collapse)
-            for irow, name in enumerate(self.line.name_by_line):
-                val = (self.towers[name].pc_wind[ds].values
-                       - self.towers[name].pc_wind.collapse.values
-                       + pc_collapse[irow, :])
-                val = np.where(val > 1.0, 1.0, val)
-                temp[irow, :] = val
-            df_prob[ds] = pd.DataFrame(temp.T,
-                                       columns=self.line.name_by_line,
-                                       index=idx_time)
+        # compute estimated number and probability of towers without considering
+        # cascading effect
+        est_ntower_nc, prob_ntower_nc = cal_exp_std_no_cascading(fid_by_line[line],
+                                                                 event,
+                                                                 id2name,
+                                                                 damage_states,
+                                                                 conf.nsims,
+                                                                 idx_time,
+                                                                 ntime)
 
-        df_prob['collapse'] = pd.DataFrame(pc_collapse.T,
-                                           columns=self.line.name_by_line,
-                                           index=idx_time)
+        # compute collapse of tower considering cascading effect
+        tf_sim, prob_sim = cal_collapse_of_towers_mc(fid_by_line[line],
+                                                     event,
+                                                     id2name,
+                                                     damage_states,
+                                                     conf.nsims,
+                                                     idx_time,
+                                                     ntime)
+        est_ntower, prob_ntower = cal_exp_std(tf_sim, idx_time)
+        if conf.flag_save:
+            line_ = line.replace(' - ', '_')
+            for (ds, _) in damage_states:
+                npy_file = os.path.join(conf.dir_output,
+                                        'tf_line_mc_{}_{}.npy'.format(ds, line_))
+                np.save(npy_file, tf_sim[ds])
 
-        return df_prob
+                csv_file = os.path.join(conf.dir_output,
+                                        'pc_line_mc_{}_{}.csv'.format(ds, line_))
+                prob_sim[ds].to_csv(csv_file)
+
+                csv_file = os.path.join(conf.dir_output,
+                                        'est_ntower_{}_{}.csv'.format(ds, line_))
+                est_ntower[ds].to_csv(csv_file)
+
+                npy_file = os.path.join(conf.dir_output,
+                                        'prob_ntower_{}_{}.npy'.format(ds, line_))
+                np.save(npy_file, prob_ntower[ds])
+
+                csv_file = os.path.join(conf.dir_output,
+                                        'est_ntower_nc_{}_{}.csv'.format(ds, line_))
+                est_ntower_nc[ds].to_csv(csv_file)
+
+                npy_file = os.path.join(conf.dir_output,
+                                        'prob_ntower_nc_{}_{}.npy'.format(ds,
+                                                                          line_))
+                np.save(npy_file, prob_ntower_nc[ds])
+        print('loop {} finished'.format(id))
+        return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc,\
+            prob_ntower_nc
+
+
+
+

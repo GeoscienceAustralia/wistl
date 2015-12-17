@@ -3,12 +3,10 @@ from __future__ import print_function
 
 __author__ = 'Hyeuk Ryu'
 
+import os
 import numpy as np
 from tower import Tower
 from geopy.distance import great_circle
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 
 class TransmissionLine(object):
@@ -75,13 +73,23 @@ class TransmissionLine(object):
                                  format(self.df_line['LineRoute'].values[0]))
             idx_sorted.append(idx)
 
-        if self.conf.flag_figure:
+        if self.conf.figure:
+
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
             plt.figure()
             plt.plot(self.coord_line[:, 0],
                      self.coord_line[:, 1], 'ro-',
                      self.coord_towers[idx_sorted, 0],
                      self.coord_towers[idx_sorted, 1], 'b-')
-            plt.title(self.df_line['LineRoute'].values[0])
+            line_ = self.df_line['LineRoute'].values[0]
+            plt.title(line_)
+            png_file = os.path.join(self.conf.path_output,
+                                    'line_{}.png'.format(line_))
+            plt.savefig(png_file)
+            plt.close()
 
         return idx_sorted
 
@@ -145,6 +153,6 @@ class TransmissionLine(object):
         for i, tid in enumerate(id_adj):
             if tid >= 0:
                 funct_ = self.towers[self.id2name[tid]].funct
-                if funct_ in self.conf.flag_strainer:
+                if funct_ in self.conf.strainer:
                     id_adj[i] = -1
         return id_adj

@@ -22,8 +22,8 @@ class DamageTower(object):
         self.wind = self.read_wind_timeseries()
         self.idx_time = self.wind.index
 
-        self.pc_wind = None
-        self.pc_adj = None  # dict (ntime,) <- cal_pc_adj_towers
+        self.pc_wind = None  # compute_pc_wind
+        self.pc_adj = None  # dict (ntime,) <- compute_pc_adj
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict
 
@@ -131,7 +131,7 @@ class DamageTower(object):
 
         self.pc_adj = pc_adj
 
-    def compute_mc_adj(self, asset, damage_states, rv, idx):
+    def compute_mc_adj(self, rv, iseed):
         """
         2. determine if adjacent tower collapses or not due to pull by the tower
         jtime: time index (array)
@@ -139,36 +139,33 @@ class DamageTower(object):
         """
 
         # 1. determine damage state of tower due to wind
-        val = np.array([rv < self.pc_wind[ds[0]].values
-                       for ds in damage_states])  # (nds, nsims, ntime)
+        val = np.array([rv < self.pc_wind[ds].values
+                       for ds, _ in self.tower.conf.damage_states])  # (nds, nsims, ntime)
 
         ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
 
         mc_wind = dict()
-        for ds, ids in damage_states:
-            mc_wind.setdefault(ds, {})['isim'],\
-            mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
+        for ds, ids in self.tower.conf.damage_states:
+            mc_wind.setdefault(ds, {})['isim'], \
+                mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
 
         # for collapse
         unq_itime = np.unique(mc_wind['collapse']['itime'])
-        nprob = len(asset.cond_pc_adj_mc['cum_prob'])  #
+        nprob = len(self.tower.cond_pc_adj_mc['cum_prob'])  #
 
-        mc_adj = {}  # impact on adjacent towers
+        mc_adj = dict()  # impact on adjacent towers
 
-        if idx:
-            prng = np.random.RandomState(idx)
-        else:
-            prng = np.random.RandomState()
+        prng = np.random.RandomState(iseed + 100)  # replication
 
         if nprob > 0:
             for jtime in unq_itime:
                 jdx = np.where(mc_wind['collapse']['itime'] == jtime)[0]
                 idx_sim = mc_wind['collapse']['isim'][jdx]  # index of simulation
-                nsims = len(idx_sim)
-                rv = prng.uniform(size=nsims)
+
+                rv = prng.uniform(size=len(idx_sim))
 
                 list_idx_cond = map(lambda rv_: sum(
-                    rv_ >= asset.cond_pc_adj_mc['cum_prob']), rv)
+                    rv_ >= self.tower.cond_pc_adj_mc['cum_prob']), rv)
 
                 # ignore simulation where none of adjacent tower collapses
                 unq_list_idx_cond = set(list_idx_cond) - set([nprob])
@@ -176,10 +173,10 @@ class DamageTower(object):
                 for idx_cond in unq_list_idx_cond:
 
                     # list of idx of adjacent towers in collapse
-                    rel_idx = asset.cond_pc_adj_mc['rel_idx'][idx_cond]
+                    rel_idx = self.tower.cond_pc_adj_mc['rel_idx'][idx_cond]
 
                     # convert relative to absolute fid
-                    abs_idx = [asset.adj_list[j + asset.max_no_adj_towers]
+                    abs_idx = [self.tower.id_adj[j + self.tower.max_no_adj_towers]
                                for j in rel_idx]
 
                     # filter simulation
@@ -189,7 +186,6 @@ class DamageTower(object):
 
         self.mc_wind = mc_wind
         self.mc_adj = mc_adj
-        return
 
 # if __name__ == '__main__':
 #     from config_class import TransmissionConfig
