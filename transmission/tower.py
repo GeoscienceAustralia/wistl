@@ -55,17 +55,21 @@ class Tower(object):
     def get_cond_collapse_prob(self):
         ''' get dict of conditional collapse probabilities
         '''
+
         if self.funct == 'Strainer':
-            funct = self.funct
             design_level = self.design_level
-        else:  # Suspension or Terminal
-            funct = 'Suspension'
-            thr = float(self.conf.cond_collapse_prob[funct]['threshold'])
+        elif self.funct in ('Suspension', 'Terminal'):
+            thr = float(self.conf.cond_collapse_prob[self.funct]['threshold'])
             if self.height > thr:
                 design_level = 'higher'
             else:
                 design_level = 'lower'
-        return self.conf.cond_collapse_prob[funct][design_level]
+
+        try:
+            return self.conf.cond_collapse_prob[self.funct][design_level]
+        except KeyError:
+            print('Please check {}'.format(self.conf.file_cond_collapse_prob),
+                  'as probability for {} is undefined'.format(self.funct))
 
     def get_wind_file(self):
         ''' return name of wind file '''
@@ -109,7 +113,7 @@ class Tower(object):
         """
 
         idx_m1 = np.array([i for i in range(len(self.id_adj))
-            if self.id_adj[i] == -1]) - self.max_no_adj_towers # rel_index
+            if self.id_adj[i] == -1]) - self.max_no_adj_towers  # rel_index
 
         try:
             max_neg = np.max(idx_m1[idx_m1 < 0]) + 1
@@ -128,12 +132,12 @@ class Tower(object):
             w = list(set(item).intersection(bound_))
             w.sort()
             w = tuple(w)
-            if cond_prob.has_key(w):
+            if w in cond_prob:
                 cond_prob[w] += self.cond_pc[item]
             else:
                 cond_prob[w] = self.cond_pc[item]
 
-        if cond_prob.has_key((0,)):
+        if (0,) in cond_prob:
             cond_prob.pop((0,))
 
         # sort by cond. prob

@@ -17,6 +17,7 @@ class TransmissionLine(object):
         self.conf = conf
         self.df_towers = df_towers
         self.df_line = df_line
+        self.name = df_line['LineRoute'].values[0]
         self.no_towers = len(self.df_towers)
 
         self.coord_line = np.array(self.df_line['Shapes'].values[0].points)
@@ -70,7 +71,7 @@ class TransmissionLine(object):
             tf = np.allclose(temp[idx], 0.0, 1.0e-4)
             if not tf:
                 raise ValueError('Can not locate the tower in {}'.
-                                 format(self.df_line['LineRoute'].values[0]))
+                                 format(self.name))
             idx_sorted.append(idx)
 
         if self.conf.figure:
@@ -84,10 +85,9 @@ class TransmissionLine(object):
                      self.coord_line[:, 1], 'ro-',
                      self.coord_towers[idx_sorted, 0],
                      self.coord_towers[idx_sorted, 1], 'b-')
-            line_ = self.df_line['LineRoute'].values[0]
-            plt.title(line_)
+            plt.title(self.name)
             png_file = os.path.join(self.conf.path_output,
-                                    'line_{}.png'.format(line_))
+                                    'line_{}.png'.format(self.name))
             plt.savefig(png_file)
             plt.close()
 

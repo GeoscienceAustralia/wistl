@@ -6,7 +6,7 @@ __author__ = 'Hyeuk Ryu'
 import os
 import numpy as np
 import pandas as pd
-
+from scipy.stats import itemfreq
 
 from damage_tower import DamageTower
 
@@ -16,6 +16,7 @@ class DamageLine(object):
 
     def __init__(self, line, path_wind):
         self.line = line
+        self.event_id = path_wind.split('/')[-1]
 
         self.towers = dict()
         for key, tower in self.line.towers.iteritems():
@@ -23,15 +24,28 @@ class DamageLine(object):
             if key in self.towers:
                 raise KeyError('{} is already assigned'.format(key))
 
-            vel_file = os.path.join(path_wind, tower.file_wind)
-            self.towers[key] = DamageTower(tower, vel_file)
+            file_wind = os.path.join(path_wind, tower.file_wind)
+            self.towers[key] = DamageTower(tower, file_wind)
 
             # compute pc_wind and pc_adj
             self.towers[key].compute_pc_wind()
             self.towers[key].compute_pc_adj()
 
         # assuming same time index for each tower in the same network
-        self.idx_time = self.towers[key].idx_time
+        self.time_index = self.towers[key].time_index
+
+        # analytical method
+        self.damage_prob_analytical = dict()
+
+        # simulation method
+        self.damage_prob_simulation = dict()
+        self.prob_no_damage = None
+        self.est_no_damage = None
+
+        # non cascading collapse
+        self.damage_prob_simulation_non_cascading = dict()
+        self.prob_no_damage_non_cascading = None
+        self.est_no_damage_non_cascading = None
 
     def compute_damage_probability_analytical(self):
         """
@@ -44,11 +58,9 @@ class DamageLine(object):
         pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
         """
 
-        df_prob = dict()
-
         pc_adj_agg = np.zeros((self.line.no_towers,
-                               self.line_no_towers,
-                               len(self.idx_time)))
+                               self.line.no_towers,
+                               len(self.time_index)))
 
         # prob of collapse
         for irow, name in enumerate(self.line.name_by_line):
@@ -59,9 +71,10 @@ class DamageLine(object):
 
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)  # (ntower, ntime)
 
-        df_prob['collapse'] = pd.DataFrame(pc_collapse.T,
-                                           columns=self.line.name_by_line,
-                                           index=self.idx_time)
+        self.damage_prob_analytical['collapse'] = pd.DataFrame(
+            pc_collapse.T,
+            columns=self.line.name_by_line,
+            index=self.time_index)
 
         # prob of non-collapse damage
         cds_list = [x for x, _ in self.line.conf.damage_states]  # only string
@@ -75,19 +88,19 @@ class DamageLine(object):
                        + pc_collapse[irow, :])
                 val = np.where(val > 1.0, 1.0, val)
                 temp[irow, :] = val
-            df_prob[ds] = pd.DataFrame(temp.T,
-                                       columns=self.line.name_by_line,
-                                       index=self.idx_time)
 
-        return df_prob
+            self.damage_prob_analytical[ds] = pd.DataFrame(
+                temp.T,
+                columns=self.line.name_by_line,
+                index=self.time_index)
 
     def compute_damage_probability_simulation(self):
 
-        prob_sim = dict()
         tf_sim = dict()
 
-        tf_ds = np.zeros((self.line.no_towers, self.line.conf.nsims,
-                         len(self.idx_time)), dtype=bool)
+        tf_ds = np.zeros((self.line.no_towers,
+                          self.line.conf.nsims,
+                          len(self.time_index)), dtype=bool)
 
         # collapse by adjacent towers
         for name in self.line.name_by_line:
@@ -107,25 +120,90 @@ class DamageLine(object):
 
         # append damage stae by direct wind
         for ds, _ in cds_list:
+
             for irow, name in enumerate(self.line.name_by_line):
-                for (j1, k1) in zip(self.towers[name].mc_wind[ds]['isim'],
-                                    self.towers[name].mc_wind[ds]['itime']):
 
-                    tf_ds[irow, j1, k1] = True
+                for j, k in zip(self.towers[name].mc_wind[ds]['isim'],
+                                self.towers[name].mc_wind[ds]['itime']):
 
-            temp = np.sum(tf_ds, axis=1)/float(self.line.conf.nsims)
+                    tf_ds[irow, j, k] = True
 
-            prob_sim[ds] = pd.DataFrame(temp.T,
-                                        columns=self.line.name_by_line,
-                                        index=self.idx_time)
+            self.damage_prob_simulation[ds] = pd.DataFrame(
+                np.sum(tf_ds, axis=1).T/float(self.line.conf.nsims),
+                columns=self.line.name_by_line,
+                index=self.time_index)
 
             tf_sim[ds] = np.copy(tf_ds)  # why copy??
 
-        return tf_sim, prob_sim
+        self.est_no_damage, self.prob_no_damage = \
+            self.compute_damage_stats(tf_sim)
 
+    def compute_damage_probability_simulation_ignoring_cascading(self):
 
+        tf_sim_non_cascading = dict()
 
+        for ds, _ in self.line.conf.damage_states:
 
+            tf_ds = np.zeros((self.line.no_towers,
+                              self.line.conf.nsims,
+                              len(self.time_index)), dtype=bool)
 
+            for irow, name in enumerate(self.line.name_by_line):
 
+                isim = self.towers[name].mc_wind[ds]['isim']
+                itime = self.towers[name].mc_wind[ds]['itime']
 
+                tf_ds[irow, isim, itime] = True
+
+            self.damage_prob_simulation_non_cascading[ds] = pd.DataFrame(
+                np.sum(tf_ds, axis=1).T/float(self.line.conf.nsims),
+                columns=self.line.name_by_line,
+                index=self.time_index)
+
+            tf_sim_non_cascading[ds] = np.copy(tf_ds)
+
+        self.est_no_damage_non_cascading, \
+            self.prob_no_damage_non_cascading = \
+            self.compute_damage_stats(tf_sim_non_cascading)
+
+    def compute_damage_stats(self, tf_sim):
+        """
+        compute mean and std of no. of ds
+        tf_collapse_sim.shape = (ntowers, nsim, ntime)
+        """
+
+        est_damage_tower = dict()
+        prob_damage_tower = dict()
+
+        ntime = len(self.time_index)
+        ntowers = self.line.no_towers
+        nsims = self.line.conf.nsims
+
+        for ds in tf_sim:
+
+            assert tf_sim[ds].shape == (ntowers, nsims, ntime)
+
+            # mean and standard deviation
+            x_ = np.array(range(ntowers + 1))[:, np.newaxis]  # (ntowers, 1)
+            x2_ = np.power(x_, 2.0)
+
+            no_ds_across_towers = np.sum(tf_sim[ds], axis=0)  # (nsims, ntime)
+            no_freq = np.zeros(shape=(ntime, ntowers + 1))  # (ntime, ntowers)
+
+            for i in range(ntime):
+                val = itemfreq(no_ds_across_towers[:, i])  # (value, freq)
+                no_freq[i, [int(x) for x in val[:, 0]]] = val[:, 1]
+
+            prob = no_freq / float(nsims)  # (ntime, ntowers)
+
+            exp_ntower = np.dot(prob, x_)
+            std_ntower = np.sqrt(np.dot(prob, x2_) - np.power(exp_ntower, 2))
+
+            est_damage_tower[ds] = pd.DataFrame(
+                np.hstack((exp_ntower, std_ntower)),
+                columns=['mean', 'std'],
+                index=self.time_index)
+
+            prob_damage_tower[ds] = prob
+
+        return est_damage_tower, prob_damage_tower

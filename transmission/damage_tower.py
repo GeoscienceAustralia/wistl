@@ -16,26 +16,29 @@ class DamageTower(object):
     at this tower location.
     """
 
-    def __init__(self, tower, vel_file):
+    def __init__(self, tower, file_wind):
         self.tower = tower
-        self.vel_file = vel_file
+        self.file_wind = file_wind
         self.wind = self.read_wind_timeseries()
-        self.idx_time = self.wind.index
+        self.time_index = self.wind.index
 
+        # analytical method
         self.pc_wind = None  # compute_pc_wind
         self.pc_adj = None  # dict (ntime,) <- compute_pc_adj
+
+        # simulation method
         self.mc_wind = None  # dict(nsims, ntime)
-        self.mc_adj = None  # dict
+        self.mc_adj = None  # dict <- compute_mc_adj
 
     def read_wind_timeseries(self):
         # Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure
         try:
-            data = pd.read_csv(self.vel_file, header=0, parse_dates=[0],
+            data = pd.read_csv(self.file_wind, header=0, parse_dates=[0],
                                index_col=[0], usecols=[0, 3, 6],
                                names=['', '', '', 'speed', '', '', 'bearing',
                                       ''])
         except IOError:
-            print('file {} does not exist'.format(self.vel_file))
+            print('file {} does not exist'.format(self.file_wind))
 
         speed = data['speed'].values
         bearing = np.deg2rad(data['bearing'].values)  # degree
@@ -75,7 +78,8 @@ class DamageTower(object):
                                 self.tower.conf.terrain_multiplier['height'],
                                 self.tower.conf.terrain_multiplier[tc_str])
         except KeyError:
-            print('{} is not defined'.format(tc_str))
+            print('{} is undefined in {}'.format(
+                tc_str, self.tower.conf.file_terrain_multiplier))
 #            return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
 
         idx_10 = self.tower.conf.terrain_multiplier['height'].index(10)
@@ -91,7 +95,7 @@ class DamageTower(object):
         - damage_states: [('collapse', 2), ('minor', 1)]
         - nds:
         """
-        pc_wind = np.zeros(shape=(len(self.idx_time),
+        pc_wind = np.zeros(shape=(len(self.time_index),
                                   self.tower.conf.no_damage_states))
         vratio = self.wind.dir_speed.values/self.tower.collapse_capacity
 
@@ -124,14 +128,13 @@ class DamageTower(object):
 
         pc_adj = {}
         for rel_idx in self.tower.cond_pc_adj.keys():
-            abs_idx = self.tower.id_adj[rel_idx +
-                                          self.tower.max_no_adj_towers]
+            abs_idx = self.tower.id_adj[rel_idx + self.tower.max_no_adj_towers]
             pc_adj[abs_idx] = (self.pc_wind.collapse.values *
                                self.tower.cond_pc_adj[rel_idx])
 
         self.pc_adj = pc_adj
 
-    def compute_mc_adj(self, rv, iseed):
+    def compute_mc_adj(self, rv, seed=None):
         """
         2. determine if adjacent tower collapses or not due to pull by the tower
         jtime: time index (array)
@@ -155,7 +158,10 @@ class DamageTower(object):
 
         mc_adj = dict()  # impact on adjacent towers
 
-        prng = np.random.RandomState(iseed + 100)  # replication
+        if self.tower.conf.random_seed:
+            prng = np.random.RandomState(seed + 100)  # replication
+        else:
+            prng = np.random.RandomState()
 
         if nprob > 0:
             for jtime in unq_itime:

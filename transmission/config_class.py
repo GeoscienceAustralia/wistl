@@ -29,6 +29,21 @@ class TransmissionConfig(object):
         self.parallel = conf.getboolean('run_type', 'flag_parallel')
         self.save = conf.getboolean('run_type', 'flag_save')
         self.figure = conf.getboolean('run_type', 'flag_figure')
+        self.random_seed = conf.getboolean('run_type', 'flag_random_seed')
+
+        # random seed
+        if self.random_seed:
+
+            self.seed = dict()
+            rnd_events = conf.get('random_seed', 'events').split(',')
+            rnd_lines = conf.get('random_seed', 'lines').split(',')
+
+            for rnd_event in rnd_events:
+                (event_key, event_val) = self.split_str(rnd_event, ':')
+                for rnd_line in rnd_lines:
+                    (line_key, line_val) = self.split_str(rnd_line, ':')
+                    self.seed.setdefault(event_key, {})[line_key] = \
+                        event_val + line_val
 
         # run_parameters
         self.nsims = conf.getint('run_parameters', 'num_simulations')
@@ -42,17 +57,19 @@ class TransmissionConfig(object):
         self.strainer = [x.strip() for x in strainer_.split(',')]
 
         # directories
+        self.path_proj = conf.get('directories', 'project')
+
         try:
-            path_gis_data = conf.get('directories', 'gis_data')
+            self.path_gis_data = conf.get('directories', 'gis_data')
         except ValueError:
-            path_gis_data = self.get_path(
+            self.path_gis_data = self.get_path(
                 conf.get('directories', 'gis_data', 1), conf_dic)
 
         try:
-            self.path_wind_timeseries = conf.get('directories', 'wind_scenario')
+            self.path_wind_scenario = conf.get('directories', 'wind_scenario')
         except ValueError:
             xx = conf.get('directories', 'wind_scenario', 1).split(',\n')
-            self.path_wind_timeseries = [self.get_path(x, conf_dic) for x in xx]
+            self.path_wind_scenario = [self.get_path(x, conf_dic) for x in xx]
 
         try:
             path_input = conf.get('directories', 'input')
@@ -67,11 +84,11 @@ class TransmissionConfig(object):
                 conf.get('directories', 'output', 1), conf_dic)
 
         # gis_data
-        self.file_shape_tower = os.path.join(path_gis_data,
+        self.file_shape_tower = os.path.join(self.path_gis_data,
                                              conf.get('gis_data',
                                                       'shape_tower'))
 
-        self.file_shape_line = os.path.join(path_gis_data,
+        self.file_shape_line = os.path.join(self.path_gis_data,
                                             conf.get('gis_data',
                                                      'shape_line'))
 
@@ -154,6 +171,16 @@ class TransmissionConfig(object):
         path_full = conf_dic['directories'][path_key]
 
         return os.path.join(path_full, path_split[1])
+
+    @staticmethod
+    def split_str(str_, str_split):
+        ''' split string with split_str and return tuple of str and integer
+        '''
+        list_ = str_.split(str_split)
+
+        return list_[0].strip(), int(list_[1])
+
+
 
     # @property
     # def test(self):

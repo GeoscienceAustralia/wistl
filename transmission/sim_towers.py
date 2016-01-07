@@ -24,155 +24,47 @@ Todo:
     -. with our without cascading effect (mc simulation) - priority
 """
 
-#import parmap
 import time
 import sys
-#from multiprocessing import Pool
+import os
 
-#from read import read_velocity_profile
-#from compute import cal_collapse_of_towers_analytical,\
-#    cal_collapse_of_towers_mc, cal_exp_std, cal_exp_std_no_cascading
-#from read import TransmissionNetwork
-#from transmission_line import TransmissionLine
-#from transmission_network import TransmissionNetwork
-from event_set import create_event_set
+from damage_network import create_event_set
 
 
 def sim_towers(conf):
+
     if conf.test:
         print("==============>testing")
 
+    if not os.path.exists(conf.path_output):
+        os.makedirs(conf.path_output)
+
     event_set = create_event_set(conf)
 
-    # toc = time.time()
-    # print('creation of event set took {} seconds'.format(toc - tic))
+    tic = time.time()
 
     if conf.analytical:
         print('Computing damage probability using analytical method')
 
-        damage_prob = {}
         for event_key, damage_network in event_set.iteritems():
-            print(' for wind event: {}'.format(event_key))
+            print(' event: {}'.format(event_key))
+
             for line_key, damage_line in damage_network.lines.iteritems():
-                damage_prob.setdefault(event_key, {})[line_key] =\
-                    damage_line.compute_damage_probability_analytical()
+                damage_line.compute_damage_probability_analytical()
 
-        if conf.save:
-            print('add print here')
+        print('Analytical method took {} seconds'.format(time.time() - tic))
+        tic = time.time()
 
-    tic = time.time()
-        # print(' took {} seconds'.format(tic - toc))
+    if conf.simulation:
 
-    if conf.simulation and conf.parallel:
-        print("Parallel run on......")
-
-        print('MC simulation took {} seconds'.format(time.time() - tic))
-
-    elif conf.simulation and not conf.parallel:
-
-        print('Serial run on.....')
+        print('Computing damage probability using simulation method')
 
         for event_key, damage_network in event_set.iteritems():
-            for iseed, line_key, damage_line in enumerate(
-                    damage_network.lines.iteritems()):
+            print(' event: {}'.format(event_key))
 
-                mc_simulation_over_line(damage_line, damage_network.idx_time)
+            damage_network.mc_simulation()
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
-
-    return damage_prob
-
-#    return tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
-#        est_ntower_nc_all, prob_ntower_nc_all, sel_lines
-
-# def mc_compute(damage_line):
-
-#     #pc_collapse = dict()
-#     #print('MC sim, Loop: {}'.format(damage_line))
-#     pc_collapse = damage_line.compute_collapse_of_towers_analytical()
-#     #print('loop {} finished'.format(damage_line))
-
-#     return pc_collapse
-
-
-# def mc_compute(damage_network):
-
-#     pc_collapse = dict()
-#     print('MC sim, Loop: {}'.format(pid))
-#     pc_collapse[pid] = damage_network.lines[pid].compute_collapse_of_towers_analytical()
-#     print('loop {} finished'.format(pid))
-
-#     return pc_collapse[pid]
-
-
-def mc_simulation_over_line(damage_line, idx_time):
-
-    ntime = len(idx_time)
-    line = lines[id]
-    damage_states = conf.damage_states
-
-    if conf.test:
-        print('we are in test, Loop {}'.format(id))
-        prng = np.random.RandomState(id)
-    else:
-        print('MC sim, Loop: {}'.format(id))
-        prng = np.random.RandomState()
-        id = None  # required for true random inside cal_mc_adj
-
-    rv = prng.uniform(size=(conf.nsims, network.))  # perfect correlation within a single line
-
-    for i in fid_by_line[line]:
-        event[id2name[i]].cal_mc_adj(tower[id2name[i]], damage_states, rv, id)
-
-    # compute estimated number and probability of towers without considering
-    # cascading effect
-    est_ntower_nc, prob_ntower_nc = cal_exp_std_no_cascading(fid_by_line[line],
-                                                             event,
-                                                             id2name,
-                                                             damage_states,
-                                                             conf.nsims,
-                                                             idx_time,
-                                                             ntime)
-
-    # compute collapse of tower considering cascading effect
-    tf_sim, prob_sim = cal_collapse_of_towers_mc(fid_by_line[line],
-                                                 event,
-                                                 id2name,
-                                                 damage_states,
-                                                 conf.nsims,
-                                                 idx_time,
-                                                 ntime)
-    est_ntower, prob_ntower = cal_exp_std(tf_sim, idx_time)
-    if conf.flag_save:
-        line_ = line.replace(' - ', '_')
-        for (ds, _) in damage_states:
-            npy_file = os.path.join(conf.dir_output,
-                                    'tf_line_mc_{}_{}.npy'.format(ds, line_))
-            np.save(npy_file, tf_sim[ds])
-
-            csv_file = os.path.join(conf.dir_output,
-                                    'pc_line_mc_{}_{}.csv'.format(ds, line_))
-            prob_sim[ds].to_csv(csv_file)
-
-            csv_file = os.path.join(conf.dir_output,
-                                    'est_ntower_{}_{}.csv'.format(ds, line_))
-            est_ntower[ds].to_csv(csv_file)
-
-            npy_file = os.path.join(conf.dir_output,
-                                    'prob_ntower_{}_{}.npy'.format(ds, line_))
-            np.save(npy_file, prob_ntower[ds])
-
-            csv_file = os.path.join(conf.dir_output,
-                                    'est_ntower_nc_{}_{}.csv'.format(ds, line_))
-            est_ntower_nc[ds].to_csv(csv_file)
-
-            npy_file = os.path.join(conf.dir_output,
-                                    'prob_ntower_nc_{}_{}.npy'.format(ds,
-                                                                      line_))
-            np.save(npy_file, prob_ntower_nc[ds])
-    print('loop {} finished'.format(id))
-    return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc,\
-        prob_ntower_nc
 
 
 if __name__ == '__main__':
