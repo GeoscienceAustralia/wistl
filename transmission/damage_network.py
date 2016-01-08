@@ -4,6 +4,7 @@ from __future__ import print_function
 __author__ = 'Hyeuk Ryu'
 
 import os
+import copy
 import numpy as np
 import parmap
 #import pandas as pd
@@ -17,7 +18,7 @@ def create_event_set(conf):
     """
 
     network = TransmissionNetwork(conf)
-
+    print(network.lines['Calaca - Amadeo'].towers)
     events = dict()
 
     for path_wind in conf.path_wind_scenario:
@@ -33,6 +34,8 @@ def create_event_set(conf):
 
         events[event_id] = DamageNetwork(network, path_wind)
 
+        print(network.lines['Calaca - Amadeo'].towers)
+
     return events
 
 
@@ -42,16 +45,18 @@ class DamageNetwork(TransmissionNetwork):
 
     def __init__(self, network, path_wind):
 
-        self._parent = network  # instance of TransmissionNetwork class
+        network_ = copy.deepcopy(network)  # avoid any change to network
+
+        self._parent = network_  # instance of TransmissionNetwork class
         self.path_wind = path_wind
         self.event_id = path_wind.split('/')[-1]
-        self.damage_lines = dict()
+        #self.damage_lines = dict()
 
-        for key, line in network.lines.iteritems():
-            self.damage_lines[key] = DamageLine(line, self.path_wind)
+        for key, line in network_.lines.iteritems():
+            self.lines[key] = DamageLine(line, self.path_wind)
 
         # assuming same time index for each tower in the same network
-        self.time_index = self.damage_lines[key].time_index
+        self.time_index = self.lines[key].time_index
 
     def __getattr__(self, attr_name):
         return getattr(self._parent, attr_name)
@@ -60,11 +65,11 @@ class DamageNetwork(TransmissionNetwork):
 
         if self.conf.parallel:
             print('parallel MC run on.......')
-            parmap.map(self.mc_loop_over_line, self.damage_lines.values())
+            parmap.map(self.mc_loop_over_line, self.lines.values())
 
         else:
             print('serial MC run on.......')
-            for _, line in self.damage_lines.iteritems():
+            for _, line in self.lines.iteritems():
                 self.mc_loop_over_line(line)
 
     def mc_loop_over_line(self, damage_line):
@@ -84,14 +89,14 @@ class DamageNetwork(TransmissionNetwork):
         rv = prng.uniform(size=(self.conf.nsims,
                                 len(damage_line.time_index)))
 
-        for _, tower in damage_line.damage_towers.iteritems():
+        for _, tower in damage_line.towers.iteritems():
             tower.compute_mc_adj(rv, seed)
 
         #damage_line.est_damage_tower, damage_line.prob_damage_tower = \
         damage_line.compute_damage_probability_simulation()
 
         if not self.conf.skip_non_cascading_collapse:
-            damage_line.compute_damage_probability_simulation_ignoring_cascading()
+            damage_line.compute_damage_probability_simulation_non_cascading()
 
     #return est_damage_tower, prob_damage_tower
 

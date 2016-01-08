@@ -4,6 +4,7 @@ from __future__ import print_function
 __author__ = 'Hyeuk Ryu'
 
 import os
+import copy
 import numpy as np
 import pandas as pd
 from scipy.stats import itemfreq
@@ -16,24 +17,27 @@ class DamageLine(TransmissionLine):
     """ class for a collectin of damage to line """
 
     def __init__(self, line, path_wind):
-        self._parent = line  # instance of TransmissionLine class
+
+        line_ = copy.deepcopy(line)  # avoid any change to line
+
+        self._parent = line_  # instance of TransmissionLine class
         self.event_id = path_wind.split('/')[-1]
-        self.damage_towers = dict()
+        #self.towers = dict()
 
-        for key, tower in line.towers.iteritems():
+        for key, tower in line_.towers.iteritems():
 
-            # if key in self.damage_towers:
+            # if key in self.towers:
             #     raise KeyError('{} is already assigned'.format(key))
 
             file_wind = os.path.join(path_wind, tower.file_wind)
-            self.damage_towers[key] = DamageTower(tower, file_wind)
+            self.towers[key] = DamageTower(tower, file_wind)
 
             # compute pc_wind and pc_adj
-            self.damage_towers[key].compute_pc_wind()
-            self.damage_towers[key].compute_pc_adj()
+            self.towers[key].compute_pc_wind()
+            self.towers[key].compute_pc_adj()
 
         # assuming same time index for each tower in the same network
-        self.time_index = self.damage_towers[key].time_index
+        self.time_index = self.towers[key].time_index
 
         # analytical method
         self.damage_prob_analytical = dict()
@@ -68,10 +72,10 @@ class DamageLine(TransmissionLine):
 
         # prob of collapse
         for irow, name in enumerate(self.name_by_line):
-            for j in self.damage_towers[name].pc_adj.keys():
+            for j in self.towers[name].pc_adj.keys():
                 jcol = self.id_by_line.index(j)
-                pc_adj_agg[irow, jcol, :] = self.damage_towers[name].pc_adj[j]
-            pc_adj_agg[irow, irow, :] = self.damage_towers[name].pc_wind.collapse.values
+                pc_adj_agg[irow, jcol, :] = self.towers[name].pc_adj[j]
+            pc_adj_agg[irow, irow, :] = self.towers[name].pc_wind.collapse.values
 
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)  # (ntower, ntime)
 
@@ -87,8 +91,8 @@ class DamageLine(TransmissionLine):
         for ds in cds_list:
             temp = np.zeros_like(pc_collapse)
             for irow, name in enumerate(self.name_by_line):
-                val = (self.damage_towers[name].pc_wind[ds].values
-                       - self.damage_towers[name].pc_wind.collapse.values
+                val = (self.towers[name].pc_wind[ds].values
+                       - self.towers[name].pc_wind.collapse.values
                        + pc_collapse[irow, :])
                 val = np.where(val > 1.0, 1.0, val)
                 temp[irow, :] = val
@@ -109,11 +113,11 @@ class DamageLine(TransmissionLine):
         # collapse by adjacent towers
         for name in self.name_by_line:
 
-            for j in self.damage_towers[name].mc_adj.keys():  # time
+            for j in self.towers[name].mc_adj.keys():  # time
 
-                for k in self.damage_towers[name].mc_adj[j].keys():  # fid
+                for k in self.towers[name].mc_adj[j].keys():  # fid
 
-                    isim = self.damage_towers[name].mc_adj[j][k]
+                    isim = self.towers[name].mc_adj[j][k]
 
                     for l in k:  # each fid
 
@@ -127,8 +131,8 @@ class DamageLine(TransmissionLine):
 
             for irow, name in enumerate(self.name_by_line):
 
-                for j, k in zip(self.damage_towers[name].mc_wind[ds]['isim'],
-                                self.damage_towers[name].mc_wind[ds]['itime']):
+                for j, k in zip(self.towers[name].mc_wind[ds]['isim'],
+                                self.towers[name].mc_wind[ds]['itime']):
 
                     tf_ds[irow, j, k] = True
 
@@ -142,7 +146,7 @@ class DamageLine(TransmissionLine):
         self.est_no_damage, self.prob_no_damage = \
             self.compute_damage_stats(tf_sim)
 
-    def compute_damage_probability_simulation_ignoring_cascading(self):
+    def compute_damage_probability_simulation_non_cascading(self):
 
         tf_sim_non_cascading = dict()
 
@@ -154,8 +158,8 @@ class DamageLine(TransmissionLine):
 
             for irow, name in enumerate(self.name_by_line):
 
-                isim = self.damage_towers[name].mc_wind[ds]['isim']
-                itime = self.damage_towers[name].mc_wind[ds]['itime']
+                isim = self.towers[name].mc_wind[ds]['isim']
+                itime = self.towers[name].mc_wind[ds]['itime']
 
                 tf_ds[irow, isim, itime] = True
 

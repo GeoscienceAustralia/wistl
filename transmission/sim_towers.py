@@ -49,7 +49,7 @@ def sim_towers(conf):
         for event_key, network in event_set.iteritems():
             print(' event: {}'.format(event_key))
 
-            for line_key, line in network.damage_lines.iteritems():
+            for line_key, line in network.lines.iteritems():
                 line.compute_damage_probability_analytical()
 
         print('Analytical method took {} seconds'.format(time.time() - tic))
