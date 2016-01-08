@@ -46,11 +46,11 @@ def sim_towers(conf):
     if conf.analytical:
         print('Computing damage probability using analytical method')
 
-        for event_key, damage_network in event_set.iteritems():
+        for event_key, network in event_set.iteritems():
             print(' event: {}'.format(event_key))
 
-            for line_key, damage_line in damage_network.lines.iteritems():
-                damage_line.compute_damage_probability_analytical()
+            for line_key, line in network.damage_lines.iteritems():
+                line.compute_damage_probability_analytical()
 
         print('Analytical method took {} seconds'.format(time.time() - tic))
         tic = time.time()
@@ -59,10 +59,10 @@ def sim_towers(conf):
 
         print('Computing damage probability using simulation method')
 
-        for event_key, damage_network in event_set.iteritems():
+        for event_key, network in event_set.iteritems():
             print(' event: {}'.format(event_key))
 
-            damage_network.mc_simulation()
+            network.mc_simulation()
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
 

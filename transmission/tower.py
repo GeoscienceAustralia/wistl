@@ -39,6 +39,7 @@ class Tower(object):
         self.design_speed = self.assign_design_speed()  # design wind speed
         self.collapse_capacity = self.compute_collapse_capacity()
         self.file_wind = self.get_wind_file()
+        self.convert_factor = self.convert_10_to_z()
 
         cond_collapse_prob = self.get_cond_collapse_prob()
         self.cond_pc = cond_collapse_prob['prob']
@@ -105,6 +106,27 @@ class Tower(object):
                 (1.0 - self.actual_span / self.design_span))  # 1 in case sw/sd > 1
         #self.u_val = 1.0/np.sqrt(u)
         return self.design_speed/np.sqrt(u)
+
+    def convert_10_to_z(self):
+        """
+        Mz,cat(h=10)/Mz,cat(h=z)
+        tc: terrain category (defined by line route)
+        asset is a Tower class instance.
+        """
+
+        tc_str = 'tc' + str(self.terrain_cat)  # Terrain
+        try:
+            mzcat_z = np.interp(self.height_z,
+                                self.conf.terrain_multiplier['height'],
+                                self.conf.terrain_multiplier[tc_str])
+        except KeyError:
+            print('{} is undefined in {}'.format(
+                tc_str, self.conf.file_terrain_multiplier))
+#            return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
+
+        idx_10 = self.conf.terrain_multiplier['height'].index(10)
+        mzcat_10 = self.conf.terrain_multiplier[tc_str][idx_10]
+        return mzcat_z/mzcat_10
 
     def calculate_cond_pc_adj(self):
         """

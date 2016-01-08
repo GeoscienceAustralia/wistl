@@ -5,8 +5,10 @@ import numpy as np
 from scipy.stats import lognorm
 import pandas as pd
 
+from tower import Tower
 
-class DamageTower(object):
+
+class DamageTower(Tower):
 
     """
     class DamageTower
@@ -17,7 +19,7 @@ class DamageTower(object):
     """
 
     def __init__(self, tower, file_wind):
-        self.tower = tower
+        self._parent = tower
         self.file_wind = file_wind
         self.wind = self.read_wind_timeseries()
         self.time_index = self.wind.index
@@ -29,6 +31,9 @@ class DamageTower(object):
         # simulation method
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict <- compute_mc_adj
+
+    def __getattr__(self, attr_name):
+        return getattr(self._parent, attr_name)
 
     def read_wind_timeseries(self):
         # Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure
@@ -44,10 +49,10 @@ class DamageTower(object):
         bearing = np.deg2rad(data['bearing'].values)  # degree
 
         # angle of conductor relative to NS
-        t0 = np.deg2rad(self.tower.strong_axis) - np.pi/2.0
-        convert_factor = self.convert_10_to_z()
+        t0 = np.deg2rad(self.strong_axis) - np.pi/2.0
+
         data['dir_speed'] = pd.Series(
-            convert_factor * self.compute_directional_wind_speed(
+            self.convert_factor * self.compute_directional_wind_speed(
                 speed, bearing, t0), index=data.index)
         return data
 
@@ -65,27 +70,6 @@ class DamageTower(object):
         adj = speed*np.max(np.vstack((cos_, sin_)), axis=0)
         return np.where(tf, adj, speed)  # adj if true, otherwise speed
 
-    def convert_10_to_z(self):
-        """
-        Mz,cat(h=10)/Mz,cat(h=z)
-        tc: terrain category (defined by line route)
-        asset is a Tower class instance.
-        """
-
-        tc_str = 'tc' + str(self.tower.terrain_cat)  # Terrain
-        try:
-            mzcat_z = np.interp(self.tower.height_z,
-                                self.tower.conf.terrain_multiplier['height'],
-                                self.tower.conf.terrain_multiplier[tc_str])
-        except KeyError:
-            print('{} is undefined in {}'.format(
-                tc_str, self.tower.conf.file_terrain_multiplier))
-#            return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
-
-        idx_10 = self.tower.conf.terrain_multiplier['height'].index(10)
-        mzcat_10 = self.tower.conf.terrain_multiplier[tc_str][idx_10]
-        return mzcat_z/mzcat_10
-
     def compute_pc_wind(self):
         """
         compute probability of damage due to wind
@@ -96,14 +80,14 @@ class DamageTower(object):
         - nds:
         """
         pc_wind = np.zeros(shape=(len(self.time_index),
-                                  self.tower.conf.no_damage_states))
-        vratio = self.wind.dir_speed.values/self.tower.collapse_capacity
+                                  self.conf.no_damage_states))
+        vratio = self.wind.dir_speed.values/self.collapse_capacity
 
         try:
-            fragx = self.tower.conf.fragility_curve[self.tower.ttype][self.tower.funct]
-            idf = np.sum(fragx['dev_angle'] <= self.tower.dev_angle)
+            fragx = self.conf.fragility_curve[self.ttype][self.funct]
+            idf = np.sum(fragx['dev_angle'] <= self.dev_angle)
 
-            for (ds, ids) in self.tower.conf.damage_states:  # damage state
+            for (ds, ids) in self.conf.damage_states:  # damage state
                 med = fragx[idf][ds]['param0']
                 sig = fragx[idf][ds]['param1']
 
@@ -112,11 +96,11 @@ class DamageTower(object):
 
         except KeyError:
                 print('fragility is not defined for {}'.format(
-                      self.tower.const_type))
+                      self.const_type))
 
         self.pc_wind = pd.DataFrame(
             pc_wind,
-            columns=[x[0] for x in self.tower.conf.damage_states],
+            columns=[x[0] for x in self.conf.damage_states],
             index=self.wind.index)
 
     def compute_pc_adj(self):  # only for analytical approach
@@ -127,10 +111,10 @@ class DamageTower(object):
         # only applicable for tower collapse
 
         pc_adj = {}
-        for rel_idx in self.tower.cond_pc_adj.keys():
-            abs_idx = self.tower.id_adj[rel_idx + self.tower.max_no_adj_towers]
+        for rel_idx in self.cond_pc_adj.keys():
+            abs_idx = self.id_adj[rel_idx + self.max_no_adj_towers]
             pc_adj[abs_idx] = (self.pc_wind.collapse.values *
-                               self.tower.cond_pc_adj[rel_idx])
+                               self.cond_pc_adj[rel_idx])
 
         self.pc_adj = pc_adj
 
@@ -143,22 +127,22 @@ class DamageTower(object):
 
         # 1. determine damage state of tower due to wind
         val = np.array([rv < self.pc_wind[ds].values
-                       for ds, _ in self.tower.conf.damage_states])  # (nds, nsims, ntime)
+                       for ds, _ in self.conf.damage_states])  # (nds, nsims, ntime)
 
         ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
 
         mc_wind = dict()
-        for ds, ids in self.tower.conf.damage_states:
+        for ds, ids in self.conf.damage_states:
             mc_wind.setdefault(ds, {})['isim'], \
                 mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
 
         # for collapse
         unq_itime = np.unique(mc_wind['collapse']['itime'])
-        nprob = len(self.tower.cond_pc_adj_mc['cum_prob'])  #
+        nprob = len(self.cond_pc_adj_mc['cum_prob'])  #
 
         mc_adj = dict()  # impact on adjacent towers
 
-        if self.tower.conf.random_seed:
+        if self.conf.random_seed:
             prng = np.random.RandomState(seed + 100)  # replication
         else:
             prng = np.random.RandomState()
@@ -171,7 +155,7 @@ class DamageTower(object):
                 rv = prng.uniform(size=len(idx_sim))
 
                 list_idx_cond = map(lambda rv_: sum(
-                    rv_ >= self.tower.cond_pc_adj_mc['cum_prob']), rv)
+                    rv_ >= self.cond_pc_adj_mc['cum_prob']), rv)
 
                 # ignore simulation where none of adjacent tower collapses
                 unq_list_idx_cond = set(list_idx_cond) - set([nprob])
@@ -179,10 +163,10 @@ class DamageTower(object):
                 for idx_cond in unq_list_idx_cond:
 
                     # list of idx of adjacent towers in collapse
-                    rel_idx = self.tower.cond_pc_adj_mc['rel_idx'][idx_cond]
+                    rel_idx = self.cond_pc_adj_mc['rel_idx'][idx_cond]
 
                     # convert relative to absolute fid
-                    abs_idx = [self.tower.id_adj[j + self.tower.max_no_adj_towers]
+                    abs_idx = [self.id_adj[j + self.max_no_adj_towers]
                                for j in rel_idx]
 
                     # filter simulation

@@ -19,6 +19,7 @@ def create_event_set(conf):
     network = TransmissionNetwork(conf)
 
     events = dict()
+
     for path_wind in conf.path_wind_scenario:
 
         event_id = path_wind.split('/')[-1]
@@ -35,65 +36,66 @@ def create_event_set(conf):
     return events
 
 
-class DamageNetwork(object):
+class DamageNetwork(TransmissionNetwork):
     """ class for a collection of damage to lines
     """
 
     def __init__(self, network, path_wind):
-        self.network = network
+
+        self._parent = network  # instance of TransmissionNetwork class
         self.path_wind = path_wind
         self.event_id = path_wind.split('/')[-1]
-        self.lines = dict()
-        for key, line in self.network.lines.iteritems():
+        self.damage_lines = dict()
 
-            if key in self.lines:
-                raise KeyError('{} is already assigned'.format(key))
-
-            self.lines[key] = DamageLine(line, self.path_wind)
+        for key, line in network.lines.iteritems():
+            self.damage_lines[key] = DamageLine(line, self.path_wind)
 
         # assuming same time index for each tower in the same network
-        self.time_index = self.lines[key].time_index
+        self.time_index = self.damage_lines[key].time_index
+
+    def __getattr__(self, attr_name):
+        return getattr(self._parent, attr_name)
 
     def mc_simulation(self):
 
-        if self.network.conf.parallel:
+        if self.conf.parallel:
             print('parallel MC run on.......')
-            parmap.map(self.mc_loop_over_line, self.lines.values())
+            parmap.map(self.mc_loop_over_line, self.damage_lines.values())
 
         else:
             print('serial MC run on.......')
-            for _, line in self.lines.iteritems():
+            for _, line in self.damage_lines.iteritems():
                 self.mc_loop_over_line(line)
 
     def mc_loop_over_line(self, damage_line):
 
-        if damage_line.line.conf.random_seed:
+        if self.conf.random_seed:
             try:
-                seed = damage_line.line.conf.seed[self.event_id][damage_line.line.name]
+                seed = self.conf.seed[self.event_id][damage_line.name]
             except KeyError:
                 print('{}:{} is undefined. Check the config file'.format(
-                    event_id, key_line))
+                    self.event_id, damage_line.name))
         else:
             seed = None
 
         prng = np.random.RandomState(seed)
 
         # perfect correlation within a single line
-        rv = prng.uniform(size=(damage_line.line.conf.nsims,
+        rv = prng.uniform(size=(self.conf.nsims,
                                 len(damage_line.time_index)))
 
-        for key_tower, tower in damage_line.towers.iteritems():
-            damage_line.towers[key_tower].compute_mc_adj(rv, seed)
+        for _, tower in damage_line.damage_towers.iteritems():
+            tower.compute_mc_adj(rv, seed)
 
         #damage_line.est_damage_tower, damage_line.prob_damage_tower = \
         damage_line.compute_damage_probability_simulation()
 
-        if not damage_line.line.conf.skip_non_cascading_collapse:
+        if not self.conf.skip_non_cascading_collapse:
             damage_line.compute_damage_probability_simulation_ignoring_cascading()
 
     #return est_damage_tower, prob_damage_tower
 
-        # if self.network.conf.save:
+        # if self.conf.save:
         #     line_ = line.replace(' - ', '_')
         #     for (ds, _) in damage_states:
         #         npy_file = os.path.join(conf.dir_output,
