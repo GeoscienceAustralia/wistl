@@ -23,17 +23,10 @@ class TransmissionNetwork(object):
                 tf = self.df_lines['LineRoute'] == name
                 if not tf.sum():
                     raise KeyError('{} not in the line shapefile'.format(name))
-                self.lines[name] = self.add_line(df_towers=grouped,
-                                                 df_line=self.df_lines[tf])
 
-    def add_line(self, df_towers, df_line):
-        """ add transmission line
-        """
-        name = df_line['LineRoute'].values[0]
-        if name in self.lines:
-            raise KeyError('{} is already assigned'.format(name))
-        self.lines[name] = TransmissionLine(self.conf, df_towers, df_line)
-        return self.lines[name]
+                self.lines[name] = TransmissionLine(conf=self.conf,
+                                                    df_towers=grouped,
+                                                    df_line=self.df_lines[tf])
 
 
 def read_shape_file(file_shape):

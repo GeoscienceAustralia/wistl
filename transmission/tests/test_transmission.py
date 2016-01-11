@@ -8,14 +8,15 @@ import os
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers import sim_towers
 #from transmission.read import distance
-from transmission.read import TransmissionNetwork
+#from transmission.read import TransmissionNetwork
 
 
 class TestTransmission(unittest.TestCase):
 
     def test_transmission(self):
-        conf = TransmissionConfig(cfg_file='./transmission/tests/test.cfg')
-        dir_output = conf.dir_output
+
+        path_ = '/'.join(__file__.split('/')[:-1])
+        conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
 
         # read GIS information
         network = TransmissionNetwork(conf)
@@ -97,10 +98,14 @@ class TestTransmission(unittest.TestCase):
 
 
 class TestTransmissionConfig(unittest.TestCase):
+
     def test_whether_config_is_test(self):
-        conf = TransmissionConfig(cfg_file='./transmission/tests/test.cfg')
+
+        path_ = '/'.join(__file__.split('/')[:-1])
+        conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+
         self.assertEqual(conf.test, 1)
-        #self.assertEqual(conf.flag_save, 0)
+        self.assertEqual(conf.save, 0)
         self.assertEqual(conf.nsims, 20)
 
         #conf1 = TransmissionConfig(test=0)

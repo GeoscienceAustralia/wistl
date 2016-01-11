@@ -27,8 +27,9 @@ Todo:
 import time
 import sys
 import os
+import parmap
 
-from damage_network import create_event_set
+from damage_network import create_event_set, mc_loop_over_line
 
 
 def sim_towers(conf):
@@ -39,14 +40,14 @@ def sim_towers(conf):
     if not os.path.exists(conf.path_output):
         os.makedirs(conf.path_output)
 
-    event_set = create_event_set(conf)
+    events = create_event_set(conf)
 
     tic = time.time()
 
     if conf.analytical:
         print('Computing damage probability using analytical method')
 
-        for event_key, network in event_set.iteritems():
+        for event_key, network in events.iteritems():
             print(' event: {}'.format(event_key))
 
             for line_key, line in network.lines.iteritems():
@@ -56,13 +57,21 @@ def sim_towers(conf):
         tic = time.time()
 
     if conf.simulation:
-
         print('Computing damage probability using simulation method')
 
-        for event_key, network in event_set.iteritems():
-            print(' event: {}'.format(event_key))
+        if conf.parallel:
+            print('parallel MC run on.......')
 
-            network.mc_simulation()
+            list_ = [line for line in network.lines.itervalues() for network in events.itervalues()]
+            parmap.map(mc_loop_over_line, list_)
+
+        else:
+            print('serial MC run on.......')
+
+            for event_key, network in events.iteritems():
+                print(' event: {}'.format(event_key))
+                for _, line in network.lines.iteritems():
+                    mc_loop_over_line(line)
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
 

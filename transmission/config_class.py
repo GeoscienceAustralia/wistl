@@ -68,7 +68,7 @@ class TransmissionConfig(object):
         try:
             self.path_wind_scenario = conf.get('directories', 'wind_scenario')
         except ValueError:
-            xx = conf.get('directories', 'wind_scenario', 1).split(',\n')
+            xx = conf.get('directories', 'wind_scenario', 1).split(', ')
             self.path_wind_scenario = [self.get_path(x, conf_dic) for x in xx]
 
         try:

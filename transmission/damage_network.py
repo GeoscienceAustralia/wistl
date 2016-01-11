@@ -6,7 +6,6 @@ __author__ = 'Hyeuk Ryu'
 import os
 import copy
 import numpy as np
-import parmap
 #import pandas as pd
 
 from transmission_network import TransmissionNetwork
@@ -18,7 +17,7 @@ def create_event_set(conf):
     """
 
     network = TransmissionNetwork(conf)
-    print(network.lines['Calaca - Amadeo'].towers)
+    #print(network.lines['Calaca - Amadeo'].towers)
     events = dict()
 
     for path_wind in conf.path_wind_scenario:
@@ -34,7 +33,7 @@ def create_event_set(conf):
 
         events[event_id] = DamageNetwork(network, path_wind)
 
-        print(network.lines['Calaca - Amadeo'].towers)
+        #print(network.lines['Calaca - Amadeo'].towers)
 
     return events
 
@@ -61,74 +60,32 @@ class DamageNetwork(TransmissionNetwork):
     def __getattr__(self, attr_name):
         return getattr(self._parent, attr_name)
 
-    def mc_simulation(self):
 
-        if self.conf.parallel:
-            print('parallel MC run on.......')
-            parmap.map(self.mc_loop_over_line, self.lines.values())
+def mc_loop_over_line(damage_line):
 
-        else:
-            print('serial MC run on.......')
-            for _, line in self.lines.iteritems():
-                self.mc_loop_over_line(line)
+    event_id = damage_line.event_id
+    line_name = damage_line.name
+    if damage_line.conf.random_seed:
+        try:
+            seed = damage_line.conf.seed[event_id][line_name]
+        except KeyError:
+            print('{}:{} is undefined. Check the config file'.format(
+                event_id, line_name))
+    else:
+        seed = None
 
-    def mc_loop_over_line(self, damage_line):
+    prng = np.random.RandomState(seed)
 
-        if self.conf.random_seed:
-            try:
-                seed = self.conf.seed[self.event_id][damage_line.name]
-            except KeyError:
-                print('{}:{} is undefined. Check the config file'.format(
-                    self.event_id, damage_line.name))
-        else:
-            seed = None
+    # perfect correlation within a single line
+    rv = prng.uniform(size=(damage_line.conf.nsims,
+                            len(damage_line.time_index)))
 
-        prng = np.random.RandomState(seed)
+    for _, tower in damage_line.towers.iteritems():
+        tower.compute_mc_adj(rv, seed)
 
-        # perfect correlation within a single line
-        rv = prng.uniform(size=(self.conf.nsims,
-                                len(damage_line.time_index)))
+    damage_line.compute_damage_probability_simulation()
 
-        for _, tower in damage_line.towers.iteritems():
-            tower.compute_mc_adj(rv, seed)
-
-        #damage_line.est_damage_tower, damage_line.prob_damage_tower = \
-        damage_line.compute_damage_probability_simulation()
-
-        if not self.conf.skip_non_cascading_collapse:
-            damage_line.compute_damage_probability_simulation_non_cascading()
-
-    #return est_damage_tower, prob_damage_tower
-
-        # if self.conf.save:
-        #     line_ = line.replace(' - ', '_')
-        #     for (ds, _) in damage_states:
-        #         npy_file = os.path.join(conf.dir_output,
-        #                                 'tf_line_mc_{}_{}.npy'.format(ds, line_))
-        #         np.save(npy_file, tf_sim[ds])
-
-        #         csv_file = os.path.join(conf.dir_output,
-        #                                 'pc_line_mc_{}_{}.csv'.format(ds, line_))
-        #         prob_sim[ds].to_csv(csv_file)
-
-        #         csv_file = os.path.join(conf.dir_output,
-        #                                 'est_ntower_{}_{}.csv'.format(ds, line_))
-        #         est_ntower[ds].to_csv(csv_file)
-
-        #         npy_file = os.path.join(conf.dir_output,
-        #                                 'prob_ntower_{}_{}.npy'.format(ds, line_))
-        #         np.save(npy_file, prob_ntower[ds])
-
-        #         csv_file = os.path.join(conf.dir_output,
-        #                                 'est_ntower_nc_{}_{}.csv'.format(ds, line_))
-        #         est_ntower_nc[ds].to_csv(csv_file)
-
-        #         npy_file = os.path.join(conf.dir_output,
-        #                                 'prob_ntower_nc_{}_{}.npy'.format(ds,
-        #                                                                   line_))
-        #         np.save(npy_file, prob_ntower_nc[ds])
-        # print('loop {} finished'.format(id))
-        # return tf_sim, prob_sim, est_ntower, prob_ntower, est_ntower_nc,\
-        #     prob_ntower_nc
+    if not damage_line.conf.skip_non_cascading_collapse:
+        damage_line.compute_damage_probability_simulation_non_cascading()
 
 

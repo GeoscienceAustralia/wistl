@@ -42,22 +42,13 @@ class TransmissionLine(object):
             name = val['Name']
             val['id'] = tid
             val['actual_span'] = actual_span[i]
-            self.towers[name] = self.add_tower(val)
+            self.towers[name] = Tower(conf=self.conf, df_tower=val)
             self.towers[name].id_sides = self.assign_id_both_sides(i)
             self.towers[name].id_adj = self.assign_id_adj_towers(i)
 
         for key, val in self.towers.iteritems():
             self.towers[key].id_adj = self.update_id_adj_towers(val)
             self.towers[key].calculate_cond_pc_adj()
-
-    def add_tower(self, df_tower):
-        """ add tower to a transmission line """
-        name = df_tower['Name']
-        if name in self.towers:
-            raise KeyError('{} is already assigned'.format(name))
-        self.towers[name] = Tower(self.conf, df_tower)
-
-        return self.towers[name]
 
     def sort_by_location(self):
         """ sort towers by location"""
