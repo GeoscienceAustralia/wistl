@@ -180,8 +180,6 @@ class TransmissionConfig(object):
 
         return list_[0].strip(), int(list_[1])
 
-
-
     # @property
     # def test(self):
     #     return self.__test

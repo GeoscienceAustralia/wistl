@@ -18,6 +18,10 @@ class TransmissionLine(object):
         self.df_towers = df_towers
         self.df_line = df_line
         self.name = df_line['LineRoute'].values[0]
+
+        name_ = self.name.split()
+        self.name_output = '_'.join(x for x in name_ if x.isalnum())
+
         self.no_towers = len(self.df_towers)
 
         self.coord_line = np.array(self.df_line['Shapes'].values[0].points)

@@ -55,6 +55,19 @@ class DamageLine(TransmissionLine):
     def __getattr__(self, attr_name):
         return getattr(self._parent, attr_name)
 
+    def write_hdf5(self, file_str, val):
+
+        h5file = os.path.join(
+            self.conf.path_output,
+            self.event_id,
+            '{}_{}.h5'.format(file_str, self.name_output))
+        hdf = pd.HDFStore(h5file)
+
+        for ds, _ in self.conf.damage_states:
+            hdf.put(ds, val[ds], format='table', data_columns=True)
+        hdf.close()
+        print('{} is created'.format(h5file))
+
     def compute_damage_probability_analytical(self):
         """
         calculate damage probability of towers analytically
@@ -102,9 +115,11 @@ class DamageLine(TransmissionLine):
                 columns=self.name_by_line,
                 index=self.time_index)
 
-    def compute_damage_probability_simulation(self):
+        if self.conf.save:
+            self.write_hdf5(file_str='damage_prob_analytical',
+                            val=self.damage_prob_analytical)
 
-        tf_sim = dict()
+    def compute_damage_probability_simulation(self):
 
         tf_ds = np.zeros((self.no_towers,
                           self.conf.nsims,
@@ -126,6 +141,8 @@ class DamageLine(TransmissionLine):
         cds_list = self.conf.damage_states[:]  # to avoid effect
         cds_list.reverse()  # [(collapse, 2), (minor, 1)]
 
+        tf_sim = dict()
+
         # append damage stae by direct wind
         for ds, _ in cds_list:
 
@@ -145,6 +162,18 @@ class DamageLine(TransmissionLine):
 
         self.est_no_damage, self.prob_no_damage = \
             self.compute_damage_stats(tf_sim)
+
+        if self.conf.save:
+
+            self.write_hdf5(file_str='damage_prob_simulation',
+                            val=self.damage_prob_simulation)
+
+            self.write_hdf5(file_str='est_no_damage_simulation',
+                            val=self.est_no_damage)
+
+            self.write_hdf5(file_str='prob_no_damage_simulation',
+                            val=self.prob_no_damage)
+
 
     def compute_damage_probability_simulation_non_cascading(self):
 
@@ -173,6 +202,17 @@ class DamageLine(TransmissionLine):
         self.est_no_damage_non_cascading, \
             self.prob_no_damage_non_cascading = \
             self.compute_damage_stats(tf_sim_non_cascading)
+
+        if self.conf.save:
+
+            self.write_hdf5(file_str='damage_prob_simulation_non_cascading',
+                            val=self.damage_prob_simulation_non_cascading)
+
+            self.write_hdf5(file_str='est_no_damage_simulation_non_cascading',
+                            val=self.est_no_damage_non_cascading)
+
+            self.write_hdf5(file_str='prob_no_damage_simulation_non_cascading',
+                            val=self.prob_no_damage_non_cascading)
 
     def compute_damage_stats(self, tf_sim):
         """

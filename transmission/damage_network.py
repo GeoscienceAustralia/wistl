@@ -87,5 +87,3 @@ def mc_loop_over_line(damage_line):
 
     if not damage_line.conf.skip_non_cascading_collapse:
         damage_line.compute_damage_probability_simulation_non_cascading()
-
-

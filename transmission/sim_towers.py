@@ -60,18 +60,25 @@ def sim_towers(conf):
         print('Computing damage probability using simulation method')
 
         if conf.parallel:
-            print('parallel MC run on.......')
+            list_ = [line for network in events.itervalues()
+                     for line in network.lines.itervalues()]
+            no_cpus = parmap.multiprocessing.cpu_count()
 
-            list_ = [line for line in network.lines.itervalues() for network in events.itervalues()]
-            parmap.map(mc_loop_over_line, list_)
+            if no_cpus >= len(list_):
+                print('parallel MC run on.......')
+                parmap.map(mc_loop_over_line, list_)
 
-        else:
-            print('serial MC run on.......')
+                print('MC simulation took {} seconds'.format(time.time() - tic))
+                sys.exit(0)
 
-            for event_key, network in events.iteritems():
-                print(' event: {}'.format(event_key))
-                for _, line in network.lines.iteritems():
-                    mc_loop_over_line(line)
+            else:
+                print('Not enough cpus for parallel processing')
+
+        print('serial MC run on.......')
+        for event_key, network in events.iteritems():
+            print(' event: {}'.format(event_key))
+            for line in network.lines.itervalues():
+                mc_loop_over_line(line)
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
 
