@@ -82,6 +82,7 @@ def sim_towers(conf):
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
 
+    return events
 
 if __name__ == '__main__':
 
@@ -93,4 +94,4 @@ if __name__ == '__main__':
 
     from config_class import TransmissionConfig
     conf = TransmissionConfig(cfg_file=args[0])
-    sim_towers(conf)
+    events = sim_towers(conf)

@@ -44,13 +44,13 @@ class DamageLine(TransmissionLine):
 
         # simulation method
         self.damage_prob_simulation = dict()
-        self.prob_no_damage = None
-        self.est_no_damage = None
+        self.prob_no_damage_simulation = None
+        self.est_no_damage_simulation = None
 
         # non cascading collapse
         self.damage_prob_simulation_non_cascading = dict()
-        self.prob_no_damage_non_cascading = None
-        self.est_no_damage_non_cascading = None
+        self.prob_no_damage_simulation_non_cascading = None
+        self.est_no_damage_simulation_non_cascading = None
 
     def __getattr__(self, attr_name):
         return getattr(self._parent, attr_name)
@@ -159,7 +159,7 @@ class DamageLine(TransmissionLine):
 
             tf_sim[ds] = np.copy(tf_ds)  # why copy??
 
-        self.est_no_damage, self.prob_no_damage = \
+        self.est_no_damage_simulation, self.prob_no_damage_simulation = \
             self.compute_damage_stats(tf_sim)
 
         if self.conf.save:
@@ -168,10 +168,10 @@ class DamageLine(TransmissionLine):
                             val=self.damage_prob_simulation)
 
             self.write_hdf5(file_str='est_no_damage_simulation',
-                            val=self.est_no_damage)
+                            val=self.est_no_damage_simulation)
 
             self.write_hdf5(file_str='prob_no_damage_simulation',
-                            val=self.prob_no_damage)
+                            val=self.prob_no_damage_simulation)
 
     def compute_damage_probability_simulation_non_cascading(self):
 
@@ -197,8 +197,8 @@ class DamageLine(TransmissionLine):
 
             tf_sim_non_cascading[ds] = np.copy(tf_ds)
 
-        self.est_no_damage_non_cascading, \
-            self.prob_no_damage_non_cascading = \
+        self.est_no_damage_simulation_non_cascading, \
+            self.prob_no_damage_simulation_non_cascading = \
             self.compute_damage_stats(tf_sim_non_cascading)
 
         if self.conf.save:
@@ -207,10 +207,10 @@ class DamageLine(TransmissionLine):
                             val=self.damage_prob_simulation_non_cascading)
 
             self.write_hdf5(file_str='est_no_damage_simulation_non_cascading',
-                            val=self.est_no_damage_non_cascading)
+                            val=self.est_no_damage_simulation_non_cascading)
 
             self.write_hdf5(file_str='prob_no_damage_simulation_non_cascading',
-                            val=self.prob_no_damage_non_cascading)
+                            val=self.prob_no_damage_simulation_non_cascading)
 
     def compute_damage_stats(self, tf_sim):
         """

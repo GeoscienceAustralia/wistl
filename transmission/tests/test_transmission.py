@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
 __author__ = 'sudipta'
 
 import unittest
@@ -7,94 +10,165 @@ import os
 
 from transmission.config_class import TransmissionConfig
 from transmission.sim_towers import sim_towers
-#from transmission.read import distance
-#from transmission.read import TransmissionNetwork
+from pandas.util.testing import assert_frame_equal
 
 
 class TestTransmission(unittest.TestCase):
 
-    def test_transmission(self):
-
+    def setUp(self):
         path_ = '/'.join(__file__.split('/')[:-1])
-        conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+        self.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+        self.events = sim_towers(self.conf)
 
-        # read GIS information
-        network = TransmissionNetwork(conf)
-        tower, sel_lines, fid_by_line, id2name, lon, lat\
-            = network.read_tower_gis_information()
+    def test_transmission_analytical(self):
 
-        try:
-            tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
-                est_ntower_nc_all, prob_ntower_nc_all, sel_lines = sim_towers(conf)
-        except ValueError:
-            self.assertEquals(True, False, 'Something went wrong in function {}'
-                              .format(network.read_tower_gis_information.__name__))
-            return
+        if self.conf.analytical:
 
-        for line in sel_lines:
-            for (ds, _) in conf.damage_states:
-                try:
-                    self.check_file_consistency(dir_output, ds, est_ntower_all,
-                                                est_ntower_nc_all, line,
-                                                prob_ntower_all,
-                                                prob_ntower_nc_all,
-                                                prob_sim_all, tf_sim_all)
-                except IOError:
-                    conf.flag_save = 1  # if the test files don't exist, e.g., when run for the fist time
-                    tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
-                        est_ntower_nc_all, prob_ntower_nc_all, sel_lines\
-                            = sim_towers(conf)
-                    self.check_file_consistency(dir_output, ds, est_ntower_all,
-                                                est_ntower_nc_all, line,
-                                                prob_ntower_all,
-                                                prob_ntower_nc_all,
-                                                prob_sim_all, tf_sim_all)
+            for network in self.events.itervalues():
+                for line in network.lines.itervalues():
 
-    def check_file_consistency(self, dir_output, ds, est_ntower_all,
-                               est_ntower_nc_all, line, prob_ntower_all,
-                               prob_ntower_nc_all, prob_sim_all, tf_sim_all):
+                    self.check_file_consistency_analytical(line)
 
-        line_ = line.replace(' - ', '_')
-        npy_file = os.path.join(dir_output,
-                                'tf_line_mc_{}_{}.npy'.format(ds, line_))
-        tf_sim_test = np.load(npy_file)
-        np.testing.assert_array_equal(tf_sim_test, tf_sim_all[line][ds])
+    def test_transmission_simulation(self):
 
-        csv_file = os.path.join(dir_output,
-                                'pc_line_mc_{}_{}.csv'.format(ds, line_))
-        prob_sim_test = pd.read_csv(csv_file,
-                                    names=prob_sim_all[line][ds].columns,
-                                    header=0)  # dataframe
-        np.testing.assert_array_almost_equal(prob_sim_test.as_matrix(),
-                                             prob_sim_all[line][ds].as_matrix())
+        if self.conf.simulation:
 
-        csv_file = os.path.join(dir_output,
-                                'est_ntower_{}_{}.csv'.format(ds, line_))
-        est_ntower_test = pd.read_csv(csv_file,
-                                      names=est_ntower_all[line][ds].columns,
-                                      header=0)
-        np.testing.assert_array_almost_equal(est_ntower_test.as_matrix(),
-                                             est_ntower_all[line][ds].as_matrix())
+            for network in self.events.itervalues():
+                for line in network.lines.itervalues():
 
-        npy_file = os.path.join(dir_output,
-                                'prob_ntower_{}_{}.npy'.format(ds, line_))
-        prob_ntower_test = np.load(npy_file)
-        self.assertEqual(np.array_equal(prob_ntower_test,
-                                        prob_ntower_all[line][ds]), 1)
+                    self.check_file_consistency_simulation(line)
 
-        csv_file = os.path.join(dir_output,
-                                'est_ntower_nc_{}_{}.csv'.format(ds, line_))
-        est_ntower_nc_test = pd.read_csv(csv_file,
-                                         names=est_ntower_all[line][ds].columns,
-                                         header=0)
-        np.testing.assert_array_almost_equal(est_ntower_nc_test.as_matrix(),
-                                             est_ntower_nc_all[line][ds].as_matrix())
+    def test_transmission_simulation_non_cascading(self):
 
-        npy_file = os.path.join(dir_output,
-                                'prob_ntower_nc_{}_{}.npy'.format(ds, line_))
-        prob_ntower_nc_test = np.load(npy_file)
-        self.assertEqual(np.array_equal(prob_ntower_nc_test,
-                                        prob_ntower_nc_all[line][ds]), 1)
+        if not self.conf.skip_non_cascading_collapse:
+
+            for network in self.events.itervalues():
+                for line in network.lines.itervalues():
+
+                    self.check_file_consistency_simulation_non_cascading(line)
+
+    def test_transmission_analytical_vs_simulation_non_cascading(self):
+
+        if not self.conf.skip_non_cascading_collapse and self.conf.analytical:
+
+            for network in self.events.itervalues():
+                for line in network.lines.itervalues():
+
+                    self.compare_anlytical_vs_simulation_non_cascading(line)
+
+
+    # def test_simulation(self):
+
+
+
+
+    #     for line in self.conf.sel_lines:
+    #         for (ds, _) in self.conf.damage_states:
+    #             try:
+    #                 self.check_file_consistency(conf.path_output, ds, est_ntower_all,
+    #                                             est_ntower_nc_all, line,
+    #                                             prob_ntower_all,
+    #                                             prob_ntower_nc_all,
+    #                                             prob_sim_all, tf_sim_all)
+    #             except IOError:
+    #                 conf.flag_save = 1  # if the test files don't exist, e.g., when run for the fist time
+    #                 tf_sim_all, prob_sim_all, est_ntower_all, prob_ntower_all, \
+    #                     est_ntower_nc_all, prob_ntower_nc_all, sel_lines\
+    #                         = sim_towers(conf)
+    #                 self.check_file_consistency(dir_output, ds, est_ntower_all,
+    #                                             est_ntower_nc_all, line,
+    #                                             prob_ntower_all,
+    #                                             prob_ntower_nc_all,
+    #                                             prob_sim_all, tf_sim_all)
+
+    def check_file_consistency_analytical(self, damage_line):
+
+        # variable
+        file_str = 'damage_prob_analytical'
+
+        h5file = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            '{}_{}.h5'.format(file_str, damage_line.name_output))
+
+        for ds, _ in self.conf.damage_states:
+
+            df_value = pd.read_hdf(h5file, ds)
+
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.damage_prob_analytical[ds])
+
+
+    def check_file_consistency_simulation(self, damage_line):
+
+        h5file1 = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            'damage_prob_simulation_{}.h5'.format(damage_line.name_output))
+
+        h5file2 = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            'est_no_damage_simulation_{}.h5'.format(damage_line.name_output))
+
+        h5file3 = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            'prob_no_damage_simulation_{}.h5'.format(damage_line.name_output))
+
+        for ds, _ in self.conf.damage_states:
+
+            df_value = pd.read_hdf(h5file1, ds)
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.damage_prob_simulation[ds])
+
+            df_value = pd.read_hdf(h5file2, ds)
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.est_no_damage_simulation[ds])
+
+            df_value = pd.read_hdf(h5file3, ds)
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.prob_no_damage_simulation[ds])
+
+
+    def check_file_consistency_simulation_non_cascading(self, damage_line):
+
+        h5file1 = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            'damage_prob_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
+
+        h5file2 = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            'est_no_damage_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
+
+        h5file3 = os.path.join(
+            self.conf.path_output,
+            damage_line.event_id,
+            'prob_no_damage_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
+
+        for ds, _ in self.conf.damage_states:
+
+            df_value = pd.read_hdf(h5file1, ds)
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.damage_prob_simulation_non_cascading[ds])
+
+            df_value = pd.read_hdf(h5file2, ds)
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.est_no_damage_simulation_non_cascading[ds])
+
+            df_value = pd.read_hdf(h5file3, ds)
+            pd.util.testing.assert_frame_equal(
+                df_value, damage_line.prob_no_damage_simulation_non_cascading[ds])
+
+    def compare_anlytical_vs_simulation_non_cascading(self, damage_line):
+
+        for ds, _ in self.conf.damage_states:
+
+            pd.util.testing.assert_frame_equal(
+                damage_line.damage_prob_analytical[ds],
+                damage_line.damage_prob_simulation_non_cascading[ds])
 
 
 class TestTransmissionConfig(unittest.TestCase):
@@ -107,22 +181,6 @@ class TestTransmissionConfig(unittest.TestCase):
         self.assertEqual(conf.test, 1)
         self.assertEqual(conf.save, 0)
         self.assertEqual(conf.nsims, 20)
-
-        #conf1 = TransmissionConfig(test=0)
-        #self.assertEqual(conf1.test, 0)
-
-
-# class TestReadDotPy(unittest.TestCase):
-#     '''
-#     Tests Hyeuk's distance function with that of geopy.distance.great_circle
-#     Hyeuk's function is not used in the code anymore. Instead the geopy.distance.great_circle is used.
-#     '''
-#     def test_distance(self):
-#         from geopy.distance import great_circle
-#         newport_ri = (41.49008, -71.312796)
-#         cleveland_oh = (41.499498, -81.695391)
-#         self.assertAlmostEqual(distance(newport_ri, cleveland_oh), great_circle(newport_ri, cleveland_oh).kilometers,
-#                                places=0)
 
 if __name__ == '__main__':
     unittest.main()
