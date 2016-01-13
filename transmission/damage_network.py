@@ -49,7 +49,6 @@ class DamageNetwork(TransmissionNetwork):
         self._parent = network_  # instance of TransmissionNetwork class
         self.path_wind = path_wind
         self.event_id = path_wind.split('/')[-1]
-        #self.damage_lines = dict()
 
         for key, line in network_.lines.iteritems():
             self.lines[key] = DamageLine(line, self.path_wind)
@@ -65,6 +64,7 @@ def mc_loop_over_line(damage_line):
 
     event_id = damage_line.event_id
     line_name = damage_line.name
+
     if damage_line.conf.random_seed:
         try:
             seed = damage_line.conf.seed[event_id][line_name]
@@ -80,7 +80,7 @@ def mc_loop_over_line(damage_line):
     rv = prng.uniform(size=(damage_line.conf.nsims,
                             len(damage_line.time_index)))
 
-    for _, tower in damage_line.towers.iteritems():
+    for tower in damage_line.towers.itervalues():
         tower.compute_mc_adj(rv, seed)
 
     damage_line.compute_damage_probability_simulation()

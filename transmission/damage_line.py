@@ -7,10 +7,14 @@ import os
 import copy
 import numpy as np
 import pandas as pd
+import warnings
 from scipy.stats import itemfreq
 
 from damage_tower import DamageTower
 from transmission_line import TransmissionLine
+
+# ignore NaturalNameWarning
+warnings.filterwarnings("ignore", lineno=100, module='tables')
 
 
 class DamageLine(TransmissionLine):
@@ -22,12 +26,8 @@ class DamageLine(TransmissionLine):
 
         self._parent = line_  # instance of TransmissionLine class
         self.event_id = path_wind.split('/')[-1]
-        #self.towers = dict()
 
         for key, tower in line_.towers.iteritems():
-
-            # if key in self.towers:
-            #     raise KeyError('{} is already assigned'.format(key))
 
             file_wind = os.path.join(path_wind, tower.file_wind)
             self.towers[key] = DamageTower(tower, file_wind)
@@ -57,10 +57,9 @@ class DamageLine(TransmissionLine):
 
     def write_hdf5(self, file_str, val):
 
-        h5file = os.path.join(
-            self.conf.path_output,
-            self.event_id,
-            '{}_{}.h5'.format(file_str, self.name_output))
+        h5file = os.path.join(self.conf.path_output,
+                              self.event_id,
+                              '{}_{}.h5'.format(file_str, self.name_output))
         hdf = pd.HDFStore(h5file)
 
         for ds, _ in self.conf.damage_states:
@@ -174,7 +173,6 @@ class DamageLine(TransmissionLine):
             self.write_hdf5(file_str='prob_no_damage_simulation',
                             val=self.prob_no_damage)
 
-
     def compute_damage_probability_simulation_non_cascading(self):
 
         tf_sim_non_cascading = dict()
@@ -252,6 +250,9 @@ class DamageLine(TransmissionLine):
                 columns=['mean', 'std'],
                 index=self.time_index)
 
-            prob_damage_tower[ds] = prob
+            prob_damage_tower[ds] = pd.DataFrame(
+                prob,
+                columns=[str(x) for x in range(ntowers+1)],
+                index=self.time_index)
 
         return est_damage_tower, prob_damage_tower
