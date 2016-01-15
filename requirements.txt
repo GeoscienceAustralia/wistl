@@ -1,17 +1,15 @@
-cycler (0.9.0)
-geopy (1.11.0)
-matplotlib (1.5.1)
-numexpr (2.4.6)
-numpy (1.10.2)
-pandas (0.17.1)
-parmap (1.2.3)
-pip (7.1.2)
-pyparsing (2.0.3)
-pyshp (1.2.3)
-python-dateutil (2.4.2)
-pytz (2015.7)
-scipy (0.16.1)
-setuptools (19.2)
-six (1.10.0)
-tables (3.2.2)
-wheel (0.26.0)
+cycler==0.9.0
+geopy==1.11.0
+matplotlib==1.5.1
+numexpr==2.4.6
+numpy==1.10.2
+pandas==0.17.1
+parmap==1.2.3
+pyparsing==2.0.3
+pyshp==1.2.3
+python-dateutil==2.4.2
+pytz==2015.7
+scipy==0.16.1
+six==1.10.0
+tables==3.2.2
+wheel==0.26.0
