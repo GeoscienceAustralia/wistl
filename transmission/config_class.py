@@ -57,31 +57,37 @@ class TransmissionConfig(object):
         self.strainer = [x.strip() for x in strainer_.split(',')]
 
         # directories
-        self.path_proj = conf.get('directories', 'project')
+        #self.path_proj = conf.get('directories', 'project')
 
-        try:
-            self.path_gis_data = conf.get('directories', 'gis_data')
-        except ValueError:
-            self.path_gis_data = self.get_path(
-                conf.get('directories', 'gis_data', 1), conf_dic)
+        self.path_proj = os.path.abspath(
+            os.path.join(os.path.abspath(cfg_file),
+                         os.pardir,
+                         conf.get('directories', 'project')))
+        conf.set('directories', 'project', self.path_proj)
 
-        try:
-            self.path_wind_scenario = conf.get('directories', 'wind_scenario')
-        except ValueError:
-            xx = conf.get('directories', 'wind_scenario', 1).split(', ')
-            self.path_wind_scenario = [self.get_path(x, conf_dic) for x in xx]
+        # try:
+        self.path_gis_data = conf.get('directories', 'gis_data')
+        # except ValueError:
+        #     self.path_gis_data = self.get_path(
+        #         conf.get('directories', 'gis_data', 1), conf_dic)
 
-        try:
-            path_input = conf.get('directories', 'input')
-        except ValueError:
-            path_input = self.get_path(
-                conf.get('directories', 'input', 1), conf_dic)
+        # try:
+        self.path_wind_scenario = conf.get('directories', 'wind_scenario')
+        # except ValueError:
+        #     xx = conf.get('directories', 'wind_scenario', 1).split(', ')
+        #     self.path_wind_scenario = [self.get_path(x, conf_dic) for x in xx]
 
-        try:
-            self.path_output = conf.get('directories', 'output')
-        except ValueError:
-            self.path_output = self.get_path(
-                conf.get('directories', 'output', 1), conf_dic)
+        # try:
+        path_input = conf.get('directories', 'input')
+        # except ValueError:
+        #     path_input = self.get_path(
+        #         conf.get('directories', 'input', 1), conf_dic)
+
+        # try:
+        self.path_output = conf.get('directories', 'output')
+        # except ValueError:
+        #     self.path_output = self.get_path(
+        #         conf.get('directories', 'output', 1), conf_dic)
 
         # gis_data
         self.file_shape_tower = os.path.join(self.path_gis_data,
