@@ -64,9 +64,8 @@ target/
 output_current_glenda/
 input/
 wind_scenario/
-transmission/tests/test_output_current_glenda/
+tests/output/
 gis_data/
-test_output*/
 *.pdf
 
 # pycharm

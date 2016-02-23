@@ -72,7 +72,8 @@ class TransmissionConfig(object):
         #         conf.get('directories', 'gis_data', 1), conf_dic)
 
         # try:
-        self.path_wind_scenario = conf.get('directories', 'wind_scenario')
+        self.path_wind_scenario = [x.strip() for 
+            x in conf.get('directories', 'wind_scenario').split(',')]
         # except ValueError:
         #     xx = conf.get('directories', 'wind_scenario', 1).split(', ')
         #     self.path_wind_scenario = [self.get_path(x, conf_dic) for x in xx]
