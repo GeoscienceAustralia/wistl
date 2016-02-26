@@ -132,7 +132,6 @@ class TransmissionConfig(object):
         return absolute path of path_ which is relative to location of file_
         '''
         path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
-
         return os.path.abspath(os.path.join(path_file_, path_))
 
     @staticmethod
@@ -140,7 +139,6 @@ class TransmissionConfig(object):
         ''' split string with split_str and return tuple of str and integer
         '''
         list_ = str_.split(str_split)
-
         return list_[0].strip(), int(list_[1])
 
     # @property
