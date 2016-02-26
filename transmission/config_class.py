@@ -25,11 +25,11 @@ class TransmissionConfig(object):
         conf_dic = conf._sections
 
         # run_type
-        self.test = conf.getboolean('run_type', 'flag_test')
-        self.parallel = conf.getboolean('run_type', 'flag_parallel')
-        self.save = conf.getboolean('run_type', 'flag_save')
-        self.figure = conf.getboolean('run_type', 'flag_figure')
-        self.random_seed = conf.getboolean('run_type', 'flag_random_seed')
+        self.test = conf.getboolean('run_type', 'test')
+        self.parallel = conf.getboolean('run_type', 'parallel')
+        self.save = conf.getboolean('run_type', 'save')
+        self.figure = conf.getboolean('run_type', 'figure')
+        self.random_seed = conf.getboolean('run_type', 'random_seed')
 
         # random seed
         if self.random_seed:
@@ -57,38 +57,16 @@ class TransmissionConfig(object):
         self.strainer = [x.strip() for x in strainer_.split(',')]
 
         # directories
-        #self.path_proj = conf.get('directories', 'project')
+        self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'), 
+                                           cfg_file)
 
-        self.path_proj = os.path.abspath(
-            os.path.join(os.path.abspath(cfg_file),
-                         os.pardir,
-                         conf.get('directories', 'project')))
-        conf.set('directories', 'project', self.path_proj)
+        self.path_wind_scenario = [self.get_path(x.strip(), cfg_file) 
+            for x in conf.get('directories', 'wind_scenario').split(',')]
 
-        # try:
-        self.path_gis_data = conf.get('directories', 'gis_data')
-        # except ValueError:
-        #     self.path_gis_data = self.get_path(
-        #         conf.get('directories', 'gis_data', 1), conf_dic)
+        path_input = self.get_path(conf.get('directories', 'input'), cfg_file)
 
-        # try:
-        self.path_wind_scenario = [x.strip() for 
-            x in conf.get('directories', 'wind_scenario').split(',')]
-        # except ValueError:
-        #     xx = conf.get('directories', 'wind_scenario', 1).split(', ')
-        #     self.path_wind_scenario = [self.get_path(x, conf_dic) for x in xx]
-
-        # try:
-        path_input = conf.get('directories', 'input')
-        # except ValueError:
-        #     path_input = self.get_path(
-        #         conf.get('directories', 'input', 1), conf_dic)
-
-        # try:
-        self.path_output = conf.get('directories', 'output')
-        # except ValueError:
-        #     self.path_output = self.get_path(
-        #         conf.get('directories', 'output', 1), conf_dic)
+        self.path_output = self.get_path(conf.get('directories', 'output'), 
+                                         cfg_file)
 
         # gis_data
         self.file_shape_tower = os.path.join(self.path_gis_data,
@@ -120,22 +98,6 @@ class TransmissionConfig(object):
         self.file_drag_height_by_type = os.path.join(
             path_input, conf.get('input', 'drag_height_by_type'))
 
-        # flag for test, no need to change
-        # self.test = test
-
-        # if self.test:
-        #     self.flag_save = 0
-        #     self.nsims = 20
-        #     self.dir_output = os.path.join(self.pdir, 'transmission', 'tests',
-        #                                    'test_output_current_glenda')
-        # else:
-        #     self.flag_save = 0
-        #     self.nsims = 3000
-        #     self.dir_output = os.path.join(self.pdir, 'output_current_glenda')
-
-        # # parallel or serial computation
-        # self.parallel = 0
-
         # read information
         self.design_value = self.read_design_value()
 
@@ -164,20 +126,14 @@ class TransmissionConfig(object):
             self.design_adjustment_factor_by_topo = \
                 self.read_design_adjustment_factor_by_topography_mutliplier()
 
-        # output directory
-        #if not os.path.exists(self.path_output):
-        #    os.makedirs(self.path_output)
-        #    print('{} is created'.format(self.dir_output))
-
     @staticmethod
-    def get_path(path_, conf_dic):
+    def get_path(path_, file_):
         '''
+        return absolute path of path_ which is relative to location of file_
         '''
-        path_split = path_.split(')/')
-        path_key = path_split[0][2:]
-        path_full = conf_dic['directories'][path_key]
+        path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
 
-        return os.path.join(path_full, path_split[1])
+        return os.path.abspath(os.path.join(path_file_, path_))
 
     @staticmethod
     def split_str(str_, str_split):

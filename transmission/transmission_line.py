@@ -24,7 +24,7 @@ class TransmissionLine(object):
 
         self.no_towers = len(self.df_towers)
 
-        self.coord_line = np.array(self.df_line['Shapes'].values[0].points)
+        self.coord_line = np.array(self.df_line['Shapes'].values[0].points) # lon, lat
         actual_span = self.calculate_distance_between_towers()
 
         self.id2name = dict()
@@ -54,6 +54,7 @@ class TransmissionLine(object):
             self.towers[key].id_adj = self.update_id_adj_towers(val)
             self.towers[key].calculate_cond_pc_adj()
 
+
     def sort_by_location(self):
         """ sort towers by location"""
 
@@ -61,7 +62,7 @@ class TransmissionLine(object):
         for item in self.coord_line:
             diff = (self.coord_towers - np.ones((self.no_towers, 1)) *
                     item[np.newaxis, :])
-            temp = diff[:, 0] * diff[:, 0] + diff[:, 1] * diff[:, 1]
+            temp = np.linalg.norm(diff, axis=1)
             idx = np.argmin(temp)
             tf = np.allclose(temp[idx], 0.0, 1.0e-4)
             if not tf:
@@ -126,7 +127,7 @@ class TransmissionLine(object):
         """ calculate actual span between the towers """
         dist_forward = []
         for i in range(self.no_towers - 1):
-            pt0 = (self.coord_line[i, 1], self.coord_line[i, 0])
+            pt0 = (self.coord_line[i, 1], self.coord_line[i, 0]) # lat, lon
             pt1 = (self.coord_line[i+1, 1], self.coord_line[i+1, 0])
             dist_forward.append(great_circle(pt0, pt1).meters)
 
