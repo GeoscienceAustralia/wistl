@@ -52,25 +52,25 @@ class TransmissionConfig(object):
             'run_parameters', 'skip_non_cascading_collapse')
         self.adjust_design_by_topo = conf.getboolean(
             'run_parameters', 'adjust_design_by_topography')
-        strainer_ = conf.get('run_parameters', 'Strainer')
-        self.strainer = [x.strip() for x in strainer_.split(',')]
+        self.strainer = [x.strip() for x in conf.get('run_parameters',
+                         'Strainer').split(',')]
 
         if conf.getboolean('run_parameters', 'parallel_line_interaction'):
-            self.parallel_line = dict():
+            self.parallel_line = dict()
             for line in conf.options('parallel_line_interaction'):
-                self.parallel_line_interaction[line] = [x.strip() for x in 
+                self.parallel_line[line] = [x.strip() for x in
                     conf.get('parallel_line_interaction', line).split(',')]
 
         # directories
-        self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'), 
+        self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'),
                                            cfg_file)
 
-        self.path_wind_scenario = [self.get_path(x.strip(), cfg_file) 
+        self.path_wind_scenario = [self.get_path(x.strip(), cfg_file)
             for x in conf.get('directories', 'wind_scenario').split(',')]
 
         path_input = self.get_path(conf.get('directories', 'input'), cfg_file)
 
-        self.path_output = self.get_path(conf.get('directories', 'output'), 
+        self.path_output = self.get_path(conf.get('directories', 'output'),
                                          cfg_file)
 
         # gis_data
