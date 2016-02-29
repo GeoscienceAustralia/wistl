@@ -21,8 +21,8 @@ class TransmissionConfig(object):
             sys.exit(1)
 
         conf = ConfigParser.ConfigParser()
+        conf.optionxform = str
         conf.read(cfg_file)
-        conf_dic = conf._sections
 
         # run_type
         self.test = conf.getboolean('run_type', 'test')
@@ -33,7 +33,6 @@ class TransmissionConfig(object):
 
         # random seed
         if self.random_seed:
-
             self.seed = dict()
             rnd_events = conf.get('random_seed', 'events').split(',')
             rnd_lines = conf.get('random_seed', 'lines').split(',')
@@ -55,6 +54,12 @@ class TransmissionConfig(object):
             'run_parameters', 'adjust_design_by_topography')
         strainer_ = conf.get('run_parameters', 'Strainer')
         self.strainer = [x.strip() for x in strainer_.split(',')]
+
+        if conf.getboolean('run_parameters', 'parallel_line_interaction'):
+            self.parallel_line = dict():
+            for line in conf.options('parallel_line_interaction'):
+                self.parallel_line_interaction[line] = [x.strip() for x in 
+                    conf.get('parallel_line_interaction', line).split(',')]
 
         # directories
         self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'), 
