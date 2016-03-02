@@ -67,7 +67,7 @@ class TestTransmission(unittest.TestCase):
 
         h5file = self.h5file_full(damage_line, 'damage_prob_analytical')
 
-        for ds, _ in self.conf.damage_states:
+        for ds in self.conf.damage_states:
             df_value = pd.read_hdf(h5file, ds)
             pd.util.testing.assert_frame_equal(
                 df_value, damage_line.damage_prob_analytical[ds])
@@ -78,7 +78,7 @@ class TestTransmission(unittest.TestCase):
         h5file_est = self.h5file_full(damage_line, 'est_no_damage_simulation')
         h5file_prob = self.h5file_full(damage_line, 'prob_no_damage_simulation')
 
-        for ds, _ in self.conf.damage_states:
+        for ds in self.conf.damage_states:
 
             df_value = pd.read_hdf(h5file_damage, ds)
             pd.util.testing.assert_frame_equal(
@@ -109,7 +109,7 @@ class TestTransmission(unittest.TestCase):
             damage_line.event_id,
             'prob_no_damage_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
 
-        for ds, _ in self.conf.damage_states:
+        for ds in self.conf.damage_states:
 
             df_value = pd.read_hdf(h5file1, ds)
             pd.util.testing.assert_frame_equal(
@@ -125,7 +125,7 @@ class TestTransmission(unittest.TestCase):
 
     def compare_anlytical_vs_simulation_non_cascading(self, damage_line):
 
-        for ds, _ in self.conf.damage_states:
+        for ds in self.conf.damage_states:
 
             pd.util.testing.assert_frame_equal(
                 damage_line.damage_prob_analytical[ds],

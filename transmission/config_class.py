@@ -58,15 +58,17 @@ class TransmissionConfig(object):
         if conf.getboolean('run_parameters', 'parallel_line_interaction'):
             self.parallel_line = dict()
             for line in conf.options('parallel_line_interaction'):
-                self.parallel_line[line] = [x.strip() for x in
-                    conf.get('parallel_line_interaction', line).split(',')]
+                self.parallel_line[line] = [
+                    x.strip() for x in conf.get('parallel_line_interaction',
+                                                line).split(',')]
 
         # directories
         self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'),
                                            cfg_file)
 
-        self.path_wind_scenario = [self.get_path(x.strip(), cfg_file)
-            for x in conf.get('directories', 'wind_scenario').split(',')]
+        self.path_wind_scenario = [
+            self.get_path(x.strip(), cfg_file) for x in conf.get(
+                'directories', 'wind_scenario').split(',')]
 
         path_input = self.get_path(conf.get('directories', 'input'), cfg_file)
 
@@ -88,14 +90,14 @@ class TransmissionConfig(object):
 
         # input
         self.file_design_value = os.path.join(path_input,
-                                              conf.get('input',
-                                                       'design_value'))
+                                              conf.get('input', 'design_value'))
 
-        self.file_fragility = os.path.join(path_input,
-                                           conf.get('input', 'fragility'))
+        self.file_fragility_metadata = os.path.join(
+            path_input, conf.get('input', 'fragility_metadata'))
 
-        self.file_cond_collapse_prob = os.path.join(
-            path_input, conf.get('input', 'conditional_collapse_probability'))
+        self.file_cond_collapse_prob_metadata = os.path.join(
+            path_input, conf.get('input',
+                                 'conditional_collapse_probability_metadata'))
 
         self.file_terrain_multiplier = os.path.join(
             path_input, conf.get('input', 'terrain_height_multiplier'))
@@ -108,10 +110,11 @@ class TransmissionConfig(object):
 
         self.sel_lines = self.design_value.keys()
 
-        self.fragility_curve, self.damage_states, self.no_damage_states =\
-            self.read_fragility()
+        self.fragility_metadata, self.fragility, self.damage_states, \
+            self.no_damage_states = self.read_fragility()
 
-        self.cond_collapse_prob = self.read_cond_collapse_prob()
+        self.cond_collapse_prob_metadata, self.cond_collapse_prob = \
+            self.read_cond_collapse_prob()
 
         self.terrain_multiplier = self.read_ASNZS_terrain_multiplier()
 
@@ -130,6 +133,12 @@ class TransmissionConfig(object):
 
             self.design_adjustment_factor_by_topo = \
                 self.read_design_adjustment_factor_by_topography_mutliplier()
+
+        if conf.getboolean('run_parameters', 'parallel_line_interaction'):
+            self.file_line_interaction = os.path.join(
+                path_input, conf.get('input', 'line_interaction'))
+
+            #self.prob_line_interaction = self.read_parallel_interaction_prob()
 
     @staticmethod
     def get_path(path_, file_):
@@ -171,66 +180,56 @@ class TransmissionConfig(object):
         read collapse fragility parameter values
         """
 
+        metadata = ConfigParser.ConfigParser()
+        metadata.read(self.file_fragility_metadata)
+        metadata = metadata._sections
+
+        for item, value in metadata['main'].iteritems():
+            if ',' in value:
+                metadata['main'][item] = [x.strip() for x in value.split(',')]
+
+        # remove main
+        meta_data = metadata['main'].copy()
+        metadata.pop('main')
+        meta_data.update(metadata)
+
+        self.file_fragility = self.get_path(meta_data['file'],
+                                            self.file_fragility_metadata)
+
         data = pd.read_csv(self.file_fragility, skipinitialspace=True)
-        grouped = (data.groupby(['tower type', 'function'])).groups
 
-        frag = dict()
-        for item in grouped.keys():
-            (ttype, func) = item
-            idx = grouped[item]
-            dev0_ = data['dev0'].ix[idx].unique()
-            dev1_ = data['dev1'].ix[idx].unique()
-
-            frag.setdefault(ttype, {})[func] = {}
-            frag.setdefault(ttype, {}).setdefault(func, {})['dev_angle'] =\
-                np.sort(np.union1d(dev0_, dev1_))
-
-            temp = {}
-            # dev_angle (0, 5, 15, 30, 360) <= tower_angle 0.0 => index
-            # angle is less than 360. if 360 then 0.
-            for (j, k) in enumerate(idx):
-                idx_dev = int(j/2)+1
-                ds_ = data.ix[k]['damage']
-                temp.setdefault(idx_dev, {}).setdefault(ds_, {})['idx'] =\
-                    data.ix[k]['index']
-                temp[idx_dev][ds_]['param0'] = data.ix[k]['param0']
-                temp[idx_dev][ds_]['param1'] = data.ix[k]['param1']
-                temp[idx_dev][ds_]['cdf'] = data.ix[k]['cdf']
-
-            frag[ttype][func].update(temp)
-
-        ds_list = [(x, frag[ttype][func][1][x]['idx'])
-                   for x in frag[ttype][func][1].keys()]
-        ds_list.sort(key=lambda tup: tup[1])  # sort by ids
-        nds = len(ds_list)
-
-        return frag, ds_list, nds
+        return meta_data, data, meta_data['limit_states'], len(meta_data['limit_states'])
 
     def read_cond_collapse_prob(self):
         """
         read condition collapse probability defined by tower function
         """
 
-        data = pd.read_csv(self.file_cond_collapse_prob, skipinitialspace=1)
+        metadata = ConfigParser.ConfigParser()
+        metadata.read(self.file_cond_collapse_prob_metadata)
+        metadata = metadata._sections
+
+        for item, value in metadata['main'].iteritems():
+            if ',' in value:
+                metadata['main'][item] = [x.strip() for x in value.split(',')]
+
+        # remove main
+        meta_data = metadata['main'].copy()
+        metadata.pop('main')
+        meta_data.update(metadata)
 
         cond_pc = dict()
-        for line in data.iterrows():
-            func, cls_str, thr, pb, n0, n1 = [
-                line[1][x] for x in ['FunctionType', 'class', 'threshold',
-                                     'probability', 'start', 'end']]
-            list_ = range(int(n0), int(n1)+1)
-            cond_pc.setdefault(func, {})['threshold'] = thr
-            cond_pc[func].setdefault(cls_str, {}).setdefault('prob', {})[
-                tuple(list_)] = float(pb)
+        for item in meta_data['list']:
+            meta_data[item]['max_adj'] = int(meta_data[item]['max_adj'])
+            file_ = self.get_path(meta_data[item]['file'],
+                                  self.file_cond_collapse_prob_metadata)
+            df_tmp = pd.read_csv(file_, skipinitialspace=1)
+            df_tmp['start'] = df_tmp['start'].astype(np.int64)
+            df_tmp['end'] = df_tmp['end'].astype(np.int64)
+            df_tmp['list'] = df_tmp.apply(lambda x: tuple(range(x['start'], x['end'] + 1)), axis=1)
+            cond_pc[item] = df_tmp.loc[df_tmp[meta_data['by']] == item]
 
-        for func in cond_pc.keys():
-            cls_str = cond_pc[func].keys()
-            cls_str.remove('threshold')
-            for cls in cls_str:
-                max_no_adj_towers = np.max(np.abs([
-                    j for k in cond_pc[func][cls]['prob'].keys() for j in k]))
-                cond_pc[func][cls]['max_adj'] = max_no_adj_towers
-        return cond_pc
+        return meta_data, cond_pc
 
     def read_ASNZS_terrain_multiplier(self):
         """

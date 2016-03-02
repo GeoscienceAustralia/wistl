@@ -62,7 +62,7 @@ class DamageLine(TransmissionLine):
                               '{}_{}.h5'.format(file_str, self.name_output))
         hdf = pd.HDFStore(h5file)
 
-        for ds, _ in self.conf.damage_states:
+        for ds in self.conf.damage_states:
             hdf.put(ds, val[ds], format='table', data_columns=True)
         hdf.close()
         print('{} is created'.format(h5file))
@@ -97,7 +97,7 @@ class DamageLine(TransmissionLine):
             index=self.time_index)
 
         # prob of non-collapse damage
-        cds_list = [x for x, _ in self.conf.damage_states]  # only string
+        cds_list = copy.deepcopy(self.conf.damage_states)
         cds_list.remove('collapse')  # non-collapse
 
         for ds in cds_list:
@@ -138,12 +138,12 @@ class DamageLine(TransmissionLine):
                         tf_ds[self.id_by_line.index(l), isim, j] = True
 
         cds_list = self.conf.damage_states[:]  # to avoid effect
-        cds_list.reverse()  # [(collapse, 2), (minor, 1)]
+        cds_list.reverse()  # [collapse, minor]
 
         tf_sim = dict()
 
         # append damage stae by direct wind
-        for ds, _ in cds_list:
+        for ds in cds_list:
 
             for irow, name in enumerate(self.name_by_line):
 
@@ -177,7 +177,7 @@ class DamageLine(TransmissionLine):
 
         tf_sim_non_cascading = dict()
 
-        for ds, _ in self.conf.damage_states:
+        for ds in self.conf.damage_states:
 
             tf_ds = np.zeros((self.no_towers,
                               self.conf.nsims,

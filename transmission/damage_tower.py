@@ -2,7 +2,7 @@
 from __future__ import print_function
 
 import numpy as np
-from scipy.stats import lognorm
+import scipy.stats as stats
 import pandas as pd
 
 from tower import Tower
@@ -73,34 +73,33 @@ class DamageTower(Tower):
     def compute_pc_wind(self):
         """
         compute probability of damage due to wind
-        - asset: instance of Tower object
-        - frag: dictionary by asset.const_type
-        - ntime:
-        - damage_states: [('collapse', 2), ('minor', 1)]
-        - nds:
         """
         pc_wind = np.zeros(shape=(len(self.time_index),
                                   self.conf.no_damage_states))
         vratio = self.wind.dir_speed.values/self.collapse_capacity
 
-        try:
-            fragx = self.conf.fragility_curve[self.ttype][self.funct]
-            idf = np.sum(fragx['dev_angle'] <= self.dev_angle)
+        tf_array = np.ones((self.conf.fragility.shape[0],), dtype=bool)
+        for att, att_type in zip(self.conf.fragility_metadata['by'],
+                                 self.conf.fragility_metadata['type']):
+            if att_type == 'string':
+                tf_array *= self.conf.fragility[att] == self.df_tower[att]
+            elif att_type == 'numeric':
+                tf_array *= (self.conf.fragility[att + '_lower'] <= self.df_tower[att]) & \
+                            (self.conf.fragility[att + '_upper'] > self.df_tower[att])
 
-            for (ds, ids) in self.conf.damage_states:  # damage state
-                med = fragx[idf][ds]['param0']
-                sig = fragx[idf][ds]['param1']
+        for ids, limit_state in enumerate(self.conf.damage_states):
 
-                temp = lognorm.cdf(vratio, sig, scale=med)
-                pc_wind[:, ids-1] = temp  # 2->1
+            idx = tf_array & (self.conf.fragility['limit_states'] == limit_state)
+            fn_form = self.conf.fragility.loc[idx, self.conf.fragility_metadata['function']].values[0]
+            arg_ = self.conf.fragility.loc[idx, self.conf.fragility_metadata[fn_form]['arg']]
+            scale_ = self.conf.fragility.loc[idx, self.conf.fragility_metadata[fn_form]['scale']]
 
-        except KeyError:
-                print('fragility is not defined for {}'.format(
-                      self.const_type))
+            temp = getattr(stats, fn_form).cdf(vratio, arg_, scale=scale_)
+            pc_wind[:, ids] = temp
 
         self.pc_wind = pd.DataFrame(
             pc_wind,
-            columns=[x[0] for x in self.conf.damage_states],
+            columns=self.conf.damage_states,
             index=self.wind.index)
 
     def compute_pc_adj(self):  # only for analytical approach
@@ -127,14 +126,15 @@ class DamageTower(Tower):
 
         # 1. determine damage state of tower due to wind
         val = np.array([rv < self.pc_wind[ds].values
-                       for ds, _ in self.conf.damage_states])  # (nds, nsims, ntime)
+                       for ds in self.conf.damage_states])  # (nds, nsims, ntime)
 
         ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
 
         mc_wind = dict()
-        for ds, ids in self.conf.damage_states:
-            mc_wind.setdefault(ds, {})['isim'], \
-                mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == ids)
+        print("{}".format(self.conf.damage_states))
+        for ids, ds in enumerate(self.conf.damage_states):
+            print("{}".format(ds))
+            mc_wind.setdefault(ds, {})['isim'], mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == (ids + 1))
 
         # for collapse
         unq_itime = np.unique(mc_wind['collapse']['itime'])

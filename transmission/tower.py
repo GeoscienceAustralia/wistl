@@ -32,7 +32,7 @@ class Tower(object):
         self.design_level = self.conf.design_value[self.line_route]['level']  # design level
         self.strong_axis = df_tower['AxisAz']  # azimuth of strong axis relative to North (deg)
         self.dev_angle = df_tower['DevAngle']  # deviation angle
-        self.height = float(df_tower['Height'])
+        self.height = df_tower['Height']
         self.height_z = conf.drag_height[self.funct]
         self.actual_span = df_tower['actual_span']  # actual wind span on eith side
 
@@ -41,9 +41,8 @@ class Tower(object):
         self.file_wind = self.get_wind_file()
         self.convert_factor = self.convert_10_to_z()
 
-        cond_collapse_prob = self.get_cond_collapse_prob()
-        self.cond_pc = cond_collapse_prob['prob']
-        self.max_no_adj_towers = cond_collapse_prob['max_adj']
+        #cond_collapse_prob = self.get_cond_collapse_prob()
+        self.cond_pc, self.max_no_adj_towers = self.get_cond_collapse_prob()
 
         # computed by funcitons in transmission_line class
         self.id_sides = None  # (left, right) ~ assign_id_both_sides
@@ -57,20 +56,23 @@ class Tower(object):
         ''' get dict of conditional collapse probabilities
         '''
 
-        if self.funct == 'Strainer':
-            design_level = self.design_level
-        elif self.funct in ('Suspension', 'Terminal'):
-            thr = float(self.conf.cond_collapse_prob[self.funct]['threshold'])
-            if self.height > thr:
-                design_level = 'higher'
-            else:
-                design_level = 'lower'
+        att_value = self.df_tower[self.conf.cond_collapse_prob_metadata['by']]
+        df_prob = self.conf.cond_collapse_prob[att_value]
 
-        try:
-            return self.conf.cond_collapse_prob[self.funct][design_level]
-        except KeyError:
-            print('Please check {}'.format(self.conf.file_cond_collapse_prob),
-                  'as probability for {} is undefined'.format(self.funct))
+        att = self.conf.cond_collapse_prob_metadata[att_value]['by']
+        att_type = self.conf.cond_collapse_prob_metadata[att_value]['type']
+        if att_type == 'string':
+            tf_array = df_prob[att] == getattr(self, att)
+        elif att_type == 'numeric':
+            tf_array = (df_prob[att + '_lower'] <= self.df_tower[att]) & \
+                       (df_prob[att + '_upper'] > self.df_tower[att])
+
+        # change to dictionary
+        cond_pc = dict(zip(df_prob.loc[tf_array, 'list'],
+                           df_prob.loc[tf_array, 'probability']))
+        max_no_adj_towers = self.conf.cond_collapse_prob_metadata[att_value]['max_adj']
+
+        return cond_pc, max_no_adj_towers
 
     def get_wind_file(self):
         ''' return name of wind file '''
