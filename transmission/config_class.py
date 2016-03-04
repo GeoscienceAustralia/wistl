@@ -25,7 +25,6 @@ class TransmissionConfig(object):
         conf.read(cfg_file)
 
         # run_type
-        self.test = conf.getboolean('run_type', 'test')
         self.parallel = conf.getboolean('run_type', 'parallel')
         self.save = conf.getboolean('run_type', 'save')
         self.figure = conf.getboolean('run_type', 'figure')
@@ -193,10 +192,10 @@ class TransmissionConfig(object):
         metadata.pop('main')
         meta_data.update(metadata)
 
-        self.file_fragility = self.get_path(meta_data['file'],
+        meta_data['file'] = self.get_path(meta_data['file'],
                                             self.file_fragility_metadata)
 
-        data = pd.read_csv(self.file_fragility, skipinitialspace=True)
+        data = pd.read_csv(meta_data['file'], skipinitialspace=True)
 
         return meta_data, data, meta_data['limit_states'], len(meta_data['limit_states'])
 
@@ -223,6 +222,7 @@ class TransmissionConfig(object):
             meta_data[item]['max_adj'] = int(meta_data[item]['max_adj'])
             file_ = self.get_path(meta_data[item]['file'],
                                   self.file_cond_collapse_prob_metadata)
+            meta_data[item]['file'] = file_
             df_tmp = pd.read_csv(file_, skipinitialspace=1)
             df_tmp['start'] = df_tmp['start'].astype(np.int64)
             df_tmp['end'] = df_tmp['end'].astype(np.int64)
@@ -279,16 +279,15 @@ class TransmissionConfig(object):
         :rtype: dict
 
         """
+        adic = ConfigParser.ConfigParser()
+        adic.read(self.file_design_adjustment_factor_by_topo)
 
-        # design speed adjustment factor
-        temp = pd.read_csv(self.file_design_adjustment_factor_by_topo,
-                           skiprows=2)
-        data = temp.set_index('key').to_dict()['value']
-
-        # threshold
-        temp = pd.read_csv(self.file_design_adjustment_factor_by_topo,
-                           skiprows=1)
-        data['threshold'] = np.array([float(x) for x in temp.columns])
+        data = dict()
+        for key, value in adic.items('main'):
+            try:
+                data[int(key)] = float(value)
+            except ValueError:
+                data[key] = np.array([float(x) for x in value.split(',')])
 
         assert len(data['threshold']) == len(data.keys()) - 2
         return data

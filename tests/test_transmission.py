@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-__author__ = 'sudipta'
+__author__ = 'Hyeuk Ryu'
 
 import unittest
 #import numpy as np

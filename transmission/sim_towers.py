@@ -34,8 +34,8 @@ from damage_network import create_event_set, mc_loop_over_line
 
 def sim_towers(conf):
 
-    if conf.test:
-        print("==============>testing")
+    # if conf.test:
+    #     print("==============>testing")
 
     if not os.path.exists(conf.path_output):
         os.makedirs(conf.path_output)
