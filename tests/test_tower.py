@@ -8,49 +8,12 @@ import pandas as pd
 import os
 import StringIO
 import numpy as np
+import copy
 
 from collections import OrderedDict
 from transmission.config_class import TransmissionConfig
-
-
-# https://github.com/larsbutler/oq-engine/blob/master/tests/utils/helpers.py
-def assertDeepAlmostEqual(test_case, expected, actual, *args, **kwargs):
-    """
-    Assert that two complex structures have almost equal contents.
-    Compares lists, dicts and tuples recursively. Checks numeric values
-    using test_case's :py:meth:`unittest.TestCase.assertAlmostEqual` and
-    checks all other values with :py:meth:`unittest.TestCase.assertEqual`.
-    Accepts additional positional and keyword arguments and pass those
-    intact to assertAlmostEqual() (that's how you specify comparison
-    precision).
-    :param test_case: TestCase object on which we can call all of the basic
-        'assert' methods.
-    :type test_case: :py:class:`unittest.TestCase` object
-    """
-    is_root = not '__trace' in kwargs
-    trace = kwargs.pop('__trace', 'ROOT')
-    try:
-        if isinstance(expected, (int, float, long, complex)):
-            test_case.assertAlmostEqual(expected, actual, *args, **kwargs)
-        elif isinstance(expected, (list, tuple, np.ndarray)):
-            test_case.assertEqual(len(expected), len(actual))
-            for index in xrange(len(expected)):
-                v1, v2 = expected[index], actual[index]
-                assertDeepAlmostEqual(test_case, v1, v2,
-                                      __trace=repr(index), *args, **kwargs)
-        elif isinstance(expected, dict):
-            test_case.assertEqual(set(expected), set(actual))
-            for key in expected:
-                assertDeepAlmostEqual(test_case, expected[key], actual[key],
-                                      __trace=repr(key), *args, **kwargs)
-        else:
-            test_case.assertEqual(expected, actual)
-    except AssertionError as exc:
-        exc.__dict__.setdefault('traces', []).append(trace)
-        if is_root:
-            trace = ' -> '.join(reversed(exc.traces))
-            exc = AssertionError("%s\nTRACE: %s" % (exc.message, trace))
-        raise exc
+from transmission.tower import Tower
+from test_config_class import assertDeepAlmostEqual
 
 
 class TestTransmissionConfig(unittest.TestCase):
@@ -60,106 +23,80 @@ class TestTransmissionConfig(unittest.TestCase):
         path_ = '/'.join(__file__.split('/')[:-1])
         self.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
 
-    def test_get_path(self):
+        self.stower = pd.Series({'id': 1,
+                                 'actual_span': 10.0,
+                                 'AxisAz': 134,
+                                 'ConstType': 'Unknown',
+                                 'DevAngle': 0,
+                                 'Function': 'Suspension',
+                                 'Height': 17.837622726399999,
+                                 'Latitude': 13.938321649600001,
+                                 'LineRoute': 'Calaca - Amadeo',
+                                 'Longitude': 120.804464197,
+                                 'Name': 'AC-099',
+                                 'Type': 'Lattice Tower'})
 
-        file_ = __file__
-        path_ = '../tests/output'
-        path_only = '/'.join(__file__.split('/')[:-1])
-        expected = os.path.abspath(os.path.join(path_only, path_))
-        result = self.conf.get_path(path_, file_)
-        self.assertEqual(result, expected)
+        self.tower = Tower(self.conf, self.stower)
 
-    def test_split_str(self):
+    def test_get_cond_collapse_prob(self):
 
-        str_ = 'aa: 44'
-        expected = ('aa', 44)
-        result = self.conf.split_str(str_, ':')
-        self.assertEqual(result, expected)
+        list_function = ['Suspension']*2 + ['Terminal']*2
+        list_value = [20.0, 50.0]*2
 
-    def test_read_design_value(self):
-        self.conf.file_design_value = StringIO.StringIO(
-            """lineroute, speed, span, category, level
-            AAA - BBB, 75.0, 400.0, 2, low
-            Ccc - Ddd, 51.389, 400.0, 2, low""")
-        result = self.conf.read_design_value()
-        expected = {'AAA - BBB': {'cat': 2, 'level': 'low', 'span': 400.0, 'speed': 75.0},
-                    'Ccc - Ddd': {'cat': 2, 'level': 'low', 'span': 400.0, 'speed': 51.389}}
+        for funct_, value_ in zip(list_function, list_value):
 
-        assertDeepAlmostEqual(self, expected, result)
+            stower = copy.deepcopy(self.stower)
+            conf = copy.deepcopy(self.conf)
 
-    def test_read_fragility(self):
+            stower['Function'] = funct_
+            stower['Height'] = value_
+            tower = Tower(conf, stower)
 
-        fragility_metadata = StringIO.StringIO("""\
-[main]
-by: Type, Function, DevAngle
-type: string, string, numeric
-limit_states: minor, collapse
-function: form
-file: ./fragility.csv
+            if tower.cond_pc:
+                tmp = conf.cond_collapse_prob[funct_]
+                expected = tmp.set_index('list').to_dict()['probability']
+                assertDeepAlmostEqual(self, tower.cond_pc, expected)
 
-[lognorm]
-scale: param1
-arg: param2""")
+        list_function = ['Strainer']*2
+        list_value = ['low', 'high']
 
-        fragility = StringIO.StringIO("""\
-Type,Function,DevAngle_lower,DevAngle_upper,limit_states,form,param1,param2
-Lattice Tower,Suspension,0,360,minor,lognorm,1.02,0.02
-Lattice Tower,Suspension,0,360,collapse,lognorm,1.05,0.03
-Lattice Tower,Terminal,0,360,minor,lognorm,1.02,0.02
-Lattice Tower,Terminal,0,360,collapse,lognorm,1.05,0.03
-Lattice Tower,Strainer,0,5,minor,lognorm,1.143,0.032
-Lattice Tower,Strainer,0,5,collapse,lognorm,1.18,0.04
-Lattice Tower,Strainer,5,15,minor,lognorm,1.173,0.032
-Lattice Tower,Strainer,5,15,collapse,lognorm,1.21,0.04
-Lattice Tower,Strainer,15,30,minor,lognorm,1.208,0.032
-Lattice Tower,Strainer,15,30,collapse,lognorm,1.245,0.04
-Lattice Tower,Strainer,30,360,minor,lognorm,1.243,0.032
-Lattice Tower,Strainer,30,360,collapse,lognorm,1.28,0.04
-Steel Pole,Suspension,0,360,minor,lognorm,3.85,0.05
-Steel Pole,Suspension,0,360,collapse,lognorm,4.02,0.05
-Steel Pole,Terminal,0,360,minor,lognorm,3.85,0.05
-Steel Pole,Terminal,0,360,collapse,lognorm,4.02,0.05
-Steel Pole,Strainer,0,5,minor,lognorm,3.85,0.05
-Steel Pole,Strainer,0,5,collapse,lognorm,4.02,0.05
-Steel Pole,Strainer,5,15,minor,lognorm,3.95,0.05
-Steel Pole,Strainer,5,15,collapse,lognorm,4.12,0.05
-Steel Pole,Strainer,15,30,minor,lognorm,3.05,0.05
-Steel Pole,Strainer,15,30,collapse,lognorm,4.22,0.05
-Steel Pole,Strainer,30,360,minor,lognorm,3.15,0.05
-Steel Pole,Strainer,30,360,collapse,lognorm,4.32,0.05""")
+        for funct_, value_ in zip(list_function, list_value):
 
-        expected_metadata = OrderedDict([('__name__', 'main'),
-            ('by', ['Type', 'Function', 'DevAngle']),
-            ('type', ['string', 'string', 'numeric']),
-            ('limit_states', ['minor', 'collapse']),
-            ('function', 'form'),
-            ('file', './fragility.csv'),
-            ('lognorm', OrderedDict([('__name__', 'lognorm'),
-            ('scale', 'param1'), ('arg', 'param2')]))])
+            stower = copy.deepcopy(self.stower)
+            stower['Function'] = funct_
+            conf = copy.deepcopy(self.conf)
 
-        expected_metadata['file'] = os.path.abspath(
-            os.path.join(os.path.abspath(
-                self.conf.file_fragility_metadata),
-                '../',
-                expected_metadata['file']))
+            conf.design_value[self.stower['LineRoute']]['level'] = value_
+            tower = Tower(conf, stower)
 
-        with open(self.conf.file_fragility_metadata, 'r') as file1:
-            for line1, line2 in zip(file1, fragility_metadata):
-                self.assertEqual(line1, line2)
+            if tower.cond_pc:
+                tmp = conf.cond_collapse_prob[funct_]
+                expected = tmp.loc[tmp['design_level'] == value_, :].set_index('list').to_dict()['probability']
+                assertDeepAlmostEqual(self, tower.cond_pc, expected)
 
-        with open(self.conf.fragility_metadata['file'], 'r') as file1:
-            for line1, line2 in zip(file1, fragility):
-                self.assertEqual(line1, line2)
+    def test_get_wind_file(self):
 
-        assertDeepAlmostEqual(self, expected_metadata,
-                              self.conf.fragility_metadata)
+        expected = 'ts.{}.csv'.format(self.stower['Name'])
+        self.assertEqual(self.tower.file_wind, expected)
 
-        fragility.seek(0)
-        expected_fragility = pd.read_csv(fragility)
-        pd.util.testing.assert_frame_equal(
-            self.conf.fragility, expected_fragility)
+    def test_assign_design_speed(self):
 
-    def test_read_cond_collapse_prob(self):
+        expected = 75.0 * 1.2
+        conf = copy.deepcopy(self.conf)
+        conf.adjust_design_by_topo = True
+        conf.topo_multiplier[self.stower['Name']] = 1.15
+        tower = Tower(conf, self.stower)
+        self.assertEqual(tower.design_speed, expected)
+
+        expected = 75.0
+        conf.adjust_design_by_topo = False
+        tower = Tower(self.conf, self.stower)
+        self.assertEqual(tower.design_speed, expected)
+
+    def test_compute_collapse_capacity(self):
+        pass
+
+    def test_convert_10_to_z(self):
 
         cond_collapse_prob_metadata = StringIO.StringIO("""\
 [main]
@@ -241,10 +178,6 @@ Strainer, high, 12, 0.08, -6, 6""")
             for line1, line2 in zip(file1, cond_collapse_prob_strainer):
                 self.assertEqual(line1, line2)
 
-        with open(self.conf.cond_collapse_prob_metadata['Suspension']['file'], 'r') as file1:
-            for line1, line2 in zip(file1, cond_collapse_prob_suspension_terminal):
-                self.assertEqual(line1, line2)
-
         path_input = os.path.join(os.path.abspath(
             self.conf.file_fragility_metadata), '../')
 
@@ -266,7 +199,8 @@ Strainer, high, 12, 0.08, -6, 6""")
             pd.util.testing.assert_frame_equal(
                 self.conf.cond_collapse_prob[item], expected_cond_pc[item])
 
-    def test_read_ASNZS_terrain_multiplier(self):
+
+    def test_calculate_cond_pc_adj(self):
 
         terrain_multiplier = StringIO.StringIO("""\
 height(m), terrain category 1, terrain category 2, terrain category 3, terrain category 4
@@ -294,6 +228,7 @@ height(m), terrain category 1, terrain category 2, terrain category 3, terrain c
         assertDeepAlmostEqual(self, expected.to_dict('list'),
                               self.conf.terrain_multiplier)
 
+
     def test_read_drag_height_by_type(self):
         drag_height = StringIO.StringIO("""\
 # typical drag height by tower type
@@ -311,6 +246,7 @@ Terminal,12.2""")
 
         assertDeepAlmostEqual(self, expected['value'].to_dict(),
                               self.conf.drag_height)
+
 
     def test_read_topographic_multiplier(self):
 
@@ -337,8 +273,8 @@ CB-006,2014-07-16 00:30,120.80513, 13.93877, 54.56, 45.59, 43.98,226.03,97664.55
         expected = pd.read_csv(topo_multiplier, skipinitialspace=True)
         expected['topo'] = expected[['Mh', 'Mhopp']].max(axis=1)
 
-        assertDeepAlmostEqual(self, expected.set_index('Station').to_dict()['topo'],
-                              self.conf.topo_multiplier)
+        # assertDeepAlmostEqual(self, expected.set_index('Station').to_dict()['topo'],
+        #                       self.conf.topo_multiplier)
 
     def test_read_design_adjustment_factor_by_topography_mutliplier(self):
 

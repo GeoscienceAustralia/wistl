@@ -193,11 +193,12 @@ class TransmissionConfig(object):
         meta_data.update(metadata)
 
         meta_data['file'] = self.get_path(meta_data['file'],
-                                            self.file_fragility_metadata)
+                                          self.file_fragility_metadata)
 
         data = pd.read_csv(meta_data['file'], skipinitialspace=True)
 
-        return meta_data, data, meta_data['limit_states'], len(meta_data['limit_states'])
+        return meta_data, data, meta_data['limit_states'], len(
+            meta_data['limit_states'])
 
     def read_cond_collapse_prob(self):
         """
@@ -226,7 +227,8 @@ class TransmissionConfig(object):
             df_tmp = pd.read_csv(file_, skipinitialspace=1)
             df_tmp['start'] = df_tmp['start'].astype(np.int64)
             df_tmp['end'] = df_tmp['end'].astype(np.int64)
-            df_tmp['list'] = df_tmp.apply(lambda x: tuple(range(x['start'], x['end'] + 1)), axis=1)
+            df_tmp['list'] = df_tmp.apply(lambda x: tuple(range(x['start'],
+                                          x['end'] + 1)), axis=1)
             cond_pc[item] = df_tmp.loc[df_tmp[meta_data['by']] == item]
 
         return meta_data, cond_pc
