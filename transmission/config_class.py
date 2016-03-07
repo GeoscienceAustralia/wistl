@@ -168,6 +168,11 @@ class TransmissionConfig(object):
     def read_design_value(self):
         """read design values by line
         """
+        if not os.path.exists(self.file_design_value):
+            print('Error: file_design_value {} not found'.format(
+                self.file_design_value))
+            sys.exit(1)
+
         data = pd.read_csv(self.file_design_value,
                            skipinitialspace=True, skiprows=1,
                            names=['lineroute', 'speed', 'span', 'cat',
@@ -178,6 +183,10 @@ class TransmissionConfig(object):
         """
         read collapse fragility parameter values
         """
+        if not os.path.exists(self.file_fragility_metadata):
+            print('Error: file_fragility_metadata {} not found'.format(
+                self.file_fragility_metadata))
+            sys.exit(1)
 
         metadata = ConfigParser.ConfigParser()
         metadata.read(self.file_fragility_metadata)
@@ -195,7 +204,11 @@ class TransmissionConfig(object):
         meta_data['file'] = self.get_path(meta_data['file'],
                                           self.file_fragility_metadata)
 
-        data = pd.read_csv(meta_data['file'], skipinitialspace=True)
+        try:
+            data = pd.read_csv(meta_data['file'], skipinitialspace=True)
+        except IOError:
+            print('Error: file_fragility {} not found'.format(meta_data['file']))
+            sys.exit(1)
 
         return meta_data, data, meta_data['limit_states'], len(
             meta_data['limit_states'])
@@ -204,6 +217,10 @@ class TransmissionConfig(object):
         """
         read condition collapse probability defined by tower function
         """
+        if not os.path.exists(self.file_cond_collapse_prob_metadata):
+            print('Error: file_cond_collapse_prob_metadata {} not found'.format(
+                self.file_cond_collapse_prob_metadata))
+            sys.exit(1)
 
         metadata = ConfigParser.ConfigParser()
         metadata.read(self.file_cond_collapse_prob_metadata)

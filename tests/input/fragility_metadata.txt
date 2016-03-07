@@ -1,0 +1,10 @@
+[main]
+by: Type, Function, DevAngle
+type: string, string, numeric
+limit_states: minor, collapse
+function: form
+file: ./fragility.csv
+
+[lognorm]
+scale: param1
+arg: param2

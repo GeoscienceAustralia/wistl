@@ -77,15 +77,25 @@ class TestTransmissionConfig(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_read_design_value(self):
-        self.conf.file_design_value = StringIO.StringIO(
-            """lineroute, speed, span, category, level
-            AAA - BBB, 75.0, 400.0, 2, low
-            Ccc - Ddd, 51.389, 400.0, 2, low""")
-        result = self.conf.read_design_value()
-        expected = {'AAA - BBB': {'cat': 2, 'level': 'low', 'span': 400.0, 'speed': 75.0},
-                    'Ccc - Ddd': {'cat': 2, 'level': 'low', 'span': 400.0, 'speed': 51.389}}
+        design_value = StringIO.StringIO("""\
+lineroute, design wind speed, design wind span, terrain category, design level
+Calaca - Amadeo, 75.0, 400.0, 2, low
+Calaca - Santa Rosa, 51.389, 400.0, 2, low""")
 
-        assertDeepAlmostEqual(self, expected, result)
+        with open(self.conf.file_design_value, 'r') as file1:
+            for line1, line2 in zip(file1, design_value):
+                self.assertEqual(line1, line2)
+
+        expected = {'Calaca - Amadeo': {'cat': 2,
+                                        'level': 'low',
+                                        'span': 400.0,
+                                        'speed': 75.0},
+                    'Calaca - Santa Rosa': {'cat': 2,
+                                            'level': 'low',
+                                            'span': 400.0,
+                                            'speed': 51.389}}
+
+        assertDeepAlmostEqual(self, expected, self.conf.design_value)
 
     def test_read_fragility(self):
 
