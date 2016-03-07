@@ -131,9 +131,7 @@ class DamageTower(Tower):
         ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
 
         mc_wind = dict()
-        print("{}".format(self.conf.damage_states))
         for ids, ds in enumerate(self.conf.damage_states):
-            print("{}".format(ds))
             mc_wind.setdefault(ds, {})['isim'], mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == (ids + 1))
 
         # for collapse
