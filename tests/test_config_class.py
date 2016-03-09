@@ -179,19 +179,16 @@ list: Suspension, Terminal, Strainer
 [Suspension]
 by: Height
 type: numeric
-max_adj: 2
 file: ./cond_collapse_prob_suspension_terminal.csv
 
 [Terminal]
 by: Height
 type: numeric
-max_adj: 2
 file: ./cond_collapse_prob_suspension_terminal.csv
 
 [Strainer]
 by: design_level
 type: string
-max_adj: 2
 file: ./cond_collapse_prob_strainer.csv""")
 
         cond_collapse_prob_suspension_terminal = StringIO.StringIO("""\
@@ -240,7 +237,7 @@ Strainer, high, 12, 0.08, -6, 6""")
             ('Strainer', OrderedDict([('__name__', 'Strainer'),
                 ('by', 'design_level'),
                 ('type', 'string'),
-                ('max_adj', 2),
+                ('max_adj', 6),
                 ('file', './cond_collapse_prob_strainer.csv')]))])
 
         with open(self.conf.file_cond_collapse_prob_metadata, 'r') as file1:

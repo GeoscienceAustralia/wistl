@@ -16,7 +16,7 @@ from transmission.tower import Tower
 from test_config_class import assertDeepAlmostEqual
 
 
-class TestTransmissionConfig(unittest.TestCase):
+class TestTower(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):

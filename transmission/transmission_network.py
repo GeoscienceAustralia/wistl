@@ -20,13 +20,14 @@ class TransmissionNetwork(object):
         self.lines = dict()
         for name, grouped in self.df_towers.groupby('LineRoute'):
             if name in self.conf.sel_lines:
-                tf = self.df_lines['LineRoute'] == name
-                if not tf.sum():
-                    raise KeyError('{} not in the line shapefile'.format(name))
+                try:
+                    idx = self.df_lines[self.df_lines['LineRoute'] == name].index[0]
+                except IndexError:
+                    print ('{} not in the line shapefile'.format(name))
 
                 self.lines[name] = TransmissionLine(conf=self.conf,
                                                     df_towers=grouped,
-                                                    df_line=self.df_lines[tf])
+                                                    df_line=self.df_lines.loc[idx])
 
 
 def read_shape_file(file_shape):

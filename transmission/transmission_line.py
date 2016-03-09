@@ -17,14 +17,14 @@ class TransmissionLine(object):
         self.conf = conf
         self.df_towers = df_towers
         self.df_line = df_line
-        self.name = df_line['LineRoute'].values[0]
+        self.name = df_line['LineRoute']
 
         name_ = self.name.split()
         self.name_output = '_'.join(x for x in name_ if x.isalnum())
 
         self.no_towers = len(self.df_towers)
 
-        self.coord_line = np.array(self.df_line['Shapes'].values[0].points) # lon, lat
+        self.coord_line = np.array(self.df_line['Shapes'].points) # lon, lat
         actual_span = self.calculate_distance_between_towers()
 
         self.id2name = dict()
@@ -125,20 +125,15 @@ class TransmissionLine(object):
 
     def calculate_distance_between_towers(self):
         """ calculate actual span between the towers """
-        dist_forward = []
-        for i in range(self.no_towers - 1):
-            pt0 = (self.coord_line[i, 1], self.coord_line[i, 0]) # lat, lon
-            pt1 = (self.coord_line[i+1, 1], self.coord_line[i+1, 0])
-            dist_forward.append(great_circle(pt0, pt1).meters)
+        dist_forward = np.zeros(len(self.coord_line)-1)
+        for i, (pt0, pt1) in enumerate(zip(self.coord_line[0:-1],
+                                       self.coord_line[1:])):
+            dist_forward[i]= great_circle(pt0[::-1], pt1[::-1]).meters
 
-        actual_span = []
-        for i in range(self.no_towers):
-            if i == 0:
-                actual_span.append(0.5 * dist_forward[i])
-            elif i == self.no_towers - 1:
-                actual_span.append(0.5 * dist_forward[i-1])
-            else:
-                actual_span.append(0.5 * (dist_forward[i-1]+dist_forward[i]))
+        actual_span = 0.5*(dist_forward[0:-1] + dist_forward[1:])
+        actual_span = np.insert(actual_span, 0, 0.5*dist_forward[0])
+        actual_span = np.append(actual_span, 0.5*dist_forward[-1])
+
         return actual_span
 
     def update_id_adj_towers(self, tower):

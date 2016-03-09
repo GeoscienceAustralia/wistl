@@ -237,7 +237,6 @@ class TransmissionConfig(object):
 
         cond_pc = dict()
         for item in meta_data['list']:
-            meta_data[item]['max_adj'] = int(meta_data[item]['max_adj'])
             file_ = self.get_path(meta_data[item]['file'],
                                   self.file_cond_collapse_prob_metadata)
             meta_data[item]['file'] = file_
@@ -247,6 +246,7 @@ class TransmissionConfig(object):
             df_tmp['list'] = df_tmp.apply(lambda x: tuple(range(x['start'],
                                           x['end'] + 1)), axis=1)
             cond_pc[item] = df_tmp.loc[df_tmp[meta_data['by']] == item]
+            meta_data[item]['max_adj'] = cond_pc[item]['end'].max()
 
         return meta_data, cond_pc
 
