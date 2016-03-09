@@ -1,23 +1,25 @@
-#!/usr/bin/env python
+# coding=utf-8
+"""
+Transmission Line Class Test Cases
+"""
+
 from __future__ import print_function
 
 __author__ = 'Hyeuk Ryu'
+__date__ = '8/3/2016'
 
 import unittest
-import pandas as pd
 import os
-import StringIO
 import numpy as np
 import copy
 
-from collections import OrderedDict
 from transmission.config_class import TransmissionConfig
 from transmission.transmission_line import TransmissionLine
 from test_config_class import assertDeepAlmostEqual
 from transmission.transmission_network import read_shape_file
 
-class TestTransmissionLine(unittest.TestCase):
 
+class TestTransmissionLine(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         path_ = '/'.join(__file__.split('/')[:-1])
@@ -29,7 +31,7 @@ class TestTransmissionLine(unittest.TestCase):
         # Calaca - Amadeo
         id_line = 0
         df_line = self.all_lines.loc[id_line, :]
-        tf = self.all_towers['LineRoute']==df_line['LineRoute']
+        tf = self.all_towers['LineRoute'] == df_line['LineRoute']
         df_towers = self.all_towers.loc[tf, :]
         self.line0 = TransmissionLine(self.conf, df_towers, df_line)
 
@@ -51,14 +53,14 @@ class TestTransmissionLine(unittest.TestCase):
                              142.53885713642302])
 
         np.testing.assert_almost_equal(expected,
-            self.line0.calculate_distance_between_towers())
+                                       self.line0.calculate_distance_between_towers())
 
     def test_run(self):
 
         # Calaca - Santa Rosa
         id_line = 1
         df_line = self.all_lines.loc[id_line, :]
-        tf = self.all_towers['LineRoute']==df_line['LineRoute']
+        tf = self.all_towers['LineRoute'] == df_line['LineRoute']
         df_towers = self.all_towers.loc[tf, :]
         line = TransmissionLine(self.conf, df_towers, df_line)
 
@@ -100,13 +102,13 @@ class TestTransmissionLine(unittest.TestCase):
         # Calaca - Amadeo
         id_line = 0
         df_line = self.all_lines.loc[id_line, :]
-        tf = self.all_towers['LineRoute']==df_line['LineRoute']
+        tf = self.all_towers['LineRoute'] == df_line['LineRoute']
         df_towers = copy.deepcopy(self.all_towers.loc[tf, :])
         df_towers.loc[:, 'Function'] = 'Suspension'
         line = TransmissionLine(self.conf, df_towers, df_line)
 
         expected = dict({0: [-1, -1, 0, 1, 2],
-                         1: [-1,  0, 1, 2, 3],
+                         1: [-1, 0, 1, 2, 3],
                          2: [0, 1, 2, 3, 4],
                          3: [1, 2, 3, 4, 5],
                          4: [2, 3, 4, 5, -1],
@@ -128,7 +130,6 @@ class TestTransmissionLine(unittest.TestCase):
         for i, tid in enumerate(self.line1.id_by_line):
             outcome = self.line1.assign_id_adj_towers(i)
             self.assertEqual(expected[tid], outcome)
-
 
     def test_create_list_idx(self):
 
@@ -236,21 +237,22 @@ class TestTransmissionLine(unittest.TestCase):
         """
 
         expected = dict({'AC-099': {1: 0.575, 2: 0.125},
-                         'AC-100': {-1: 0.075+0.5, 1:0.075+0.5},
-                         'AC-101': {-2: 0.125, -1: 0.125+0.45},
-                         'AC-102': {-3:0.85, -2:0.08+0.85, -1:0.05+0.08+0.85, 1:0.05+0.08+0.85, 2:0.08+0.85},
+                         'AC-100': {-1: 0.075 + 0.5, 1: 0.075 + 0.5},
+                         'AC-101': {-2: 0.125, -1: 0.125 + 0.45},
+                         'AC-102': {-3: 0.85, -2: 0.08 + 0.85, -1: 0.05 + 0.08 + 0.85, 1: 0.05 + 0.08 + 0.85,
+                                    2: 0.08 + 0.85},
                          'AC-103': {1: 0.575},
                          'AC-104': {-1: 0.575}})
 
         expected_cond_pc_adj_mc = dict({
-            'AC-099': {'rel_idx': [(0, 1, 2), (0,1)],
-                        'cum_prob': np.array([0.125, 0.45+0.125])},
+            'AC-099': {'rel_idx': [(0, 1, 2), (0, 1)],
+                       'cum_prob': np.array([0.125, 0.45 + 0.125])},
             'AC-100': {'rel_idx': [(0, 1), (-1, 0), (-1, 0, 1)],
-                       'cum_prob': np.array([0.075, 0.075+0.075, 0.5+0.15])},
+                       'cum_prob': np.array([0.075, 0.075 + 0.075, 0.5 + 0.15])},
             'AC-101': {'rel_idx': [(-2, -1, 0), (-1, 0)],
-                       'cum_prob': np.array([0.125, 0.125+0.45])},
+                       'cum_prob': np.array([0.125, 0.125 + 0.45])},
             'AC-102': {'rel_idx': [(-1, 0, 1), (-2, -1, 0, 1, 2), (-3, -2, -1, 0, 1, 2)],
-                       'cum_prob': np.array([0.05, 0.08+0.05, 0.85+0.13])},
+                       'cum_prob': np.array([0.05, 0.08 + 0.05, 0.85 + 0.13])},
             'AC-103': {'rel_idx': [(0, 1)],
                        'cum_prob': np.array([0.575])},
             'AC-104': {'rel_idx': [(-1, 0)],
@@ -260,8 +262,8 @@ class TestTransmissionLine(unittest.TestCase):
             assertDeepAlmostEqual(self, val.cond_pc_adj, expected[name])
             assertDeepAlmostEqual(self, val.cond_pc_adj_mc,
                                   expected_cond_pc_adj_mc[name])
-            #print("{}:{}".format(name, val.cond_pc_adj))
-            #print("{}:{}:{}".format(name, val.cond_pc_adj_mc, expected_cond_pc_adj_mc[name]))
+            # print("{}:{}".format(name, val.cond_pc_adj))
+            # print("{}:{}:{}".format(name, val.cond_pc_adj_mc, expected_cond_pc_adj_mc[name]))
 
 
 if __name__ == '__main__':
