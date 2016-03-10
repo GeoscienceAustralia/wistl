@@ -8,8 +8,8 @@ import unittest
 import pandas as pd
 import os
 
-from transmission.config_class import TransmissionConfig
-from transmission.sim_towers import sim_towers
+from wistl.config_class import TransmissionConfig
+from wistl.sim_towers import sim_towers
 #from pandas.util.testing import assert_frame_equal
 
 

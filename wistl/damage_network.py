@@ -6,10 +6,9 @@ __author__ = 'Hyeuk Ryu'
 import os
 import copy
 import numpy as np
-#import pandas as pd
 
-from transmission_network import TransmissionNetwork
-from damage_line import DamageLine
+from wistl.transmission_network import TransmissionNetwork
+from wistl.damage_line import DamageLine
 
 
 def create_event_set(conf):

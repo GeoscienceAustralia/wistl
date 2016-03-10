@@ -6,13 +6,11 @@ __author__ = 'Hyeuk Ryu'
 import unittest
 import pandas as pd
 import os
-import StringIO
 import numpy as np
 import copy
 
-from collections import OrderedDict
-from transmission.config_class import TransmissionConfig
-from transmission.tower import Tower
+from wistl.config_class import TransmissionConfig
+from wistl.tower import Tower
 from test_config_class import assertDeepAlmostEqual
 
 
@@ -40,8 +38,8 @@ class TestTower(unittest.TestCase):
 
     def test_get_cond_collapse_prob(self):
 
-        list_function = ['Suspension']*2 + ['Terminal']*2
-        list_value = [20.0, 50.0]*2
+        list_function = ['Suspension'] * 2 + ['Terminal'] * 2
+        list_value = [20.0, 50.0] * 2
 
         for funct_, value_ in zip(list_function, list_value):
 
@@ -57,7 +55,7 @@ class TestTower(unittest.TestCase):
                 expected = tmp.set_index('list').to_dict()['probability']
                 assertDeepAlmostEqual(self, tower.cond_pc, expected)
 
-        list_function = ['Strainer']*2
+        list_function = ['Strainer'] * 2
         list_value = ['low', 'high']
 
         for funct_, value_ in zip(list_function, list_value):

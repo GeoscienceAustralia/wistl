@@ -6,11 +6,11 @@ __author__ = 'Hyeuk Ryu'
 import shapefile
 import pandas as pd
 import numpy as np
-from transmission_line import TransmissionLine
+from wistl.transmission_line import TransmissionLine
 
 
 class TransmissionNetwork(object):
-    """ class for a collection of transmission lines"""
+    """ class for a collection of wistl lines"""
 
     def __init__(self, conf):
         self.conf = conf

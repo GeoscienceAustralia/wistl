@@ -5,7 +5,7 @@ import numpy as np
 import scipy.stats as stats
 import pandas as pd
 
-from tower import Tower
+from wistl.tower import Tower
 
 
 class DamageTower(Tower):

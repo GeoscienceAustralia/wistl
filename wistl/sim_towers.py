@@ -2,26 +2,7 @@
 from __future__ import print_function
 
 """
-simulation of collapse of transmission towers
-based on empricially derived conditional probability
-
-required input
-    -. tower geometry whether rectangle or squre (v) - all of them are square
-    -. design wind speed (requiring new field in input) v
-    -. tower type and associated collapse fragility v
-    -. conditional probability by tower type (suspension and strainer) v
-    -. idenfity strainer tower v
-
-Todo:
-    -. creating module (v)
-    -. visualisation (arcGIS?) (v)
-    -. postprocessing of mc results (v)
-    -. think about how to sample random numbers (spatial correlation) (v)
-    -. adding additional damage state (v)
-    -. adj_list by function type (v)
-    -. update cond adj each simulation/time
-    -. assigning cond (different)
-    -. with our without cascading effect (mc simulation) - priority
+WISTL: Wind Impact Simulation on Transmission Lines
 """
 
 import time
@@ -29,22 +10,19 @@ import sys
 import os
 import parmap
 
-from damage_network import create_event_set, mc_loop_over_line
+from wistl.damage_network import create_event_set, mc_loop_over_line
 
 
-def sim_towers(conf):
+def sim_towers(cfg):
 
-    # if conf.test:
-    #     print("==============>testing")
+    if not os.path.exists(cfg.path_output):
+        os.makedirs(cfg.path_output)
 
-    if not os.path.exists(conf.path_output):
-        os.makedirs(conf.path_output)
-
-    events = create_event_set(conf)
+    events = create_event_set(cfg)
 
     tic = time.time()
 
-    if conf.analytical:
+    if cfg.analytical:
         print('Computing damage probability using analytical method')
 
         for event_key, network in events.iteritems():
@@ -56,10 +34,10 @@ def sim_towers(conf):
         print('Analytical method took {} seconds'.format(time.time() - tic))
         tic = time.time()
 
-    if conf.simulation:
+    if cfg.simulation:
         print('Computing damage probability using simulation method')
 
-        if conf.parallel:
+        if cfg.parallel:
             list_ = [line for network in events.itervalues()
                      for line in network.lines.itervalues()]
             no_cpus = parmap.multiprocessing.cpu_count()
@@ -92,6 +70,6 @@ if __name__ == '__main__':
         print('python sim_towers.py <config-file>')
         sys.exit(1)
 
-    from config_class import TransmissionConfig
+    from wistl.config_class import TransmissionConfig
     conf = TransmissionConfig(cfg_file=args[0])
-    events = sim_towers(conf)
+    scenario_events = sim_towers(conf)

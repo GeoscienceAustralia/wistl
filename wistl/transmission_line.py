@@ -5,7 +5,7 @@ __author__ = 'Hyeuk Ryu'
 
 import os
 import numpy as np
-from tower import Tower
+from wistl.tower import Tower
 from geopy.distance import great_circle
 
 

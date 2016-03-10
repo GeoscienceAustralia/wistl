@@ -10,7 +10,7 @@ import StringIO
 import numpy as np
 
 from collections import OrderedDict
-from transmission.config_class import TransmissionConfig
+from wistl.config_class import TransmissionConfig
 
 
 # https://github.com/larsbutler/oq-engine/blob/master/tests/utils/helpers.py

@@ -10,8 +10,8 @@ import pandas as pd
 import warnings
 from scipy.stats import itemfreq
 
-from damage_tower import DamageTower
-from transmission_line import TransmissionLine
+from wistl.damage_tower import DamageTower
+from wistl.transmission_line import TransmissionLine
 
 # ignore NaturalNameWarning
 warnings.filterwarnings("ignore", lineno=100, module='tables')

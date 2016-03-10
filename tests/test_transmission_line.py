@@ -13,10 +13,10 @@ import os
 import numpy as np
 import copy
 
-from transmission.config_class import TransmissionConfig
-from transmission.transmission_line import TransmissionLine
+from wistl.config_class import TransmissionConfig
+from wistl.transmission_line import TransmissionLine
 from test_config_class import assertDeepAlmostEqual
-from transmission.transmission_network import read_shape_file
+from wistl.transmission_network import read_shape_file
 
 
 class TestTransmissionLine(unittest.TestCase):

@@ -141,9 +141,9 @@ class TransmissionConfig(object):
 
     @staticmethod
     def get_path(path_, file_):
-        '''
+        """
         return absolute path of path_ which is relative to location of file_
-        '''
+        """
         path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
         return os.path.abspath(os.path.join(path_file_, path_))
 

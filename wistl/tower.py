@@ -12,7 +12,7 @@ class Tower(object):
 
     """
     class Tower
-    Tower class represent an individual transmission tower.
+    Tower class represent an individual wistl tower.
     """
     #id_gen = itertools.count()
 
