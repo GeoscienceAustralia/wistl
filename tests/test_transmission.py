@@ -7,6 +7,7 @@ import unittest
 #import numpy as np
 import pandas as pd
 import os
+WISTL = os.environ['WISTL']
 
 from wistl.config_class import TransmissionConfig
 from wistl.sim_towers import sim_towers
@@ -16,16 +17,15 @@ from wistl.sim_towers import sim_towers
 class TestTransmission(unittest.TestCase):
 
     @classmethod
-    def setUpClass(self):
-        path_ = '/'.join(__file__.split('/')[:-1])
-        self.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
-        self.events = sim_towers(self.conf)
+    def setUpClass(cls):
+        cls.conf = TransmissionConfig(os.path.join(WISTL, 'tests', 'test.cfg'))
+        cls.events = sim_towers(cls.conf)
 
     @classmethod
-    def h5file_full(self, damage_line, str_head):
+    def h5file_full(cls, damage_line, str_head):
 
         h5file = os.path.join(
-            self.conf.path_output,
+            cls.conf.path_output,
             damage_line.event_id,
             '{}_{}.h5'.format(str_head, damage_line.name_output))
 
