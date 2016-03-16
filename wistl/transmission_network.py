@@ -6,6 +6,7 @@ __author__ = 'Hyeuk Ryu'
 import shapefile
 import pandas as pd
 from wistl.transmission_line import TransmissionLine
+import numpy as np
 
 
 class TransmissionNetwork(object):
@@ -41,14 +42,14 @@ def read_shape_file(file_shape):
     fields = [x[0] for x in sf.fields[1:]]
     fields_type = [x[1] for x in sf.fields[1:]]
 
-    shapefile_type = {'C': 'object', 'F': 'np.float64', 'N': 'np.int64'}
+    shapefile_type = {'C': object, 'F': np.float64, 'N': np.int64}
 
     data_frame = pd.DataFrame(records, columns=fields)
 
     for name_, type_ in zip(data_frame.columns, fields_type):
-        if data_frame[name_].dtype != eval(shapefile_type[type_]):
+        if data_frame[name_].dtype != shapefile_type[type_]:
             data_frame[name_] = \
-                data_frame[name_].astype(eval(shapefile_type[type_]))
+                data_frame[name_].astype(shapefile_type[type_])
 
     if 'Shapes' in fields:
         raise KeyError('Shapes is already in the fields')
