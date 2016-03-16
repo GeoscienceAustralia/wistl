@@ -52,11 +52,12 @@ def sim_towers(cfg):
             else:
                 print('Not enough cpus for parallel processing')
 
-        print('serial MC run on.......')
-        for event_key, network in events.iteritems():
-            print(' event: {}'.format(event_key))
-            for line in network.lines.itervalues():
-                mc_loop_over_line(line)
+        else:
+            print('serial MC run on.......')
+            for event_key, network in events.iteritems():
+                print(' event: {}'.format(event_key))
+                for line in network.lines.itervalues():
+                    mc_loop_over_line(line)
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
 
