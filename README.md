@@ -12,13 +12,13 @@ Note, in the above, the first command `sudo apt-get -y build-dep matplotlib` ins
 
 Clone the repo:    
 
-    git clone https://github.com/GeoscienceAustralia/TLDA.git
+    https://github.com/GeoscienceAustralia/wistl.git
     
 This will prompt for your github username and password. Once you have entered them and you have access to this repo, `TLDA` will clone in your current directory. 
 
 Once inside the `virtualenv`, navigate to the `TLDA` code:
     
-    cd TLDA # This is where the requirements.txt exists
+    cd wistl # This is where the requirements.txt exists
     pip install -r requirements.txt
 
 #### Inputs required to run the TLDA:
