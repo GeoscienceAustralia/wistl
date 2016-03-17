@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import ConfigParser
 
+WISTL = os.environ['WISTL']
 
 class TransmissionConfig(object):
     """
@@ -64,6 +65,10 @@ class TransmissionConfig(object):
         # directories
         self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'),
                                            cfg_file)
+
+        self.wind_scenarios_path = self.get_path(
+            conf.get('directories', 'wind_scenario_main'),
+            cfg_file)
 
         self.path_wind_scenario = [
             self.get_path(x.strip(), cfg_file) for x in conf.get(

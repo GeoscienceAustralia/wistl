@@ -20,9 +20,6 @@ class TransmissionNetwork(object):
 
         self.lines = dict()
         for name, grouped in df_towers.groupby('LineRoute'):
-            # print (type(grouped))
-            # print (grouped)
-            # towers = [Tower(conf, g) for g in grouped]
             if name in self.conf.sel_lines:
                 try:
                     idx = self.df_lines[

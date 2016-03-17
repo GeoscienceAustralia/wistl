@@ -4,7 +4,6 @@ from __future__ import print_function
 __author__ = 'Hyeuk Ryu'
 
 import os
-import copy
 import numpy as np
 
 from wistl.transmission_network import TransmissionNetwork
@@ -13,13 +12,12 @@ from wistl.damage_line import DamageLine
 
 def create_damaged_network(conf):
     """
-    list of damaged network states
+    dict of damaged network states
     """
 
     # network = TransmissionNetwork(conf)
     #print(network.lines['Calaca - Amadeo'].towers)
     damaged_networks = dict()
-
     for path_wind in conf.path_wind_scenario:
         event_id = path_wind.split('/')[-1]
 
@@ -30,7 +28,7 @@ def create_damaged_network(conf):
         if not os.path.exists(path_output_scenario):
             os.makedirs(path_output_scenario)
 
-        damaged_networks[event_id] = DamageNetwork(conf, path_wind)
+        damaged_networks[event_id] = DamageNetwork(conf, event_id)
 
         #print(network.lines['Calaca - Amadeo'].towers)
 
@@ -41,14 +39,14 @@ class DamageNetwork(TransmissionNetwork):
     """ class for a collection of damage to lines
     """
 
-    def __init__(self, conf, path_wind):
+    def __init__(self, conf, event_id):
 
-        self.event_id = path_wind.split('/')[-1]
+        self.event_id = event_id
         super(DamageNetwork, self).__init__(conf)
 
         # line is a TransmissionLine instance
         for key, line in self.lines.iteritems():
-            self.lines[key] = DamageLine(conf, line, path_wind)
+            self.lines[key] = DamageLine(line, event_id)
 
         # assuming same time index for each tower in the same network
         self.time_index = self.lines[key].time_index

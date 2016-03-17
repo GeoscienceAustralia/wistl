@@ -20,16 +20,16 @@ warnings.filterwarnings("ignore", lineno=100, module='tables')
 class DamageLine(object):
     """ class for a collection of damage to line """
 
-    def __init__(self, conf, transmission_line, path_wind):
+    def __init__(self, transmission_line, event_id):
 
         # TODO: avoid deepcopy
-        _line = copy.deepcopy(transmission_line)  # avoid any change to line
+        # instance of TransmissionLine class. Avoid any change to line
+        self._parent = transmission_line
 
-        self._parent = _line  # instance of TransmissionLine class
-        self.event_id = path_wind.split('/')[-1]
-        for key, tower in _line.towers.iteritems():
-            file_wind = os.path.join(path_wind, tower.file_wind)
-            self.towers[key] = DamageTower(conf, tower, file_wind=file_wind)
+        self.event_id = event_id
+        for key, tower in self._parent.towers.iteritems():
+            file_wind = os.path.join(tower.conf.wind_scenarios_path, event_id, tower.file_wind)
+            self.towers[key] = DamageTower(tower, file_wind=file_wind)
 
             # compute pc_wind and pc_adj
             self.towers[key].compute_pc_wind()

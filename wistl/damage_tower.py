@@ -14,12 +14,11 @@ class DamageTower(object):
     class DamageTower
     Inputs:
     tower: instance of tower class
-    vel_file: velocity file containing velocity time history
+    file_wind: velocity file containing velocity time history
     at this tower location.
     """
 
-    def __init__(self, conf, tower, file_wind):
-        # super(DamageTower, self).__init__(conf=conf, df_tower=tower.df_tower)
+    def __init__(self, tower, file_wind):
         self._parent = tower
         self.file_wind = file_wind
         self.wind = self.read_wind_timeseries()
@@ -44,7 +43,9 @@ class DamageTower(object):
                                names=['', '', '', 'speed', '', '', 'bearing',
                                       ''])
         except IOError:
-            print('file {} does not exist'.format(self.file_wind))
+            msg = 'file {} does not exist'.format(self.file_wind)
+            print(msg)
+            raise IOError(msg)
 
         speed = data['speed'].values
         bearing = np.deg2rad(data['bearing'].values)  # degree
@@ -179,8 +180,6 @@ class DamageTower(object):
 if __name__ == '__main__':
     from config_class import TransmissionConfig
     conf = TransmissionConfig()
-    from wistl.transmission_network import TransmissionNetwork
-    network = TransmissionNetwork(conf)
-    tower, sel_lines, fid_by_line, id2name, lon, lat =\
-        network.read_tower_gis_information(conf)
+
+
 
