@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from scipy.stats import itemfreq
+from wistl.tower import  Tower
 
 from wistl.damage_tower import DamageTower
 from wistl.transmission_line import TransmissionLine
@@ -22,13 +23,16 @@ class DamageLine(object):
 
     def __init__(self, transmission_line, event_id):
 
-        # TODO: avoid deepcopy
         # instance of TransmissionLine class. Avoid any change to line
         self._parent = transmission_line
 
         self.event_id = event_id
+
+        # towers are fist Tower class
+        # after this loop they become DamageTower class
         for key, tower in self._parent.towers.iteritems():
-            file_wind = os.path.join(tower.conf.wind_scenarios_path, event_id, tower.file_wind)
+            file_wind = os.path.join(tower.conf.wind_scenarios_path,
+                                     event_id, tower.file_wind)
             self.towers[key] = DamageTower(tower, file_wind=file_wind)
 
             # compute pc_wind and pc_adj

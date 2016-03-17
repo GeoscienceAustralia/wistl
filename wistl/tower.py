@@ -4,9 +4,6 @@ from __future__ import print_function
 __author__ = 'Hyeuk Ryu'
 
 import numpy as np
-#import pandas as pd
-#import itertools
-
 
 class Tower(object):
 
@@ -126,9 +123,10 @@ class Tower(object):
                                 self.conf.terrain_multiplier['height'],
                                 self.conf.terrain_multiplier[tc_str])
         except KeyError:
-            print('{} is undefined in {}'.format(
-                tc_str, self.conf.file_terrain_multiplier))
-#            return {'error': "{} is not defined".format(tc_str)}  # these errors should be handled properly
+            msg = '{} is undefined in {}'.format(
+                tc_str, self.conf.file_terrain_multiplier)
+            print(msg)
+            raise KeyError(msg)
 
         idx_10 = self.conf.terrain_multiplier['height'].index(10)
         mzcat_10 = self.conf.terrain_multiplier[tc_str][idx_10]
@@ -190,4 +188,3 @@ class Tower(object):
             cond_pc_adj.pop(0)
 
         self.cond_pc_adj = cond_pc_adj
-
