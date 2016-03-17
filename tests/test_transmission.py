@@ -19,7 +19,7 @@ class TestTransmission(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.conf = TransmissionConfig(os.path.join(WISTL, 'tests', 'test.cfg'))
-        cls.events = sim_towers(cls.conf)
+        cls.damaged_networks = sim_towers(cls.conf)
 
     @classmethod
     def h5file_full(cls, damage_line, str_head):
@@ -34,7 +34,7 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_analytical(self):
 
         if self.conf.analytical:
-            for network in self.events.itervalues():
+            for network in self.damaged_networks.itervalues():
                 for line in network.lines.itervalues():
 
                     self.check_file_consistency_analytical(line)
@@ -42,7 +42,7 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_simulation(self):
 
         if self.conf.simulation:
-            for network in self.events.itervalues():
+            for network in self.damaged_networks.itervalues():
                 for line in network.lines.itervalues():
 
                     self.check_file_consistency_simulation(line)
@@ -50,7 +50,7 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_simulation_non_cascading(self):
 
         if not self.conf.skip_non_cascading_collapse:
-            for network in self.events.itervalues():
+            for network in self.damaged_networks.itervalues():
                 for line in network.lines.itervalues():
 
                     self.check_file_consistency_simulation_non_cascading(line)
@@ -58,7 +58,7 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_analytical_vs_simulation_non_cascading(self):
 
         if not self.conf.skip_non_cascading_collapse and self.conf.analytical:
-            for network in self.events.itervalues():
+            for network in self.damaged_networks.itervalues():
                 for line in network.lines.itervalues():
 
                     self.compare_anlytical_vs_simulation_non_cascading(line)
