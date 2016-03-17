@@ -29,6 +29,13 @@ These files are not in repo and you will need access to these files to be able t
 * input: Hyeuk to describe.
 
 
+#### Set up the `WISTL` env variable
+
+The `WISTL` env variable should point to the `wistl` directory. Here is how I export my environment variable on linux:
+
+    export WISTL=/home/sudipta/GA/wistl    
+
+
 #### How to run the TLDA code
 
 Running the TLDA code is simple.
