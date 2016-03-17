@@ -6,7 +6,7 @@ import unittest
 WISTL = os.environ['WISTL']
 
 
-class DamagedNetowrkTest(unittest.TestCase):
+class DamagedNetworkTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -18,7 +18,7 @@ class DamagedNetowrkTest(unittest.TestCase):
         cls.damaged_networks = create_damaged_network(cls.conf)
 
     def test_time_index(self):
-        keys = self.damaged_networks.keys()  # get one key
+        keys = self.damaged_networks.keys()  # get the keys
         d_n0 = self.damaged_networks.pop(keys[0])  # get the time index
 
         # compare with the rest of them
