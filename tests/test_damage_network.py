@@ -8,13 +8,14 @@ WISTL = os.environ['WISTL']
 
 class DamagedNetowrkTest(unittest.TestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         from wistl.damage_network import create_damaged_network
         from wistl.config_class import TransmissionConfig
         conf_path = os.path.join(WISTL, 'tests', 'test.cfg')
         assert os.path.exists(conf_path), 'config file path wrong'
-        self.conf = TransmissionConfig(conf_path)
-        self.damaged_networks = create_damaged_network(self.conf)
+        cls.conf = TransmissionConfig(conf_path)
+        cls.damaged_networks = create_damaged_network(cls.conf)
 
     def test_time_index(self):
         keys = self.damaged_networks.keys()  # get one key
