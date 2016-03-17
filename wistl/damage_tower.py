@@ -8,7 +8,7 @@ import pandas as pd
 from wistl.tower import Tower
 
 
-class DamageTower(Tower):
+class DamageTower(object):
 
     """
     class DamageTower
@@ -18,7 +18,8 @@ class DamageTower(Tower):
     at this tower location.
     """
 
-    def __init__(self, tower, file_wind):
+    def __init__(self, conf, tower, file_wind):
+        # super(DamageTower, self).__init__(conf=conf, df_tower=tower.df_tower)
         self._parent = tower
         self.file_wind = file_wind
         self.wind = self.read_wind_timeseries()
@@ -31,8 +32,6 @@ class DamageTower(Tower):
         # simulation method
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict <- compute_mc_adj
-
-        # super(DamageTower, self).__init__(conf, df_tower=)
 
     def __getattr__(self, attr_name):
         return getattr(self._parent, attr_name)

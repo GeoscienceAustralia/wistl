@@ -12,7 +12,8 @@ from wistl.damage_line import DamageLine
 
 
 def create_damaged_network(conf):
-    """ a collection of wind events
+    """
+    list of damaged network states
     """
 
     # network = TransmissionNetwork(conf)
@@ -45,6 +46,7 @@ class DamageNetwork(TransmissionNetwork):
         self.event_id = path_wind.split('/')[-1]
         super(DamageNetwork, self).__init__(conf)
 
+        # line is a TransmissionLine instance
         for key, line in self.lines.iteritems():
             self.lines[key] = DamageLine(conf, line, path_wind)
 

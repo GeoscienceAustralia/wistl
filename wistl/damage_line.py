@@ -17,22 +17,19 @@ from wistl.transmission_line import TransmissionLine
 warnings.filterwarnings("ignore", lineno=100, module='tables')
 
 
-class DamageLine(TransmissionLine):
-    """ class for a collectin of damage to line """
+class DamageLine(object):
+    """ class for a collection of damage to line """
 
-    def __init__(self, conf, line, path_wind):
+    def __init__(self, conf, transmission_line, path_wind):
 
         # TODO: avoid deepcopy
-        line_ = copy.deepcopy(line)  # avoid any change to line
-        # super(DamageLine, self).__init__(conf, df_towers, df_line)
+        _line = copy.deepcopy(transmission_line)  # avoid any change to line
 
-        self._parent = line_  # instance of TransmissionLine class
+        self._parent = _line  # instance of TransmissionLine class
         self.event_id = path_wind.split('/')[-1]
-
-        for key, tower in line_.towers.iteritems():
-
+        for key, tower in _line.towers.iteritems():
             file_wind = os.path.join(path_wind, tower.file_wind)
-            self.towers[key] = DamageTower(tower, file_wind)
+            self.towers[key] = DamageTower(conf, tower, file_wind=file_wind)
 
             # compute pc_wind and pc_adj
             self.towers[key].compute_pc_wind()
