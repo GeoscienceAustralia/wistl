@@ -18,6 +18,7 @@ class TransmissionLine(object):
         self.df_towers = df_towers
         self.df_line = df_line
         self.name = df_line['LineRoute']
+        # df_towers = [t.df_tower for t in towers]
 
         name_ = self.name.split()
         self.name_output = '_'.join(x for x in name_ if x.isalnum())
@@ -31,6 +32,7 @@ class TransmissionLine(object):
         self.coord_towers = np.zeros((self.no_towers, 2))
         id_by_line_unsorted = []
         name_by_line_unsorted = []
+
         for i, (key, val) in enumerate(df_towers.iterrows()):
             self.id2name[key] = val['Name']
             self.coord_towers[i, :] = val['Shapes'].points[0]  # [Lon, Lat]
@@ -53,7 +55,6 @@ class TransmissionLine(object):
         for key, val in self.towers.iteritems():
             self.towers[key].id_adj = self.update_id_adj_towers(val)
             self.towers[key].calculate_cond_pc_adj()
-
 
     def sort_by_location(self):
         """ sort towers by location"""

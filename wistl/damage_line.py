@@ -20,9 +20,11 @@ warnings.filterwarnings("ignore", lineno=100, module='tables')
 class DamageLine(TransmissionLine):
     """ class for a collectin of damage to line """
 
-    def __init__(self, line, path_wind):
+    def __init__(self, conf, line, path_wind):
 
+        # TODO: avoid deepcopy
         line_ = copy.deepcopy(line)  # avoid any change to line
+        # super(DamageLine, self).__init__(conf, df_towers, df_line)
 
         self._parent = line_  # instance of TransmissionLine class
         self.event_id = path_wind.split('/')[-1]

@@ -10,7 +10,7 @@ import sys
 import os
 import parmap
 
-from wistl.damage_network import create_event_set, mc_loop_over_line
+from wistl.damage_network import create_damaged_network, mc_loop_over_line
 
 
 def sim_towers(cfg):
@@ -18,14 +18,14 @@ def sim_towers(cfg):
     if not os.path.exists(cfg.path_output):
         os.makedirs(cfg.path_output)
 
-    events = create_event_set(cfg)
+    damaged_networks = create_damaged_network(cfg)  # This is a DamageNetwork list
 
     tic = time.time()
 
     if cfg.analytical:
         print('Computing damage probability using analytical method')
 
-        for event_key, network in events.iteritems():
+        for event_key, network in damaged_networks.iteritems():
             print(' event: {}'.format(event_key))
 
             for line_key, line in network.lines.iteritems():
@@ -40,19 +40,19 @@ def sim_towers(cfg):
 
         if cfg.parallel:
             print('parallel MC run on.......')
-            _list = [line for network in events.itervalues()
+            _list = [line for network in damaged_networks.itervalues()
                      for line in network.lines.itervalues()]
             parmap.map(mc_loop_over_line, _list)
         else:
             print('serial MC run on.......')
-            for event_key, network in events.iteritems():
+            for event_key, network in damaged_networks.iteritems():
                 print(' event: {}'.format(event_key))
                 for line in network.lines.itervalues():
                     mc_loop_over_line(line)
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
 
-    return events
+    return damaged_networks
 
 if __name__ == '__main__':
 

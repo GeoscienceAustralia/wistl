@@ -11,52 +11,45 @@ from wistl.transmission_network import TransmissionNetwork
 from wistl.damage_line import DamageLine
 
 
-def create_event_set(conf):
+def create_damaged_network(conf):
     """ a collection of wind events
     """
 
-    network = TransmissionNetwork(conf)
+    # network = TransmissionNetwork(conf)
     #print(network.lines['Calaca - Amadeo'].towers)
-    events = dict()
+    damaged_networks = dict()
 
     for path_wind in conf.path_wind_scenario:
-
         event_id = path_wind.split('/')[-1]
 
-        if event_id in events:
+        if event_id in damaged_networks:
             raise KeyError('{} is already assigned'.format(event_id))
 
         path_output_scenario = os.path.join(conf.path_output, event_id)
         if not os.path.exists(path_output_scenario):
             os.makedirs(path_output_scenario)
 
-        events[event_id] = DamageNetwork(network, path_wind)
+        damaged_networks[event_id] = DamageNetwork(conf, path_wind)
 
         #print(network.lines['Calaca - Amadeo'].towers)
 
-    return events
+    return damaged_networks
 
 
 class DamageNetwork(TransmissionNetwork):
     """ class for a collection of damage to lines
     """
 
-    def __init__(self, network, path_wind):
+    def __init__(self, conf, path_wind):
 
-        network_ = copy.deepcopy(network)  # avoid any change to network
-
-        self._parent = network_  # instance of TransmissionNetwork class
-        self.path_wind = path_wind
         self.event_id = path_wind.split('/')[-1]
+        super(DamageNetwork, self).__init__(conf)
 
-        for key, line in network_.lines.iteritems():
-            self.lines[key] = DamageLine(line, self.path_wind)
+        for key, line in self.lines.iteritems():
+            self.lines[key] = DamageLine(conf, line, path_wind)
 
         # assuming same time index for each tower in the same network
         self.time_index = self.lines[key].time_index
-
-    def __getattr__(self, attr_name):
-        return getattr(self._parent, attr_name)
 
 
 def mc_loop_over_line(damage_line):
@@ -68,8 +61,10 @@ def mc_loop_over_line(damage_line):
         try:
             seed = damage_line.conf.seed[event_id][line_name]
         except KeyError:
-            print('{}:{} is undefined. Check the config file'.format(
-                event_id, line_name))
+            msg = '{}:{} is undefined. Check the config file'.format(
+                event_id, line_name)
+            print(msg)
+            raise KeyError(msg)
     else:
         seed = None
 

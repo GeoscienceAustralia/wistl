@@ -32,6 +32,8 @@ class DamageTower(Tower):
         self.mc_wind = None  # dict(nsims, ntime)
         self.mc_adj = None  # dict <- compute_mc_adj
 
+        # super(DamageTower, self).__init__(conf, df_tower=)
+
     def __getattr__(self, attr_name):
         return getattr(self._parent, attr_name)
 
@@ -175,11 +177,11 @@ class DamageTower(Tower):
         self.mc_wind = mc_wind
         self.mc_adj = mc_adj
 
-# if __name__ == '__main__':
-#     from config_class import TransmissionConfig
-#     conf = TransmissionConfig()
-#     from read import TransmissionNetwork
-#     network = TransmissionNetwork(conf)
-#     tower, sel_lines, fid_by_line, id2name, lon, lat =\
-#         network.read_tower_gis_information(conf)
+if __name__ == '__main__':
+    from config_class import TransmissionConfig
+    conf = TransmissionConfig()
+    from wistl.transmission_network import TransmissionNetwork
+    network = TransmissionNetwork(conf)
+    tower, sel_lines, fid_by_line, id2name, lon, lat =\
+        network.read_tower_gis_information(conf)
 

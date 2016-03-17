@@ -17,6 +17,10 @@ class Tower(object):
     #id_gen = itertools.count()
 
     def __init__(self, conf, df_tower):
+        """
+        :param conf: instance of config class
+        :param df_tower: data frame containing tower details
+        """
 
         self.conf = conf
         self.df_tower = df_tower

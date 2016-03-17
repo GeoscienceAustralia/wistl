@@ -7,6 +7,7 @@ import shapefile
 import pandas as pd
 from wistl.transmission_line import TransmissionLine
 import numpy as np
+from wistl.tower import Tower
 
 
 class TransmissionNetwork(object):
@@ -14,18 +15,22 @@ class TransmissionNetwork(object):
 
     def __init__(self, conf):
         self.conf = conf
-        self.df_towers = read_shape_file(self.conf.file_shape_tower)
+        df_towers = read_shape_file(self.conf.file_shape_tower)
         self.df_lines = read_shape_file(self.conf.file_shape_line)
 
         self.lines = dict()
-        for name, grouped in self.df_towers.groupby('LineRoute'):
+        for name, grouped in df_towers.groupby('LineRoute'):
+            # print (type(grouped))
+            # print (grouped)
+            # towers = [Tower(conf, g) for g in grouped]
             if name in self.conf.sel_lines:
                 try:
-                    idx = self.df_lines[self.df_lines['LineRoute']
-                                        == name].index[0]
+                    idx = self.df_lines[
+                        self.df_lines['LineRoute'] == name].index[0]
                 except IndexError:
-                    print ('{} not in the line shapefile'.format(name))
-                    raise
+                    msg = '{} not in the line shapefile'.format(name)
+                    print (msg)
+                    raise IndexError(msg)
 
                 self.lines[name] = TransmissionLine(
                     conf=self.conf,

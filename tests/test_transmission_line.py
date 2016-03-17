@@ -20,28 +20,29 @@ from wistl.transmission_network import read_shape_file
 
 
 class TestTransmissionLine(unittest.TestCase):
-    @classmethod
-    def setUpClass(self):
-        path_ = '/'.join(__file__.split('/')[:-1])
-        self.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
 
-        self.all_towers = read_shape_file(self.conf.file_shape_tower)
-        self.all_lines = read_shape_file(self.conf.file_shape_line)
+    @classmethod
+    def setUpClass(cls):
+        path_ = '/'.join(__file__.split('/')[:-1])
+        cls.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+
+        cls.all_towers = read_shape_file(cls.conf.file_shape_tower)
+        cls.all_lines = read_shape_file(cls.conf.file_shape_line)
 
         # Calaca - Amadeo
         id_line = 0
-        df_line = self.all_lines.loc[id_line, :]
-        tf = self.all_towers['LineRoute'] == df_line['LineRoute']
-        df_towers = self.all_towers.loc[tf, :]
-        self.line0 = TransmissionLine(self.conf, df_towers, df_line)
+        df_line = cls.all_lines.loc[id_line, :]
+        tf = cls.all_towers['LineRoute'] == df_line['LineRoute']
+        df_towers = cls.all_towers.loc[tf, :]
+        cls.line0 = TransmissionLine(cls.conf, df_towers, df_line)
 
         # a bit of change
-        df_towers = copy.deepcopy(self.all_towers.loc[[3, 4, 5, 0, 2, 1], :])
+        df_towers = copy.deepcopy(cls.all_towers.loc[[3, 4, 5, 0, 2, 1], :])
         df_towers.index = [0, 3, 2, 1, 4, 5]
         df_towers.loc[1, 'Function'] = 'Terminal'
         df_towers.loc[[5, 4, 3, 2], 'Function'] = 'Suspension'
         df_towers.loc[0, 'Function'] = 'Strainer'
-        self.line1 = TransmissionLine(self.conf, df_towers, df_line)
+        cls.line1 = TransmissionLine(cls.conf, df_towers, df_line)
 
     def test_calculate_distance_between_towers(self):
 

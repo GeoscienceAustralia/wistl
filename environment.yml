@@ -1,4 +1,6 @@
 name: wistl
+channels:
+- IOOS
 dependencies:
 - cycler=0.9.0=py27_0
 - freetype=2.5.5=0
@@ -27,8 +29,8 @@ dependencies:
 - tk=8.5.18=0
 - wheel=0.26.0=py27_1
 - zlib=1.2.8=0
+- geopy
 - pip:
-  - geopy==1.11.0
   - parmap==1.2.3
   - pyshp==1.2.3
   - tables==3.2.2
