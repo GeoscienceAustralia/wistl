@@ -32,7 +32,8 @@ def sim_towers(cfg):
                 line.compute_damage_probability_analytical()
 
         print('Analytical method took {} seconds'.format(time.time() - tic))
-        tic = time.time()
+
+    tic = time.time()
 
     if cfg.simulation:
         print('Computing damage probability using simulation method')
