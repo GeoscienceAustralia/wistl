@@ -21,7 +21,7 @@ dependencies:
 - pytz=2015.7=py27_0
 - qt=4.8.7=1
 - readline=6.2=2
-- scipy=0.16.1=np110py27_0
+- scipy=0.16.1=np110py27_1
 - setuptools=19.2=py27_0
 - sip=4.16.9=py27_0
 - six=1.10.0=py27_0
@@ -29,7 +29,7 @@ dependencies:
 - tk=8.5.18=0
 - wheel=0.26.0=py27_1
 - zlib=1.2.8=0
-- geopy
+- geopy=1.11.0
 - pip:
   - parmap==1.2.3
   - pyshp==1.2.3
