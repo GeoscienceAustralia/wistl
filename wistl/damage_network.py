@@ -44,9 +44,13 @@ class DamageNetwork(TransmissionNetwork):
         self.event_id = event_id
         super(DamageNetwork, self).__init__(conf)
 
+        # self.lines here are insances of TransmissionLine
+
         # line is a TransmissionLine instance
         for key, line in self.lines.iteritems():
             self.lines[key] = DamageLine(line, event_id)
+
+        # after the for loop self.lines are DamageLine instances
 
         # assuming same time index for each tower in the same network
         self.time_index = self.lines[key].time_index

@@ -75,7 +75,7 @@ class TestTower(unittest.TestCase):
     def test_get_wind_file(self):
 
         expected = 'ts.{}.csv'.format(self.stower['Name'])
-        self.assertEqual(self.tower.file_wind, expected)
+        self.assertEqual(self.tower.file_wind_base_name, expected)
 
     def test_assign_design_speed(self):
 

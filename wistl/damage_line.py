@@ -11,7 +11,6 @@ import warnings
 from scipy.stats import itemfreq
 from wistl.tower import  Tower
 
-from wistl.damage_tower import DamageTower
 from wistl.transmission_line import TransmissionLine
 
 # ignore NaturalNameWarning
@@ -32,9 +31,10 @@ class DamageLine(object):
         # after this loop they become DamageTower class
         for key, tower in self._parent.towers.iteritems():
             file_wind = os.path.join(tower.conf.wind_scenarios_path,
-                                     event_id, tower.file_wind)
-            self.towers[key] = DamageTower(tower, file_wind=file_wind)
-
+                                     event_id, tower.file_wind_base_name)
+            self.towers[key].file_wind = file_wind
+            # set wind, time_index given a file_wind
+            self.towers[key].set_wind()
             # compute pc_wind and pc_adj
             self.towers[key].compute_pc_wind()
             self.towers[key].compute_pc_adj()
