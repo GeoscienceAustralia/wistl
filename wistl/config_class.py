@@ -89,8 +89,9 @@ class TransmissionConfig(object):
                                                      'shape_line'))
 
         # wind_scenario
-        self.file_name_format = conf.get('wind_scenario',
-                                         'file_name_format', 1)
+        file_name_format = conf.get('wind_scenario', 'file_name_format', 1)
+        self.file_head = file_name_format.split('%')[0]
+        self.file_tail = file_name_format.split(')')[-1]
 
         # input
         self.file_design_value = os.path.join(path_input,

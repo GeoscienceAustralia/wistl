@@ -10,7 +10,7 @@ import sys
 import os
 import parmap
 
-from wistl.damage_network import create_damaged_network, mc_loop_over_line
+from wistl.transmission_network import create_damaged_network, mc_loop_over_line
 
 
 def sim_towers(cfg):
@@ -64,4 +64,4 @@ if __name__ == '__main__':
 
     from wistl.config_class import TransmissionConfig
     conf = TransmissionConfig(cfg_file=args[0])
-    scenario_events = sim_towers(conf)
+    network_damage = sim_towers(conf)
