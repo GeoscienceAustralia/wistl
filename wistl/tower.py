@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
+
 class Tower(object):
 
     """
@@ -71,32 +72,31 @@ class Tower(object):
     def wind(self):
         return self._wind
 
-    def set_wind(self):
+    def _set_wind(self):
         """
         set the wind, time_index variables given a file_wind
         """
-        if self._file_wind:
-            try:
-                data = pd.read_csv(self._file_wind, header=0, parse_dates=[0],
-                                   index_col=[0], usecols=[0, 3, 6],
-                                   names=['', '', '', 'speed', '', '',
-                                          'bearing', ''])
-            except IOError:
-                msg = 'file {} does not exist'.format(self._file_wind)
-                print(msg)
-                raise IOError(msg)
+        try:
+            data = pd.read_csv(self._file_wind, header=0, parse_dates=[0],
+                               index_col=[0], usecols=[0, 3, 6],
+                               names=['', '', '', 'speed', '', '',
+                                      'bearing', ''])
+        except IOError:
+            msg = 'file {} does not exist'.format(self._file_wind)
+            print(msg)
+            raise IOError(msg)
 
-            speed = data['speed'].values
-            bearing = np.deg2rad(data['bearing'].values)  # degree
+        speed = data['speed'].values
+        bearing = np.deg2rad(data['bearing'].values)  # degree
 
-            # angle of conductor relative to NS
-            t0 = np.deg2rad(self.strong_axis) - np.pi/2.0
+        # angle of conductor relative to NS
+        t0 = np.deg2rad(self.strong_axis) - np.pi/2.0
 
-            data['dir_speed'] = pd.Series(
-                self.convert_factor * self.compute_directional_wind_speed(
-                    speed, bearing, t0), index=data.index)
-            self._wind = data
-            self._time_index = data.index
+        data['dir_speed'] = pd.Series(
+            self.convert_factor * self.compute_directional_wind_speed(
+                speed, bearing, t0), index=data.index)
+        self._wind = data
+        self._time_index = data.index
 
     @property
     def time_index(self):
@@ -104,12 +104,12 @@ class Tower(object):
 
     @property
     def file_wind(self):
-        self.set_wind()
         return self._file_wind
 
     @file_wind.setter
     def file_wind(self, file_wind):
         self._file_wind = file_wind
+        self._set_wind()
 
     @staticmethod
     def compute_directional_wind_speed(speed, bearing, t0):

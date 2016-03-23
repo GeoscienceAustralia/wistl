@@ -32,9 +32,10 @@ class DamageLine(object):
         for key, tower in self._parent.towers.iteritems():
             file_wind = os.path.join(tower.conf.wind_scenarios_path,
                                      event_id, tower.file_wind_base_name)
+
+            # set wind file, which also sets wind and time_index
             self.towers[key].file_wind = file_wind
-            # set wind, time_index given a file_wind
-            self.towers[key].set_wind()
+
             # compute pc_wind and pc_adj
             self.towers[key].compute_pc_wind()
             self.towers[key].compute_pc_adj()
