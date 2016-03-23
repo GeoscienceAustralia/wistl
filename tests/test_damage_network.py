@@ -10,7 +10,7 @@ class DamagedNetworkTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from wistl.damage_network import create_damaged_network
+        from wistl.transmission_network import create_damaged_network
         from wistl.config_class import TransmissionConfig
         conf_path = os.path.join(WISTL, 'tests', 'test.cfg')
         assert os.path.exists(conf_path), 'config file path wrong'
@@ -30,10 +30,8 @@ class DamagedNetworkTest(unittest.TestCase):
                          len(self.conf.path_wind_scenario))
 
     def test_damaged_network_type(self):
-        from wistl.damage_network import DamageNetwork
         from wistl.transmission_network import TransmissionNetwork
         for d in self.damaged_networks.itervalues():
-            self.assertTrue(isinstance(d, DamageNetwork))
             self.assertTrue(isinstance(d, TransmissionNetwork))
 
 if __name__ == '__main__':
