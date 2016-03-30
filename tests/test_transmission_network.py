@@ -1,18 +1,17 @@
 __author__ = 'sudipta'
 import os
-import pandas as pd
 import unittest
+from wistl.transmission_network import create_damaged_network
+from wistl.config_class import TransmissionConfig
 
-WISTL = os.environ['WISTL']
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
-class DamagedNetworkTest(unittest.TestCase):
+class TransmissionNetworkTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from wistl.transmission_network import create_damaged_network
-        from wistl.config_class import TransmissionConfig
-        conf_path = os.path.join(WISTL, 'tests', 'test.cfg')
+        conf_path = os.path.join(BASE_DIR, 'test.cfg')
         assert os.path.exists(conf_path), 'config file path wrong'
         cls.conf = TransmissionConfig(conf_path)
         cls.damaged_networks = create_damaged_network(cls.conf)

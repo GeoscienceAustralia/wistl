@@ -13,15 +13,16 @@ from wistl.config_class import TransmissionConfig
 from wistl.tower import Tower
 from test_config_class import assertDeepAlmostEqual
 
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 class TestTower(unittest.TestCase):
 
     @classmethod
-    def setUpClass(self):
-        path_ = '/'.join(__file__.split('/')[:-1])
-        self.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+    def setUpClass(cls):
+        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
 
-        self.stower = pd.Series({'id': 1,
+        cls.stower = pd.Series({'id': 1,
                                  'actual_span': 10.0,
                                  'AxisAz': 134,
                                  'ConstType': 'Unknown',
@@ -34,7 +35,7 @@ class TestTower(unittest.TestCase):
                                  'Name': 'AC-099',
                                  'Type': 'Lattice Tower'})
 
-        self.tower = Tower(self.conf, self.stower)
+        cls.tower = Tower(cls.conf, cls.stower)
 
     def test_get_cond_collapse_prob(self):
 

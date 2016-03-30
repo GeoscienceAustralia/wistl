@@ -4,21 +4,20 @@ from __future__ import print_function
 __author__ = 'Hyeuk Ryu'
 
 import unittest
-#import numpy as np
 import pandas as pd
 import os
-WISTL = os.environ['WISTL']
 
 from wistl.config_class import TransmissionConfig
 from wistl.sim_towers import sim_towers
-#from pandas.util.testing import assert_frame_equal
+
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class TestTransmission(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.conf = TransmissionConfig(os.path.join(WISTL, 'tests', 'test.cfg'))
+        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
         cls.damaged_networks = sim_towers(cls.conf)
 
     @classmethod

@@ -9,7 +9,6 @@ import scipy.stats as stats
 
 
 class Tower(object):
-
     """
     class Tower
     Tower class represent an individual wistl tower.
@@ -26,29 +25,39 @@ class Tower(object):
 
         self.id = df_tower['id']
         self.name = df_tower['Name']
-        # self.ttype = df_tower['Type']  # Lattice Tower or Steel Pole
-        self.function = df_tower['Function']  # e.g., suspension, terminal, strainer
+        self.type = df_tower['Type']  # Lattice Tower or Steel Pole
+        self.function = df_tower[
+            'Function']  # e.g., suspension, terminal, strainer
         self.line_route = df_tower['LineRoute']  # string
         self.no_circuit = 2  # double circuit (default value)
-        self.design_span = self.conf.design_value[self.line_route]['span']  # design wind span
-        self.terrain_cat = self.conf.design_value[self.line_route]['cat']  # Terrain Cateogry
-        self.design_level = self.conf.design_value[self.line_route]['level']  # design level
-        self.strong_axis = df_tower['AxisAz']  # azimuth of strong axis relative to North (deg)
+        self.design_span = self.conf.design_value[self.line_route][
+            'span']  # design wind span
+        self.terrain_cat = self.conf.design_value[self.line_route][
+            'cat']  # Terrain Category
+        self.design_level = self.conf.design_value[self.line_route][
+            'level']  # design level
+        self.strong_axis = df_tower[
+            'AxisAz']  # azimuth of strong axis relative to North (deg)
         self.dev_angle = df_tower['DevAngle']  # deviation angle
         self.height = df_tower['Height']
         self.height_z = conf.drag_height[self.function]
-        self.actual_span = df_tower['actual_span']  # actual wind span on eith side
+        self.actual_span = df_tower[
+            'actual_span']  # actual wind span on either side
 
-        self.design_speed = self.assign_design_speed  # design wind speed
-        self.collapse_capacity = self.compute_collapse_capacity
-        self.file_wind_base_name = self.get_wind_file
+        self.design_speed = self.conf.design_value[self.line_route]['speed']
+        if self.conf.adjust_design_by_topography:
+            self.adjust_design_speed()
+
+        self.collapse_capacity = self.compute_collapse_capacity()
+        self.file_wind_base_name = \
+            self.conf.file_head + self.name + self.conf.file_tail
         self.convert_factor = self.convert_10_to_z()
 
         self.cond_pc, self.max_no_adj_towers = self.get_cond_collapse_prob()
 
         # computed by functions in transmission_line class
         self.id_sides = None  # (left, right) ~ assign_id_both_sides
-        self.id_adj = None  # (23,24,0,25,26) ~ update_id_adj_towers, update_id_adj_towers
+        self.id_adj = None  # (23,24,0,25,26) ~ update_id_adj_towers
 
         # computed by calculate_cond_pc_adj
         self.cond_pc_adj = None  # dict
@@ -56,15 +65,15 @@ class Tower(object):
 
         # moved from damage_tower.py
         self._file_wind = None
-        self._wind = None  # self.read_wind_timeseries()
-        self._time_index = None  # self.wind.index
+        self._wind = None
+        self._time_index = None
 
         # analytical method
         self._pc_wind = None  # compute_pc_wind
-        self._pc_adj = None  # dict (ntime,) <- compute_pc_adj
+        self._pc_adj = None  # dict (no_time,) <- compute_pc_adj
 
         # simulation method
-        self._mc_wind = None  # dict(nsims, ntime)
+        self._mc_wind = None  # dict(no_sims, no_time)
         self._mc_adj = None  # dict <- compute_mc_adj
 
     @property
@@ -89,7 +98,7 @@ class Tower(object):
         bearing = np.deg2rad(data['bearing'].values)  # degree
 
         # angle of conductor relative to NS
-        t0 = np.deg2rad(self.strong_axis) - np.pi/2.0
+        t0 = np.deg2rad(self.strong_axis) - np.pi / 2.0
 
         data['dir_speed'] = pd.Series(
             self.convert_factor * self.compute_directional_wind_speed(
@@ -121,7 +130,7 @@ class Tower(object):
         cos_ = abs(np.cos(np.pi / 4.0 - phi))
         sin_ = abs(np.sin(np.pi / 4.0 - phi))
 
-        adj = speed*np.max(np.vstack((cos_, sin_)), axis=0)
+        adj = speed * np.max(np.vstack((cos_, sin_)), axis=0)
         return np.where(tf, adj, speed)  # adj if true, otherwise speed
 
     def compute_pc_wind(self):
@@ -131,7 +140,7 @@ class Tower(object):
         if self._file_wind:
             pc_wind = np.zeros(shape=(len(self.time_index),
                                       self.conf.no_damage_states))
-            vratio = self.wind.dir_speed.values / self.collapse_capacity
+            ratio_ = self.wind.dir_speed.values / self.collapse_capacity
 
             tf_array = np.ones((self.conf.fragility.shape[0],), dtype=bool)
             for att, att_type in zip(self.conf.fragility_metadata['by'],
@@ -145,7 +154,6 @@ class Tower(object):
                                  self.df_tower[att])
 
             for ids, limit_state in enumerate(self.conf.damage_states):
-
                 idx = tf_array & (self.conf.fragility['limit_states'] ==
                                   limit_state)
                 fn_form = self.conf.fragility.loc[
@@ -155,7 +163,7 @@ class Tower(object):
                 scale_ = self.conf.fragility.loc[
                     idx, self.conf.fragility_metadata[fn_form]['scale']]
 
-                temp = getattr(stats, fn_form).cdf(vratio, arg_, scale=scale_)
+                temp = getattr(stats, fn_form).cdf(ratio_, arg_, scale=scale_)
                 pc_wind[:, ids] = temp
 
             self._pc_wind = pd.DataFrame(pc_wind,
@@ -189,46 +197,55 @@ class Tower(object):
     def compute_mc_adj(self, rv, seed=None):
         """
         2. determine if adjacent tower collapses or not due to pull by the tower
-        jtime: time index (array)
+        j_time: time index (array)
         idx: multiprocessing thread id
+
+        :param rv: random variable
+        :param seed: seed is None if no seed number is provided
+        :return: update self.mc_wind and self.mc_adj
         """
         if self._file_wind:
             # 1. determine damage state of tower due to wind
             val = np.array([rv < self.pc_wind[ds].values
-                           for ds in self.conf.damage_states])  # (nds, nsims, ntime)
+                            for ds in
+                            self.conf.damage_states])  # (nds, no_sims, no_time)
 
-            ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
+            # ds_wind.shape == (no_sims, no_time)
+            # 0(non), 1, 2 (collapse)
+            ds_wind = np.sum(val, axis=0)
 
             mc_wind = dict()
             for ids, ds in enumerate(self.conf.damage_states):
-                mc_wind.setdefault(ds, {})['isim'], mc_wind.setdefault(ds, {})['itime'] = np.where(ds_wind == (ids + 1))
+                mc_wind.setdefault(ds, {})['id_sim'], \
+                    mc_wind.setdefault(ds, {})['id_time'] = \
+                    np.where(ds_wind == (ids + 1))
 
             # for collapse
-            unq_itime = np.unique(mc_wind['collapse']['itime'])
-            nprob = len(self.cond_pc_adj_mc['cum_prob'])  #
+            unq_id_time = np.unique(mc_wind['collapse']['id_time'])
+            no_prob = len(self.cond_pc_adj_mc['cum_prob'])  #
 
             mc_adj = dict()  # impact on adjacent towers
 
             if self.conf.random_seed:
-                prng = np.random.RandomState(seed + 100)  # replication
+                rnd_state = np.random.RandomState(seed + 100)  # replication
             else:
-                prng = np.random.RandomState()
+                rnd_state = np.random.RandomState()
 
-            if nprob > 0:
-                for jtime in unq_itime:
-                    jdx = np.where(mc_wind['collapse']['itime'] == jtime)[0]
-                    idx_sim = mc_wind['collapse']['isim'][jdx]  # index of simulation
+            if no_prob > 0:
+                for j_time in unq_id_time:
+                    jdx = np.where(mc_wind['collapse']['id_time'] == j_time)[0]
+                    idx_sim = mc_wind['collapse']['id_sim'][
+                        jdx]  # index of simulation
 
-                    rv = prng.uniform(size=len(idx_sim))
+                    rv = rnd_state.uniform(size=len(idx_sim))
 
                     list_idx_cond = map(lambda rv_: sum(
                         rv_ >= self.cond_pc_adj_mc['cum_prob']), rv)
 
                     # ignore simulation where none of adjacent tower collapses
-                    unq_list_idx_cond = set(list_idx_cond) - set([nprob])
+                    unq_list_idx_cond = set(list_idx_cond) - {no_prob}
 
                     for idx_cond in unq_list_idx_cond:
-
                         # list of idx of adjacent towers in collapse
                         rel_idx = self.cond_pc_adj_mc['rel_idx'][idx_cond]
 
@@ -237,9 +254,10 @@ class Tower(object):
                                    for j in rel_idx]
 
                         # filter simulation
-                        isim = [i for i, x in enumerate(list_idx_cond)
-                                if x == idx_cond]
-                        mc_adj.setdefault(jtime, {})[tuple(abs_idx)] = idx_sim[isim]
+                        id_sim = [i for i, x in enumerate(list_idx_cond)
+                                  if x == idx_cond]
+                        mc_adj.setdefault(j_time, {})[tuple(abs_idx)] = idx_sim[
+                            id_sim]
 
             self._mc_wind = mc_wind
             self._mc_adj = mc_adj
@@ -262,6 +280,7 @@ class Tower(object):
 
         att = self.conf.cond_collapse_prob_metadata[att_value]['by']
         att_type = self.conf.cond_collapse_prob_metadata[att_value]['type']
+        tf_array = None
         if att_type == 'string':
             tf_array = df_prob[att] == getattr(self, att)
         elif att_type == 'numeric':
@@ -276,25 +295,12 @@ class Tower(object):
 
         return cond_pc, max_no_adj_towers
 
-    @property
-    def get_wind_file(self):
-        """
-        :return: string
-        """
-        return self.conf.file_head + self.name + self.conf.file_tail
-
-    @property
-    def assign_design_speed(self):
+    def adjust_design_speed(self):
         """ determine design speed """
-        self.design_speed = self.conf.design_value[self.line_route]['speed']
-        if self.conf.adjust_design_by_topo:
-            id_topo = np.sum(
-                self.conf.topo_multiplier[self.name] >=
-                self.conf.design_adjustment_factor_by_topo['threshold'])
-            self.design_speed *= self.conf.design_adjustment_factor_by_topo[id_topo]
-        return self.design_speed
+        id_topo = sum(self.conf.topo_multiplier[self.name] >=
+                      self.conf.design_adjustment_factor_by_topo['threshold'])
+        self.design_speed *= self.conf.design_adjustment_factor_by_topo[id_topo]
 
-    @property
     def compute_collapse_capacity(self):
         """ calculate adjusted collapse wind speed for a tower
         Vc = Vd(h=z)/sqrt(u)
@@ -329,12 +335,11 @@ class Tower(object):
         except KeyError:
             msg = '{} is undefined in {}'.format(
                 tc_str, self.conf.file_terrain_multiplier)
-            print(msg)
             raise KeyError(msg)
 
         idx_10 = self.conf.terrain_multiplier['height'].index(10)
         mzcat_10 = self.conf.terrain_multiplier[tc_str][idx_10]
-        return mzcat_z/mzcat_10
+        return mzcat_z / mzcat_10
 
     def calculate_cond_pc_adj(self):
         """
@@ -343,7 +348,8 @@ class Tower(object):
         """
 
         idx_m1 = np.array([i for i in range(len(self.id_adj))
-            if self.id_adj[i] == -1]) - self.max_no_adj_towers  # rel_index
+                           if self.id_adj[
+                               i] == -1]) - self.max_no_adj_towers  # rel_index
 
         try:
             max_neg = np.max(idx_m1[idx_m1 < 0]) + 1

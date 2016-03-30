@@ -1,7 +1,4 @@
-#!/usr/bin/env python
 from __future__ import print_function
-
-__author__ = 'Hyeuk Ryu'
 
 import os
 import shapefile
@@ -9,7 +6,6 @@ import pandas as pd
 import numpy as np
 
 from wistl.transmission_line import TransmissionLine
-from wistl.tower import Tower
 
 
 def create_damaged_network(conf):
@@ -31,6 +27,7 @@ def create_damaged_network(conf):
             os.makedirs(path_output_scenario)
 
         damaged_networks[event_id] = TransmissionNetwork(conf)
+        damaged_networks[event_id].path_event = path_wind
         damaged_networks[event_id].event_id = event_id
 
     return damaged_networks
@@ -43,8 +40,8 @@ class TransmissionNetwork(object):
 
         self.conf = conf
 
-        df_towers = read_shape_file(self.conf.file_shape_tower)
-        self.df_lines = read_shape_file(self.conf.file_shape_line)
+        df_towers = self.read_shape_file(self.conf.file_shape_tower)
+        self.df_lines = self.read_shape_file(self.conf.file_shape_line)
 
         self.lines = dict()
         for name, grouped in df_towers.groupby('LineRoute'):
@@ -54,7 +51,6 @@ class TransmissionNetwork(object):
                     idx = self.df_lines[tf].index[0]
                 except IndexError:
                     msg = '{} not in the line shapefile'.format(name)
-                    print (msg)
                     raise IndexError(msg)
 
                 self.lines[name] = TransmissionLine(
@@ -63,62 +59,77 @@ class TransmissionNetwork(object):
                     df_line=self.df_lines.loc[idx])
 
         self._event_id = None
+        self._path_event = None
         self._time_index = None
 
-    @property
-    def time_index(self):
-        return self._time_index
+    @staticmethod
+    def read_shape_file(file_shape):
+        """
+        read shape file and return data frame
+        :param file_shape:
+        :return data_frame:
+        """
+        sf = shapefile.Reader(file_shape)
+        shapes = sf.shapes()
+        records = sf.records()
+        fields = [x[0] for x in sf.fields[1:]]
+        fields_type = [x[1] for x in sf.fields[1:]]
+
+        shapefile_type = {'C': object, 'F': np.float64, 'N': np.int64}
+
+        data_frame = pd.DataFrame(records, columns=fields)
+
+        for name_, type_ in zip(data_frame.columns, fields_type):
+            if data_frame[name_].dtype != shapefile_type[type_]:
+                data_frame[name_] = \
+                    data_frame[name_].astype(shapefile_type[type_])
+
+        if 'Shapes' in fields:
+            raise KeyError('Shapes is already in the fields')
+        else:
+            data_frame['Shapes'] = shapes
+
+        return data_frame
 
     @property
     def event_id(self):
         return self._event_id
 
+    @property
+    def path_event(self):
+        return self._path_event
+
+    @property
+    def time_index(self):
+        return self._time_index
+
+    @path_event.setter
+    def path_event(self, path_event):
+        self._path_event = path_event
+
     @event_id.setter
     def event_id(self, event_id):
         self._event_id = event_id
-        self._set_event()
+        self._set_damage_line()
 
-    def _set_event(self):
+    def _set_damage_line(self):
 
+        key = None
+        # assign event information to instances of TransmissionLine
         for key, line in self.lines.iteritems():
-            #self.lines[key] = TransmissionLine(line)
+            self.lines[key].path_event = self.path_event
             self.lines[key].event_id = self.event_id
 
-        # after the for loop self.lines are DamageLine instances
         # assuming same time index for each tower in the same network
         self._time_index = self.lines[key].time_index
 
 
-def read_shape_file(file_shape):
-    """
-    read shape file and return data frame
-    :param file_shape:
-    :return data_frame:
-    """
-    sf = shapefile.Reader(file_shape)
-    shapes = sf.shapes()
-    records = sf.records()
-    fields = [x[0] for x in sf.fields[1:]]
-    fields_type = [x[1] for x in sf.fields[1:]]
-
-    shapefile_type = {'C': object, 'F': np.float64, 'N': np.int64}
-
-    data_frame = pd.DataFrame(records, columns=fields)
-
-    for name_, type_ in zip(data_frame.columns, fields_type):
-        if data_frame[name_].dtype != shapefile_type[type_]:
-            data_frame[name_] = \
-                data_frame[name_].astype(shapefile_type[type_])
-
-    if 'Shapes' in fields:
-        raise KeyError('Shapes is already in the fields')
-    else:
-        data_frame['Shapes'] = shapes
-
-    return data_frame
-
-
 def mc_loop_over_line(damage_line):
+    """
+    mc simulation over transmission line
+    :param damage_line: instance of transmission line
+    :return: None but update attributes of
+    """
 
     event_id = damage_line.event_id
     line_name = damage_line.name
@@ -129,7 +140,6 @@ def mc_loop_over_line(damage_line):
         except KeyError:
             msg = '{}:{} is undefined. Check the config file'.format(
                 event_id, line_name)
-            print(msg)
             raise KeyError(msg)
     else:
         seed = None
@@ -137,7 +147,7 @@ def mc_loop_over_line(damage_line):
     rand_number_generator = np.random.RandomState(seed)
 
     # perfect correlation within a single line
-    rv = rand_number_generator.uniform(size=(damage_line.conf.nsims,
+    rv = rand_number_generator.uniform(size=(damage_line.conf.no_sims,
                                              len(damage_line.time_index)))
 
     for tower in damage_line.towers.itervalues():

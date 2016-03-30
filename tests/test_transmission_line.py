@@ -16,18 +16,21 @@ import copy
 from wistl.config_class import TransmissionConfig
 from wistl.transmission_line import TransmissionLine
 from test_config_class import assertDeepAlmostEqual
-from wistl.transmission_network import read_shape_file
+from wistl.transmission_network import TransmissionNetwork
+
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class TestTransmissionLine(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        path_ = '/'.join(__file__.split('/')[:-1])
-        cls.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
 
-        cls.all_towers = read_shape_file(cls.conf.file_shape_tower)
-        cls.all_lines = read_shape_file(cls.conf.file_shape_line)
+        cls.all_towers = TransmissionNetwork.read_shape_file(
+            cls.conf.file_shape_tower)
+        cls.all_lines = TransmissionNetwork.read_shape_file(
+            cls.conf.file_shape_line)
 
         # Calaca - Amadeo
         id_line = 0

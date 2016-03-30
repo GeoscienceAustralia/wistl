@@ -12,6 +12,8 @@ import numpy as np
 from collections import OrderedDict
 from wistl.config_class import TransmissionConfig
 
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 # https://github.com/larsbutler/oq-engine/blob/master/tests/utils/helpers.py
 def assertDeepAlmostEqual(test_case, expected, actual, *args, **kwargs):
@@ -56,9 +58,8 @@ def assertDeepAlmostEqual(test_case, expected, actual, *args, **kwargs):
 class TestTransmissionConfig(unittest.TestCase):
 
     @classmethod
-    def setUpClass(self):
-        path_ = '/'.join(__file__.split('/')[:-1])
-        self.conf = TransmissionConfig(os.path.join(path_, 'test.cfg'))
+    def setUpClass(cls):
+        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
 
     def test_get_path(self):
 

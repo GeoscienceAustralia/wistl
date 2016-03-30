@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import ConfigParser
 
-WISTL = os.environ['WISTL']
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 class TransmissionConfig(object):
     """
@@ -45,12 +46,12 @@ class TransmissionConfig(object):
                         event_val + line_val
 
         # run_parameters
-        self.nsims = conf.getint('run_parameters', 'num_simulations')
+        self.no_sims = conf.getint('run_parameters', 'num_simulations')
         self.analytical = conf.getboolean('run_parameters', 'run_analytical')
         self.simulation = conf.getboolean('run_parameters', 'run_simulation')
         self.skip_non_cascading_collapse = conf.getboolean(
             'run_parameters', 'skip_non_cascading_collapse')
-        self.adjust_design_by_topo = conf.getboolean(
+        self.adjust_design_by_topography = conf.getboolean(
             'run_parameters', 'adjust_design_by_topography')
         self.strainer = [x.strip() for x in conf.get('run_parameters',
                          'Strainer').split(',')]
@@ -65,10 +66,6 @@ class TransmissionConfig(object):
         # directories
         self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'),
                                            cfg_file)
-
-        self.wind_scenarios_path = self.get_path(
-            conf.get('directories', 'wind_scenario_main'),
-            cfg_file)
 
         self.path_wind_scenario = [
             self.get_path(x.strip(), cfg_file) for x in conf.get(
@@ -121,11 +118,11 @@ class TransmissionConfig(object):
         self.cond_collapse_prob_metadata, self.cond_collapse_prob = \
             self.read_cond_collapse_prob()
 
-        self.terrain_multiplier = self.read_ASNZS_terrain_multiplier()
+        self.terrain_multiplier = self.read_terrain_multiplier()
 
         self.drag_height = self.read_drag_height_by_type()
 
-        if self.adjust_design_by_topo:
+        if self.adjust_design_by_topography:
 
             self.file_topo_multiplier = os.path.join(
                 path_input, conf.get('input', 'topographic_multiplier'))
@@ -143,33 +140,28 @@ class TransmissionConfig(object):
             self.file_line_interaction = os.path.join(
                 path_input, conf.get('input', 'line_interaction'))
 
-            #self.prob_line_interaction = self.read_parallel_interaction_prob()
+            # self.prob_line_interaction = self.read_parallel_interaction_prob()
 
     @staticmethod
     def get_path(path_, file_):
         """
-        return absolute path of path_ which is relative to location of file_
+        :param path_: path
+        :param file_: file
+        :return: absolute path of path_ which is relative to location of file_
         """
         path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
         return os.path.abspath(os.path.join(path_file_, path_))
 
     @staticmethod
     def split_str(str_, str_split):
-        ''' split string with split_str and return tuple of str and integer
-        '''
+        """
+        split string with split_str
+        :param str_: string
+        :param str_split: split
+        :return: tuple of str and integer
+        """
         list_ = str_.split(str_split)
         return list_[0].strip(), int(list_[1])
-
-    # @property
-    # def test(self):
-    #     return self.__test
-
-    # @test.setter
-    # def test(self, val):
-    #     if val:
-    #         self.__test = 1
-    #     else:
-    #         self.__test = 0
 
     def read_design_value(self):
         """read design values by line
@@ -213,7 +205,8 @@ class TransmissionConfig(object):
         try:
             data = pd.read_csv(meta_data['file'], skipinitialspace=True)
         except IOError:
-            print('Error: file_fragility {} not found'.format(meta_data['file']))
+            print('Error: file_fragility {} not found'.
+                  format(meta_data['file']))
             sys.exit(1)
 
         return meta_data, data, meta_data['limit_states'], len(
@@ -249,14 +242,14 @@ class TransmissionConfig(object):
             df_tmp = pd.read_csv(file_, skipinitialspace=1)
             df_tmp['start'] = df_tmp['start'].astype(np.int64)
             df_tmp['end'] = df_tmp['end'].astype(np.int64)
-            df_tmp['list'] = df_tmp.apply(lambda x: tuple(range(x['start'],
-                                          x['end'] + 1)), axis=1)
+            df_tmp['list'] = df_tmp.apply(lambda x_: tuple(range(x_['start'],
+                                          x_['end'] + 1)), axis=1)
             cond_pc[item] = df_tmp.loc[df_tmp[meta_data['by']] == item]
             meta_data[item]['max_adj'] = cond_pc[item]['end'].max()
 
         return meta_data, cond_pc
 
-    def read_ASNZS_terrain_multiplier(self):
+    def read_terrain_multiplier(self):
         """
         read terrain multiplier (ASNZ 1170.2:2011 Table 4.1)
         """
@@ -268,9 +261,6 @@ class TransmissionConfig(object):
 
     def read_drag_height_by_type(self):
         """read typical drag height by tower type
-        :param file_: input file
-        :type file_: string
-
         :returns: drag height
         :rtype: dict
 
@@ -281,9 +271,7 @@ class TransmissionConfig(object):
         return temp['value'].to_dict()
 
     def read_topographic_multiplier(self):
-        """read topograhpic multipler value from the input file
-        :param file_: input file
-        :type file_: string
+        """read topographic multiplier value from the input file
         :returns: topography value at each site
         :rtype: dict
         """
@@ -297,18 +285,15 @@ class TransmissionConfig(object):
 
     def read_design_adjustment_factor_by_topography_mutliplier(self):
         """read design wind speed adjustment based on topographic multiplier
-        :param file_: input file
-        :type file_: string
-
         :returns: design speed adjustment factor
         :rtype: dict
 
         """
-        adic = ConfigParser.ConfigParser()
-        adic.read(self.file_design_adjustment_factor_by_topo)
+        dic_ = ConfigParser.ConfigParser()
+        dic_.read(self.file_design_adjustment_factor_by_topo)
 
         data = dict()
-        for key, value in adic.items('main'):
+        for key, value in dic_.items('main'):
             try:
                 data[int(key)] = float(value)
             except ValueError:

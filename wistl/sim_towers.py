@@ -18,7 +18,7 @@ def sim_towers(cfg):
     if not os.path.exists(cfg.path_output):
         os.makedirs(cfg.path_output)
 
-    damaged_networks = create_damaged_network(cfg)  # This is a DamageNetwork list
+    damaged_networks = create_damaged_network(cfg)
 
     tic = time.time()
 
