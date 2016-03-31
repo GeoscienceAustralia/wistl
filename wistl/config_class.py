@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-__author__ = 'Hyeuk Ryu, Sudipta Basak'
-
 import os
 import sys
 import numpy as np
 import pandas as pd
 import ConfigParser
-
-BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class TransmissionConfig(object):
@@ -26,6 +22,8 @@ class TransmissionConfig(object):
         conf.optionxform = str
         conf.read(cfg_file)
 
+        path_cfg_file = os.path.dirname(os.path.realpath(cfg_file))
+
         # run_type
         self.parallel = conf.getboolean('run_type', 'parallel')
         self.save = conf.getboolean('run_type', 'save')
@@ -33,19 +31,10 @@ class TransmissionConfig(object):
         self.random_seed = conf.getboolean('run_type', 'random_seed')
 
         # random seed
+        self.seed = None
         if self.random_seed:
-            self.seed = dict()
-            rnd_events = conf.get('random_seed', 'events').split(',')
-            rnd_lines = conf.get('random_seed', 'lines').split(',')
+            self.set_random_seed(conf)
 
-            for rnd_event in rnd_events:
-                (event_key, event_val) = self.split_str(rnd_event, ':')
-                for rnd_line in rnd_lines:
-                    (line_key, line_val) = self.split_str(rnd_line, ':')
-                    self.seed.setdefault(event_key, {})[line_key] = \
-                        event_val + line_val
-
-        # run_parameters
         self.no_sims = conf.getint('run_parameters', 'num_simulations')
         self.analytical = conf.getboolean('run_parameters', 'run_analytical')
         self.simulation = conf.getboolean('run_parameters', 'run_simulation')
@@ -64,17 +53,18 @@ class TransmissionConfig(object):
                                                 line).split(',')]
 
         # directories
-        self.path_gis_data = self.get_path(conf.get('directories', 'gis_data'),
-                                           cfg_file)
+        self.path_gis_data = os.path.join(path_cfg_file,
+                                          conf.get('directories', 'gis_data'))
 
         self.path_wind_scenario = [
-            self.get_path(x.strip(), cfg_file) for x in conf.get(
+            os.path.join(path_cfg_file, x.strip()) for x in conf.get(
                 'directories', 'wind_scenario').split(',')]
 
-        path_input = self.get_path(conf.get('directories', 'input'), cfg_file)
+        path_input = os.path.join(path_cfg_file,
+                                  conf.get('directories', 'input'))
 
-        self.path_output = self.get_path(conf.get('directories', 'output'),
-                                         cfg_file)
+        self.path_output = os.path.join(path_cfg_file,
+                                        conf.get('directories', 'output'))
 
         # gis_data
         self.file_shape_tower = os.path.join(self.path_gis_data,
@@ -137,20 +127,38 @@ class TransmissionConfig(object):
                 self.read_design_adjustment_factor_by_topography_mutliplier()
 
         if conf.getboolean('run_parameters', 'parallel_line_interaction'):
-            self.file_line_interaction = os.path.join(
-                path_input, conf.get('input', 'line_interaction'))
+            self.file_line_interaction_metadata, self.prob_line_interaction = \
+                self.read_prob_line_interaction()
 
-            # self.prob_line_interaction = self.read_parallel_interaction_prob()
 
-    @staticmethod
-    def get_path(path_, file_):
+    def set_random_seed(self, conf):
         """
-        :param path_: path
-        :param file_: file
-        :return: absolute path of path_ which is relative to location of file_
+        read random seed info
+        :param conf:
+        :return:
         """
-        path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
-        return os.path.abspath(os.path.join(path_file_, path_))
+        self.seed = dict()
+
+        rnd_events = conf.get('random_seed', 'events').split(',')
+        rnd_lines = conf.get('random_seed', 'lines').split(',')
+
+        for rnd_event in rnd_events:
+            (event_key, event_val) = self.split_str(rnd_event, ':')
+
+            for rnd_line in rnd_lines:
+                (line_key, line_val) = self.split_str(rnd_line, ':')
+                self.seed.setdefault(event_key, {})[line_key] = \
+                    event_val + line_val
+
+    # @staticmethod
+    # def get_path(path_, file_):
+    #     """
+    #     :param path_: path
+    #     :param file_: file
+    #     :return: absolute path of path_ which is relative to location of file_
+    #     """
+    #     path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
+    #     return os.path.abspath(os.path.join(path_file_, path_))
 
     @staticmethod
     def split_str(str_, str_split):
@@ -190,6 +198,9 @@ class TransmissionConfig(object):
         metadata.read(self.file_fragility_metadata)
         metadata = metadata._sections
 
+        path_metadata = os.path.dirname(
+            os.path.realpath(self.file_cond_collapse_prob_metadata))
+
         for item, value in metadata['main'].iteritems():
             if ',' in value:
                 metadata['main'][item] = [x.strip() for x in value.split(',')]
@@ -199,8 +210,7 @@ class TransmissionConfig(object):
         metadata.pop('main')
         meta_data.update(metadata)
 
-        meta_data['file'] = self.get_path(meta_data['file'],
-                                          self.file_fragility_metadata)
+        meta_data['file'] = os.path.join(path_metadata, meta_data['file'])
 
         try:
             data = pd.read_csv(meta_data['file'], skipinitialspace=True)
@@ -225,6 +235,9 @@ class TransmissionConfig(object):
         metadata.read(self.file_cond_collapse_prob_metadata)
         metadata = metadata._sections
 
+        path_metadata = os.path.dirname(
+            os.path.realpath(self.file_cond_collapse_prob_metadata))
+
         for item, value in metadata['main'].iteritems():
             if ',' in value:
                 metadata['main'][item] = [x.strip() for x in value.split(',')]
@@ -236,8 +249,7 @@ class TransmissionConfig(object):
 
         cond_pc = dict()
         for item in meta_data['list']:
-            file_ = self.get_path(meta_data[item]['file'],
-                                  self.file_cond_collapse_prob_metadata)
+            file_ = os.path.join(path_metadata, meta_data[item]['file'])
             meta_data[item]['file'] = file_
             df_tmp = pd.read_csv(file_, skipinitialspace=1)
             df_tmp['start'] = df_tmp['start'].astype(np.int64)
@@ -246,6 +258,30 @@ class TransmissionConfig(object):
                                           x_['end'] + 1)), axis=1)
             cond_pc[item] = df_tmp.loc[df_tmp[meta_data['by']] == item]
             meta_data[item]['max_adj'] = cond_pc[item]['end'].max()
+
+        return meta_data, cond_pc
+
+    def read_prob_line_interaction(self):
+        """
+        read conditional parallel line interaction probability
+        """
+        if not os.path.exists(self.file_line_interaction_metadata):
+            print('Error: file_line_interaction_metadata {} not found'.format(
+                self.file_line_interaction_metadata))
+            sys.exit(1)
+
+        metadata = ConfigParser.ConfigParser()
+        metadata.read(self.file_line_interaction_metadata)
+
+        path_metadata = os.path.dirname(
+            os.path.realpath(self.file_line_interaction_metadata))
+
+        meta_data = dict()
+        for key, value in metadata.items('main'):
+                meta_data[key] = value
+
+        file_ = os.path.join(path_metadata, meta_data['file'])
+        cond_pc = pd.read_csv(file_, skipinitialspace=1)
 
         return meta_data, cond_pc
 

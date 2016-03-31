@@ -148,11 +148,9 @@ Steel Pole,Strainer,30,360,collapse,lognorm,4.32,0.05""")
             ('lognorm', OrderedDict([('__name__', 'lognorm'),
             ('scale', 'param1'), ('arg', 'param2')]))])
 
-        expected_metadata['file'] = os.path.abspath(
-            os.path.join(os.path.abspath(
-                self.conf.file_fragility_metadata),
-                '../',
-                expected_metadata['file']))
+        expected_metadata['file'] = os.path.join(
+            os.path.dirname(os.path.realpath(
+                self.conf.file_fragility_metadata)), expected_metadata['file'])
 
         with open(self.conf.file_fragility_metadata, 'r') as file1:
             for line1, line2 in zip(file1, fragility_metadata):
@@ -253,12 +251,12 @@ Strainer, high, 12, 0.08, -6, 6""")
             for line1, line2 in zip(file1, cond_collapse_prob_suspension_terminal):
                 self.assertEqual(line1, line2)
 
-        path_input = os.path.join(os.path.abspath(
-            self.conf.file_fragility_metadata), '../')
+        path_input = os.path.dirname(os.path.realpath(
+            self.conf.file_fragility_metadata))
 
         for item in expected_metadata['list']:
-            expected_metadata[item]['file'] = os.path.abspath(
-                os.path.join(path_input, expected_metadata[item]['file']))
+            expected_metadata[item]['file'] = os.path.join(
+                path_input, expected_metadata[item]['file'])
 
         assertDeepAlmostEqual(self, expected_metadata,
                               self.conf.cond_collapse_prob_metadata)
