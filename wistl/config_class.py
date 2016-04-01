@@ -15,8 +15,8 @@ class TransmissionConfig(object):
     def __init__(self, cfg_file=None):
 
         if not os.path.exists(cfg_file):
-            print('Error: configuration file {} not found'.format(cfg_file))
-            sys.exit(1)
+            msg = 'Error: file {} not found'.format(cfg_file)
+            sys.exit(msg)
 
         conf = ConfigParser.ConfigParser()
         conf.optionxform = str
@@ -25,46 +25,45 @@ class TransmissionConfig(object):
         path_cfg_file = os.path.dirname(os.path.realpath(cfg_file))
 
         # run_type
-        self.parallel = conf.getboolean('run_type', 'parallel')
-        self.save = conf.getboolean('run_type', 'save')
-        self.figure = conf.getboolean('run_type', 'figure')
-        self.random_seed = conf.getboolean('run_type', 'random_seed')
+        key = 'run_type'
+        self.parallel = conf.getboolean(key, 'parallel')
+        self.save = conf.getboolean(key, 'save')
+        self.figure = conf.getboolean(key, 'figure')
+        self.random_seed = conf.getboolean(key, 'random_seed')
 
         # random seed
-        self.seed = None
         if self.random_seed:
-            self.set_random_seed(conf)
+            self.seed = self.set_random_seed(conf)
 
-        self.no_sims = conf.getint('run_parameters', 'num_simulations')
-        self.analytical = conf.getboolean('run_parameters', 'run_analytical')
-        self.simulation = conf.getboolean('run_parameters', 'run_simulation')
+        # run_parameters
+        key = 'run_parameters'
+        self.no_sims = conf.getint(key, 'number_simulations')
+        self.analytical = conf.getboolean(key, 'run_analytical')
+        self.simulation = conf.getboolean(key, 'run_simulation')
         self.skip_non_cascading_collapse = conf.getboolean(
-            'run_parameters', 'skip_non_cascading_collapse')
+            key, 'skip_non_cascading_collapse')
         self.adjust_design_by_topography = conf.getboolean(
-            'run_parameters', 'adjust_design_by_topography')
-        self.strainer = [x.strip() for x in conf.get('run_parameters',
-                         'Strainer').split(',')]
-
-        if conf.getboolean('run_parameters', 'parallel_line_interaction'):
-            self.parallel_line = dict()
-            for line in conf.options('parallel_line_interaction'):
-                self.parallel_line[line] = [
-                    x.strip() for x in conf.get('parallel_line_interaction',
-                                                line).split(',')]
+            key, 'adjust_design_by_topography')
+        self.strainer = [x.strip() for x in conf.get(key,
+                                                     'Strainer').split(',')]
+        self.sel_lines = [x.strip() for x in conf.get(
+            key, 'selected_lines').split(',')]
 
         # directories
+        key = 'directories'
         self.path_gis_data = os.path.join(path_cfg_file,
-                                          conf.get('directories', 'gis_data'))
+                                          conf.get(key, 'gis_data'))
 
-        self.path_wind_scenario = [
-            os.path.join(path_cfg_file, x.strip()) for x in conf.get(
-                'directories', 'wind_scenario').split(',')]
+        self.path_wind_scenario = []
+        for x in conf.get(key, 'wind_scenario').split(','):
+            self.path_wind_scenario.append(
+                os.path.join(path_cfg_file, x.strip()))
 
-        path_input = os.path.join(path_cfg_file,
-                                  conf.get('directories', 'input'))
+        self.path_input = os.path.join(path_cfg_file,
+                                       conf.get(key, 'input'))
 
         self.path_output = os.path.join(path_cfg_file,
-                                        conf.get('directories', 'output'))
+                                        conf.get(key, 'output'))
 
         # gis_data
         self.file_shape_tower = os.path.join(self.path_gis_data,
@@ -76,31 +75,47 @@ class TransmissionConfig(object):
                                                      'shape_line'))
 
         # wind_scenario
-        file_name_format = conf.get('wind_scenario', 'file_name_format', 1)
-        self.file_head = file_name_format.split('%')[0]
-        self.file_tail = file_name_format.split(')')[-1]
+        wind_file_name_format = conf.get('wind_scenario', 'file_name_format', 1)
+        self.wind_file_head = wind_file_name_format.split('%')[0]
+        self.wind_file_tail = wind_file_name_format.split(')')[-1]
 
         # input
-        self.file_design_value = os.path.join(path_input,
+        self.file_design_value = os.path.join(self.path_input,
                                               conf.get('input', 'design_value'))
-
         self.file_fragility_metadata = os.path.join(
-            path_input, conf.get('input', 'fragility_metadata'))
-
+            self.path_input, conf.get('input', 'fragility_metadata'))
         self.file_cond_collapse_prob_metadata = os.path.join(
-            path_input, conf.get('input',
-                                 'conditional_collapse_probability_metadata'))
-
+            self.path_input, conf.get(
+                'input', 'conditional_collapse_probability_metadata'))
         self.file_terrain_multiplier = os.path.join(
-            path_input, conf.get('input', 'terrain_height_multiplier'))
-
+            self.path_input, conf.get('input', 'terrain_height_multiplier'))
         self.file_drag_height_by_type = os.path.join(
-            path_input, conf.get('input', 'drag_height_by_type'))
+            self.path_input, conf.get('input', 'drag_height_by_type'))
+
+        if self.adjust_design_by_topography:
+            self.file_topo_multiplier = os.path.join(
+                self.path_input, conf.get('input', 'topographic_multiplier'))
+            self.file_design_adjustment_factor_by_topo = os.path.join(
+                self.path_input, conf.get(
+                    'input', 'design_adjustment_factor_by_topography'))
+            self.topo_multiplier = self.read_topographic_multiplier()
+            self.design_adjustment_factor_by_topo = \
+                self.read_design_adjustment_factor_by_topography_mutliplier()
+
+        if conf.getboolean('run_parameters', 'line_interaction'):
+            self.line_interaction = dict()
+            for line in conf.options('line_interaction'):
+                self.line_interaction[line] = [
+                    x.strip() for x in conf.get('line_interaction',
+                                                line).split(',')]
+
+            self.file_line_interaction_metadata = os.path.join(
+                self.path_input, conf.get('input', 'line_interaction_metadata'))
+            self.prob_line_interaction_metadata, self.prob_line_interaction = \
+                self.read_prob_line_interaction()
 
         # read information
         self.design_value = self.read_design_value()
-
-        self.sel_lines = self.design_value.keys()
 
         self.fragility_metadata, self.fragility, self.damage_states, \
             self.no_damage_states = self.read_fragility()
@@ -112,32 +127,13 @@ class TransmissionConfig(object):
 
         self.drag_height = self.read_drag_height_by_type()
 
-        if self.adjust_design_by_topography:
-
-            self.file_topo_multiplier = os.path.join(
-                path_input, conf.get('input', 'topographic_multiplier'))
-
-            self.file_design_adjustment_factor_by_topo = os.path.join(
-                path_input, conf.get(
-                    'input', 'design_adjustment_factor_by_topography'))
-
-            self.topo_multiplier = self.read_topographic_multiplier()
-
-            self.design_adjustment_factor_by_topo = \
-                self.read_design_adjustment_factor_by_topography_mutliplier()
-
-        if conf.getboolean('run_parameters', 'parallel_line_interaction'):
-            self.file_line_interaction_metadata, self.prob_line_interaction = \
-                self.read_prob_line_interaction()
-
-
     def set_random_seed(self, conf):
         """
         read random seed info
         :param conf:
         :return:
         """
-        self.seed = dict()
+        seed = dict()
 
         rnd_events = conf.get('random_seed', 'events').split(',')
         rnd_lines = conf.get('random_seed', 'lines').split(',')
@@ -147,8 +143,8 @@ class TransmissionConfig(object):
 
             for rnd_line in rnd_lines:
                 (line_key, line_val) = self.split_str(rnd_line, ':')
-                self.seed.setdefault(event_key, {})[line_key] = \
-                    event_val + line_val
+                seed.setdefault(event_key, {})[line_key] = event_val + line_val
+        return seed
 
     # @staticmethod
     # def get_path(path_, file_):
@@ -174,25 +170,25 @@ class TransmissionConfig(object):
     def read_design_value(self):
         """read design values by line
         """
-        if not os.path.exists(self.file_design_value):
-            print('Error: file_design_value {} not found'.format(
-                self.file_design_value))
-            sys.exit(1)
+        try:
+            data = pd.read_csv(self.file_design_value,
+                               skipinitialspace=True,
+                               index_col=0)
+            data.columns = ['speed', 'span', 'cat', 'level']
+            return data.transpose().to_dict()
 
-        data = pd.read_csv(self.file_design_value,
-                           skipinitialspace=True, skiprows=1,
-                           names=['lineroute', 'speed', 'span', 'cat',
-                                  'level'], index_col=0)
-        return data.transpose().to_dict()
+        except IOError:
+            msg = 'Error: file {} not found'.format(self.file_design_value)
+            raise IOError(msg)
 
     def read_fragility(self):
         """
         read collapse fragility parameter values
         """
         if not os.path.exists(self.file_fragility_metadata):
-            print('Error: file_fragility_metadata {} not found'.format(
-                self.file_fragility_metadata))
-            sys.exit(1)
+            msg = 'Error: file {} not found'.format(
+                self.file_fragility_metadata)
+            sys.exit(msg)
 
         metadata = ConfigParser.ConfigParser()
         metadata.read(self.file_fragility_metadata)
@@ -215,9 +211,8 @@ class TransmissionConfig(object):
         try:
             data = pd.read_csv(meta_data['file'], skipinitialspace=True)
         except IOError:
-            print('Error: file_fragility {} not found'.
-                  format(meta_data['file']))
-            sys.exit(1)
+            msg = 'Error: file {} not found'.format(meta_data['file'])
+            raise IOError(msg)
 
         return meta_data, data, meta_data['limit_states'], len(
             meta_data['limit_states'])
@@ -227,9 +222,9 @@ class TransmissionConfig(object):
         read condition collapse probability defined by tower function
         """
         if not os.path.exists(self.file_cond_collapse_prob_metadata):
-            print('Error: file_cond_collapse_prob_metadata {} not found'.format(
-                self.file_cond_collapse_prob_metadata))
-            sys.exit(1)
+            msg = 'Error: file {} not found'.format(
+                self.file_cond_collapse_prob_metadata)
+            sys.exit(msg)
 
         metadata = ConfigParser.ConfigParser()
         metadata.read(self.file_cond_collapse_prob_metadata)
@@ -266,15 +261,15 @@ class TransmissionConfig(object):
         read conditional parallel line interaction probability
         """
         if not os.path.exists(self.file_line_interaction_metadata):
-            print('Error: file_line_interaction_metadata {} not found'.format(
-                self.file_line_interaction_metadata))
-            sys.exit(1)
-
-        metadata = ConfigParser.ConfigParser()
-        metadata.read(self.file_line_interaction_metadata)
+            msg = 'Error: file {} not found'.format(
+                self.file_line_interaction_metadata)
+            sys.exit(msg)
 
         path_metadata = os.path.dirname(
             os.path.realpath(self.file_line_interaction_metadata))
+
+        metadata = ConfigParser.ConfigParser()
+        metadata.read(self.file_line_interaction_metadata)
 
         meta_data = dict()
         for key, value in metadata.items('main'):
@@ -289,10 +284,14 @@ class TransmissionConfig(object):
         """
         read terrain multiplier (ASNZ 1170.2:2011 Table 4.1)
         """
-        data = pd.read_csv(self.file_terrain_multiplier,
-                           skipinitialspace=True,
-                           skiprows=1,
-                           names=['height', 'tc1', 'tc2', 'tc3', 'tc4'])
+        try:
+            data = pd.read_csv(self.file_terrain_multiplier,
+                               skipinitialspace=True)
+            data.columns = ['height', 'tc1', 'tc2', 'tc3', 'tc4']
+        except IOError:
+            msg = 'Error: file {} not found'.format(
+                self.file_terrain_multiplier)
+            raise IOError(msg)
         return data.to_dict('list')
 
     def read_drag_height_by_type(self):
@@ -302,21 +301,32 @@ class TransmissionConfig(object):
 
         """
         # design speed adjustment factor
-        temp = pd.read_csv(self.file_drag_height_by_type,
-                           names=['type', 'value'], skiprows=1, index_col=0)
-        return temp['value'].to_dict()
+        try:
+            data = pd.read_csv(self.file_drag_height_by_type,
+                               skipinitialspace=True,
+                               index_col=0)
+            data.columns = ['value']
+        except IOError:
+            msg = 'Error: file {} not found'.format(
+                self.file_drag_height_by_type)
+            raise IOError(msg)
+
+        return data['value'].to_dict()
 
     def read_topographic_multiplier(self):
         """read topographic multiplier value from the input file
         :returns: topography value at each site
         :rtype: dict
         """
-        names_str = ['Name', '', '', '', '', '', '', '', '', 'Mh', 'Mhopp']
-        data = pd.read_csv(self.file_topo_multiplier,
-                           usecols=[0, 9, 10],
-                           skiprows=1,
-                           names=names_str)
-        data['topo'] = data[['Mh', 'Mhopp']].max(axis=1)
+        try:
+            data = pd.read_csv(self.file_topo_multiplier,
+                               usecols=[0, 9, 10])
+            data.columns = ['Name', 'Mh', 'Mhopp']
+            data['topo'] = data[['Mh', 'Mhopp']].max(axis=1)
+        except IOError:
+            msg = 'Error: file {} not found'.format(self.file_topo_multiplier)
+            raise IOError(msg)
+
         return data.set_index('Name').to_dict()['topo']
 
     def read_design_adjustment_factor_by_topography_mutliplier(self):
@@ -325,6 +335,11 @@ class TransmissionConfig(object):
         :rtype: dict
 
         """
+        if not os.path.exists(self.file_design_adjustment_factor_by_topo):
+            msg = 'Error: file {} not found'.format(
+                self.file_design_adjustment_factor_by_topo)
+            sys.exit(msg)
+
         dic_ = ConfigParser.ConfigParser()
         dic_.read(self.file_design_adjustment_factor_by_topo)
 

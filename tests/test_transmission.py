@@ -35,7 +35,6 @@ class TestTransmission(unittest.TestCase):
         if self.conf.analytical:
             for network in self.damaged_networks.itervalues():
                 for line in network.lines.itervalues():
-
                     self.check_file_consistency_analytical(line)
 
     def test_transmission_simulation(self):

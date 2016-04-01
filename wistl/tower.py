@@ -156,6 +156,8 @@ class Tower(object):
             for ids, limit_state in enumerate(self.conf.damage_states):
                 idx = tf_array & (self.conf.fragility['limit_states'] ==
                                   limit_state)
+
+                assert(sum(idx) == 1)
                 fn_form = self.conf.fragility.loc[
                     idx, self.conf.fragility_metadata['function']].values[0]
                 arg_ = self.conf.fragility.loc[
