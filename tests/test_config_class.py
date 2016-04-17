@@ -10,7 +10,7 @@ import StringIO
 import numpy as np
 
 from collections import OrderedDict
-from wistl.config_class import TransmissionConfig
+from wistl.config_class import TransmissionConfig, split_str
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -81,7 +81,7 @@ class TestTransmissionConfig(unittest.TestCase):
 
         str_ = 'aa: 44'
         expected = ('aa', 44)
-        result = TransmissionConfig.split_str(str_, ':')
+        result = split_str(str_, ':')
         self.assertEqual(result, expected)
 
     def test_read_design_value(self):

@@ -26,7 +26,8 @@ class TransmissionNetworkTest(unittest.TestCase):
 
     def test_number_of_damaged_networks(self):
         self.assertEqual(len(self.damaged_networks),
-                         len(self.conf.path_wind_scenario))
+                         len([i for x in self.conf.scale.itervalues()
+                              for i in x ]))
 
     def test_damaged_network_type(self):
         from wistl.transmission_network import TransmissionNetwork

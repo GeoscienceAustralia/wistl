@@ -14,43 +14,43 @@ class Tower(object):
     Tower class represent an individual wistl tower.
     """
 
-    def __init__(self, conf, df_tower):
+    def __init__(self, conf, ps_tower):
         """
         :param conf: instance of config class
-        :param df_tower: data frame containing tower details
+        :param ps_tower: panda series containing tower details
         """
 
         self.conf = conf
-        self.df_tower = df_tower
+        self.ps_tower = ps_tower
+        self.id = ps_tower.name  # Series.name
 
-        self.id = df_tower['id']
-        self.name = df_tower['Name']
-        self.type = df_tower['Type']  # Lattice Tower or Steel Pole
-        self.function = df_tower[
-            'Function']  # e.g., suspension, terminal, strainer
-        self.line_route = df_tower['LineRoute']  # string
+        self.coord = ps_tower.coord  # (1, 2)
+        self.point = ps_tower.point  # (2,)
+        self.coord_lat_lon = ps_tower.coord_lat_lon  # (1, 2)
+
+        self.name = ps_tower.Name
+        self.type = ps_tower.Type  # Lattice Tower or Steel Pole
+        self.function = ps_tower.Function  # Suspension, Terminal, Strainer
+        self.line_route = ps_tower.LineRoute
         self.no_circuit = 2  # double circuit (default value)
-        self.design_span = self.conf.design_value[self.line_route][
-            'span']  # design wind span
-        self.terrain_cat = self.conf.design_value[self.line_route][
-            'cat']  # Terrain Category
-        self.design_level = self.conf.design_value[self.line_route][
-            'level']  # design level
-        self.strong_axis = df_tower[
-            'AxisAz']  # azimuth of strong axis relative to North (deg)
-        self.dev_angle = df_tower['DevAngle']  # deviation angle
-        self.height = df_tower['Height']
-        self.height_z = conf.drag_height[self.function]
-        self.actual_span = df_tower[
-            'actual_span']  # actual wind span on either side
 
-        self.design_speed = self.conf.design_value[self.line_route]['speed']
+        self.design_span = ps_tower.design_span  # design wind span
+        self.terrain_cat = ps_tower.terrain_cat  # Terrain Category
+        self.design_level = ps_tower.design_level  # design level
+
+        # azimuth of strong axis relative to North (deg)
+        self.strong_axis = ps_tower.AxisAz
+        self.dev_angle = ps_tower.DevAngle  # deviation angle
+        self.height = ps_tower.Height
+        self.height_z = conf.drag_height[self.function]
+        self.actual_span = ps_tower.actual_span
+        self.file_wind_base_name = self.ps_tower.file_wind_base_name
+
+        self.design_speed = ps_tower.design_speed
         if self.conf.adjust_design_by_topography:
             self.adjust_design_speed()
 
         self.collapse_capacity = self.compute_collapse_capacity()
-        self.file_wind_base_name = \
-            self.conf.file_head + self.name + self.conf.file_tail
         self.convert_factor = self.convert_10_to_z()
 
         self.cond_pc, self.max_no_adj_towers = self.get_cond_collapse_prob()
@@ -63,39 +63,77 @@ class Tower(object):
         self.cond_pc_adj = None  # dict
         self.cond_pc_adj_mc = {'rel_idx': [None], 'cum_prob': [None]}
 
-        # moved from damage_tower.py
-        self._file_wind = None
-        self._wind = None
-        self._time_index = None
+        # initialised and later populated
+        self._event_tuple = None
+        self.file_wind = None
+        self.scale = None
+        self.wind = None
+        self.time_index = None
 
         # analytical method
-        self._pc_wind = None  # compute_pc_wind
-        self._pc_adj = None  # dict (no_time,) <- compute_pc_adj
+        self.prob_damage_isolation = None  # compute_damage_prob_isolation
+        self.prob_damage_adjacent = None  # dict (no_time,) <- compute_pc_adj
 
         # simulation method
-        self._mc_wind = None  # dict(no_sims, no_time)
-        self._mc_adj = None  # dict <- compute_mc_adj
+        self.damage_isolation_mc = dict()  # (no_sims, no_time)
+        self.damage_adjacent_mc = dict()  #
+
+        # line interaction
+        self._id_on_target_line = dict()
+        self._cond_parallel_line = None
+        self._mc_parallel_line = None
 
     @property
-    def wind(self):
-        return self._wind
+    def event_tuple(self):
+        return self._event_tuple
+
+    @property
+    def id_on_target_line(self):
+        return self._id_on_target_line
+
+    @property
+    def cond_parallel_line(self):
+        return self._cond_parallel_line
+
+    @property
+    def mc_parallel_line(self):
+        return self._mc_parallel_line
+
+    @event_tuple.setter
+    def event_tuple(self, value):
+        try:
+            file_wind_, scale_ = value
+        except ValueError:
+            raise ValueError("Pass an iterable with two items")
+        else:
+            self.file_wind = file_wind_
+            self.scale = scale_
+            self._set_wind()
+            self.compute_damage_prob_isolation()
+
+    @id_on_target_line.setter
+    def id_on_target_line(self, id_on_target_line):
+        self._id_on_target_line = id_on_target_line
+        self._get_cond_prob_line_interaction()
 
     def _set_wind(self):
         """
         set the wind, time_index variables given a file_wind
         """
         try:
-            data = pd.read_csv(self._file_wind, header=0, parse_dates=[0],
-                               index_col=[0], usecols=[0, 3, 6],
-                               names=['', '', '', 'speed', '', '',
-                                      'bearing', ''])
+            data = self.scale * pd.read_csv(self.file_wind,
+                                            header=0,
+                                            parse_dates=[0],
+                                            index_col=[0],
+                                            usecols=[0, 3, 6],
+                                            names=['', '', '', 'speed', '', '',
+                                                   'bearing', ''])
         except IOError:
-            msg = 'file {} does not exist'.format(self._file_wind)
-            print(msg)
+            msg = 'file {} does not exist'.format(self.file_wind)
             raise IOError(msg)
 
         speed = data['speed'].values
-        bearing = np.deg2rad(data['bearing'].values)  # degree
+        bearing = np.deg2rad(data['bearing'].values)
 
         # angle of conductor relative to NS
         t0 = np.deg2rad(self.strong_axis) - np.pi / 2.0
@@ -103,21 +141,10 @@ class Tower(object):
         data['dir_speed'] = pd.Series(
             self.convert_factor * self.compute_directional_wind_speed(
                 speed, bearing, t0), index=data.index)
-        self._wind = data
-        self._time_index = data.index
+        data['ratio'] = data['dir_speed']/self.collapse_capacity
 
-    @property
-    def time_index(self):
-        return self._time_index
-
-    @property
-    def file_wind(self):
-        return self._file_wind
-
-    @file_wind.setter
-    def file_wind(self, file_wind):
-        self._file_wind = file_wind
-        self._set_wind()
+        self.wind = data
+        self.time_index = data.index
 
     @staticmethod
     def compute_directional_wind_speed(speed, bearing, t0):
@@ -133,50 +160,29 @@ class Tower(object):
         adj = speed * np.max(np.vstack((cos_, sin_)), axis=0)
         return np.where(tf, adj, speed)  # adj if true, otherwise speed
 
-    def compute_pc_wind(self):
+    def compute_damage_prob_isolation(self):
         """
-        compute probability of damage due to wind
+        compute probability of damage of tower in isolation
         """
-        if self._file_wind:
-            pc_wind = np.zeros(shape=(len(self.time_index),
-                                      self.conf.no_damage_states))
-            ratio_ = self.wind.dir_speed.values / self.collapse_capacity
+        if self.file_wind:
+            prob_damage = dict()
+            for ds in self.conf.damage_states:
+                value = getattr(stats, self.ps_tower.frag_func).cdf(
+                    self.wind.ratio,
+                    self.ps_tower.frag_arg[ds],
+                    scale=self.ps_tower.frag_scale[ds])
+                prob_damage[ds] = pd.Series(value,
+                                            index=self.wind.index,
+                                            name=ds)
+            self.prob_damage_isolation = pd.DataFrame.from_dict(prob_damage)
 
-            tf_array = np.ones((self.conf.fragility.shape[0],), dtype=bool)
-            for att, att_type in zip(self.conf.fragility_metadata['by'],
-                                     self.conf.fragility_metadata['type']):
-                if att_type == 'string':
-                    tf_array *= self.conf.fragility[att] == self.df_tower[att]
-                elif att_type == 'numeric':
-                    tf_array *= (self.conf.fragility[att + '_lower'] <=
-                                 self.df_tower[att]) & \
-                                (self.conf.fragility[att + '_upper'] >
-                                 self.df_tower[att])
+            # self.prob_damage_isolation = pd.DataFrame(
+            #     np.zeros(shape=(len(self.time_index),
+            #              self.conf.no_damage_states)),
+            #     columns=self.conf.damage_states,
+            #     index=self.wind.index)
 
-            for ids, limit_state in enumerate(self.conf.damage_states):
-                idx = tf_array & (self.conf.fragility['limit_states'] ==
-                                  limit_state)
-
-                assert(sum(idx) == 1)
-                fn_form = self.conf.fragility.loc[
-                    idx, self.conf.fragility_metadata['function']].values[0]
-                arg_ = self.conf.fragility.loc[
-                    idx, self.conf.fragility_metadata[fn_form]['arg']]
-                scale_ = self.conf.fragility.loc[
-                    idx, self.conf.fragility_metadata[fn_form]['scale']]
-
-                temp = getattr(stats, fn_form).cdf(ratio_, arg_, scale=scale_)
-                pc_wind[:, ids] = temp
-
-            self._pc_wind = pd.DataFrame(pc_wind,
-                                         columns=self.conf.damage_states,
-                                         index=self.wind.index)
-
-    @property
-    def pc_wind(self):
-        return self._pc_wind
-
-    def compute_pc_adj(self):  # only for analytical approach
+    def compute_damage_prob_adjacent(self):
         """
         only for analytical approach
         calculate collapse probability of jth tower due to pull by the tower
@@ -187,16 +193,12 @@ class Tower(object):
         pc_adj = {}
         for rel_idx in self.cond_pc_adj.keys():
             abs_idx = self.id_adj[rel_idx + self.max_no_adj_towers]
-            pc_adj[abs_idx] = (self.pc_wind.collapse.values *
+            pc_adj[abs_idx] = (self.prob_damage_isolation.collapse.values *
                                self.cond_pc_adj[rel_idx])
 
-        self._pc_adj = pc_adj
+        self.prob_damage_adjacent = pc_adj
 
-    @property
-    def pc_adj(self):
-        return self._pc_adj
-
-    def compute_mc_adj(self, rv, seed=None):
+    def determine_damage_isolation_mc(self, rv):
         """
         2. determine if adjacent tower collapses or not due to pull by the tower
         j_time: time index (array)
@@ -204,80 +206,153 @@ class Tower(object):
 
         :param rv: random variable
         :param seed: seed is None if no seed number is provided
-        :return: update self.mc_wind and self.mc_adj
+        :return: update self.damage_isolation_mc and self.damage_adjacent_mc
         """
-        if self._file_wind:
-            # 1. determine damage state of tower due to wind
-            val = np.array([rv < self.pc_wind[ds].values
-                            for ds in
-                            self.conf.damage_states])  # (nds, no_sims, no_time)
+        # 1. determine damage state of tower due to wind
+        val = np.array([rv < self.prob_damage_isolation[ds].values
+                        for ds in
+                        self.conf.damage_states])  # (nds, no_sims, no_time)
 
-            # ds_wind.shape == (no_sims, no_time)
-            # 0(non), 1, 2 (collapse)
-            ds_wind = np.sum(val, axis=0)
+        # ds_wind.shape == (no_sims, no_time)
+        # PD not PE = 0(non), 1, 2 (collapse)
+        ds_wind = np.sum(val, axis=0)
 
-            mc_wind = dict()
-            for ids, ds in enumerate(self.conf.damage_states):
-                mc_wind.setdefault(ds, {})['id_sim'], \
-                    mc_wind.setdefault(ds, {})['id_time'] = \
-                    np.where(ds_wind == (ids + 1))
+        # mc_wind = {ds: {'id_sim': None, 'id_time': None}
+        #            for ds in self.conf.damage_states}
+        # for ids, ds in enumerate(self.conf.damage_states, 1):
+        #     mc_wind[ds]['id_sim'], mc_wind[ds]['id_time'] = \
+        #         np.where(ds_wind == ids)
 
-            # for collapse
-            unq_id_time = np.unique(mc_wind['collapse']['id_time'])
-            no_prob = len(self.cond_pc_adj_mc['cum_prob'])  #
+        mc_wind = dict()
+        for ids, ds in enumerate(self.conf.damage_states, 1):
+            id_sim, id_time = np.where(ds_wind == ids)
 
-            mc_adj = dict()  # impact on adjacent towers
+            mc_wind[ds] = pd.DataFrame(np.vstack((id_sim, id_time)).T,
+                                       columns=['id_sim', 'id_time'])
+
+            # check whether MC simulation is close to analytical
+            prob_damage_isolation_mc = pd.Series(
+                np.sum(ds_wind[:, ] >= ids, axis=0) / float(self.conf.no_sims),
+                index=self.prob_damage_isolation.index)
+
+            idx_not_close, = np.where(~np.isclose(prob_damage_isolation_mc,
+                                      self.prob_damage_isolation[ds],
+                                      atol=self.conf.atol,
+                                      rtol=self.conf.rtol))
+
+            for idx in idx_not_close:
+                print('{}:{}'.format(prob_damage_isolation_mc.ix[idx],
+                                     self.prob_damage_isolation[ds].ix[idx]))
+
+        self.damage_isolation_mc = mc_wind
+
+    def determine_damage_adjacent_mc(self, seed=None):
+
+        if self.cond_pc_adj_mc['rel_idx']:
 
             if self.conf.random_seed:
                 rnd_state = np.random.RandomState(seed + 100)  # replication
             else:
                 rnd_state = np.random.RandomState()
 
-            if no_prob > 0:
-                for j_time in unq_id_time:
-                    jdx = np.where(mc_wind['collapse']['id_time'] == j_time)[0]
-                    idx_sim = mc_wind['collapse']['id_sim'][
-                        jdx]  # index of simulation
+            # generate regardless of time index
+            no_sim_collapse = len(
+                self.damage_isolation_mc['collapse']['id_time'])
+            rv = rnd_state.uniform(size=no_sim_collapse)
 
-                    rv = rnd_state.uniform(size=len(idx_sim))
+            list_idx_cond = map(lambda rv_: sum(
+                rv_ >= self.cond_pc_adj_mc['cum_prob']), rv)
+            idx_no_adjacent_collapse = len(self.cond_pc_adj_mc['cum_prob'])
 
-                    list_idx_cond = map(lambda rv_: sum(
-                        rv_ >= self.cond_pc_adj_mc['cum_prob']), rv)
+            # list of idx of adjacent towers in collapse
+            abs_idx_list = []
+            for rel_idx in self.cond_pc_adj_mc['rel_idx']:
+                abs_idx = tuple((self.id_adj[j + self.max_no_adj_towers]
+                                 for j in rel_idx if j != 0))
+                abs_idx_list.append(abs_idx)
 
-                    # ignore simulation where none of adjacent tower collapses
-                    unq_list_idx_cond = set(list_idx_cond) - {no_prob}
+            ps_ = pd.Series([abs_idx_list[x] if x < idx_no_adjacent_collapse
+                                else None for x in list_idx_cond],
+                            index=self.damage_isolation_mc['collapse'].index,
+                            name='id_adj')
 
-                    for idx_cond in unq_list_idx_cond:
-                        # list of idx of adjacent towers in collapse
-                        rel_idx = self.cond_pc_adj_mc['rel_idx'][idx_cond]
+            adj_mc = pd.concat([self.damage_isolation_mc['collapse'], ps_],
+                               axis=1)
+            adj_mc = adj_mc[pd.notnull(ps_)]
 
-                        # convert relative to absolute fid
-                        abs_idx = [self.id_adj[j + self.max_no_adj_towers]
-                                   for j in rel_idx]
+            for (id_time_, id_adj_), grouped in adj_mc.groupby(['id_time',
+                                                                'id_adj']):
+                self.damage_adjacent_mc.setdefault(id_time_, {})[id_adj_] = \
+                    grouped.id_sim.tolist()
 
-                        # filter simulation
-                        id_sim = [i for i, x in enumerate(list_idx_cond)
-                                  if x == idx_cond]
-                        mc_adj.setdefault(j_time, {})[tuple(abs_idx)] = idx_sim[
-                            id_sim]
-
-            self._mc_wind = mc_wind
-            self._mc_adj = mc_adj
-
-    @property
-    def mc_wind(self):
-        return self._mc_wind
-
-    @property
-    def mc_adj(self):
-        return self._mc_adj
+    # def compute_mc_adj(self, rv, seed=None):
+    #     """
+    #     2. determine if adjacent tower collapses or not due to pull by the tower
+    #     jtime: time index (array)
+    #     idx: multiprocessing thread id
+    #     """
+    #     if self.file_wind:
+    #         # 1. determine damage state of tower due to wind
+    #         val = np.array([rv < self.prob_damage_isolation[ds].values
+    #                        for ds in self.conf.damage_states])  # (nds, nsims, ntime)
+    #
+    #         ds_wind = np.sum(val, axis=0)  # (nsims, ntime) 0(non), 1, 2 (collapse)
+    #
+    #         mc_wind = dict()
+    #         for ids, ds in enumerate(self.conf.damage_states):
+    #             mc_wind.setdefault(ds, {})['id_sim'], mc_wind.setdefault(ds, {})['id_time'] = np.where(ds_wind == (ids + 1))
+    #
+    #         # for collapse
+    #         unq_itime = np.unique(mc_wind['collapse']['id_time'])
+    #         nprob = len(self.cond_pc_adj_mc['cum_prob'])  #
+    #
+    #         mc_adj = dict()  # impact on adjacent towers
+    #
+    #         if self.conf.random_seed:
+    #             prng = np.random.RandomState(seed + 100)  # replication
+    #         else:
+    #             prng = np.random.RandomState()
+    #
+    #         if nprob > 0:
+    #             for jtime in unq_itime:
+    #                 jdx = np.where(mc_wind['collapse']['id_time'] == jtime)[0]
+    #                 idx_sim = mc_wind['collapse']['id_sim'][jdx]  # index of simulation
+    #
+    #                 rv = prng.uniform(size=len(idx_sim))
+    #
+    #                 list_idx_cond = map(lambda rv_: sum(
+    #                     rv_ >= self.cond_pc_adj_mc['cum_prob']), rv)
+    #
+    #                 # ignore simulation where none of adjacent tower collapses
+    #                 unq_list_idx_cond = set(list_idx_cond) - set([nprob])
+    #
+    #                 for idx_cond in unq_list_idx_cond:
+    #
+    #                     # list of idx of adjacent towers in collapse
+    #                     rel_idx = self.cond_pc_adj_mc['rel_idx'][idx_cond]
+    #
+    #                     # convert relative to absolute fid
+    #                     #abs_idx = [self.id_adj[j + self.max_no_adj_towers]
+    #                     #           for j in rel_idx]
+    #                     abs_idx = [self.id_adj[j + self.max_no_adj_towers]
+    #                                for j in rel_idx if j != 0]
+    #
+    #                     # filter simulation
+    #                     isim = [i for i, x in enumerate(list_idx_cond)
+    #                             if x == idx_cond]
+    #                     mc_adj.setdefault(jtime, {})[tuple(abs_idx)] = idx_sim[isim]
+    #
+    #         self.damage_isolation_mc['collapse'] = pd.DataFrame(mc_wind['collapse'])
+    #         self.damage_isolation_mc['minor'] = pd.DataFrame(mc_wind['minor'])
+    #         self.damage_adjacent_mc = mc_adj
 
     def get_cond_collapse_prob(self):
         """ get dict of conditional collapse probabilities
         :return: cond_pc, max_no_adj_towers
         """
 
-        att_value = self.df_tower[self.conf.cond_collapse_prob_metadata['by']]
+        # FIXME: move to transmission_line
+        att_value = self.ps_tower[self.conf.cond_collapse_prob_metadata['by']]
         df_prob = self.conf.cond_collapse_prob[att_value]
 
         att = self.conf.cond_collapse_prob_metadata[att_value]['by']
@@ -286,8 +361,8 @@ class Tower(object):
         if att_type == 'string':
             tf_array = df_prob[att] == getattr(self, att)
         elif att_type == 'numeric':
-            tf_array = (df_prob[att + '_lower'] <= self.df_tower[att]) & \
-                       (df_prob[att + '_upper'] > self.df_tower[att])
+            tf_array = (df_prob[att + '_lower'] <= self.ps_tower[att]) & \
+                       (df_prob[att + '_upper'] > self.ps_tower[att])
 
         # change to dictionary
         cond_pc = dict(zip(df_prob.loc[tf_array, 'list'],
@@ -296,6 +371,27 @@ class Tower(object):
             self.conf.cond_collapse_prob_metadata[att_value]['max_adj']
 
         return cond_pc, max_no_adj_towers
+
+    def _get_cond_prob_line_interaction(self):
+        """ get dict of conditional collapse probabilities
+        :return: cond_prob_line
+        """
+
+        # FIXME: move to transmission_line
+        att = self.conf.prob_line_interaction_metadata['by']
+        att_type = self.conf.prob_line_interaction_metadata['type']
+        df_prob = self.conf.prob_line_interaction
+
+        tf_array = None
+        if att_type == 'string':
+            tf_array = df_prob == getattr(self, att)
+        elif att_type == 'numeric':
+            tf_array = (df_prob[att + '_lower'] <= self.ps_tower[att]) & \
+                       (df_prob[att + '_upper'] > self.ps_tower[att])
+
+        # change to dictionary
+        return dict(zip(df_prob.loc[tf_array, 'no_collapse'],
+                        df_prob.loc[tf_array, 'probability']))
 
     def adjust_design_speed(self):
         """ determine design speed """
@@ -325,23 +421,25 @@ class Tower(object):
     def convert_10_to_z(self):
         """
         Mz,cat(h=10)/Mz,cat(h=z)
-        tc: terrain category (defined by line route)
+        tc: terrain category
         asset is a Tower class instance.
-        """
 
-        tc_str = 'tc' + str(self.terrain_cat)  # Terrain
+        :return:
+        """
+        terrain_cat = 'tc' + str(self.terrain_cat)
         try:
-            mzcat_z = np.interp(self.height_z,
-                                self.conf.terrain_multiplier['height'],
-                                self.conf.terrain_multiplier[tc_str])
+            terrain_multiplier_z = np.interp(
+                self.height_z,
+                self.conf.terrain_multiplier['height'],
+                self.conf.terrain_multiplier[terrain_cat])
         except KeyError:
             msg = '{} is undefined in {}'.format(
-                tc_str, self.conf.file_terrain_multiplier)
+                terrain_cat, self.conf.file_terrain_multiplier)
             raise KeyError(msg)
 
-        idx_10 = self.conf.terrain_multiplier['height'].index(10)
-        mzcat_10 = self.conf.terrain_multiplier[tc_str][idx_10]
-        return mzcat_z / mzcat_10
+        id10 = self.conf.terrain_multiplier['height'].index(10)
+        terrain_multiplier_10 = self.conf.terrain_multiplier[terrain_cat][id10]
+        return terrain_multiplier_z / terrain_multiplier_10
 
     def calculate_cond_pc_adj(self):
         """
@@ -349,14 +447,14 @@ class Tower(object):
         P(j|i)
         """
 
+        # rel_idx_strainer
         idx_m1 = np.array([i for i in range(len(self.id_adj))
-                           if self.id_adj[
-                               i] == -1]) - self.max_no_adj_towers  # rel_index
+                           if self.id_adj[i] == -1]) - self.max_no_adj_towers
 
         try:
             max_neg = np.max(idx_m1[idx_m1 < 0]) + 1
         except ValueError:
-            max_neg = - self.max_no_adj_towers
+            max_neg = -1 * self.max_no_adj_towers
 
         try:
             min_pos = np.min(idx_m1[idx_m1 > 0])

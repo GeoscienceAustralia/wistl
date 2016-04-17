@@ -7,16 +7,17 @@ WISTL: Wind Impact Simulation on Transmission Lines
 
 import time
 import sys
-import os
 import parmap
 
 from wistl.transmission_network import create_damaged_network, mc_loop_over_line
 
 
 def sim_towers(cfg):
-
-    if not os.path.exists(cfg.path_output):
-        os.makedirs(cfg.path_output)
+    """
+    main function
+    :param cfg: an instance of TransmissionConfig
+    :return:
+    """
 
     damaged_networks = create_damaged_network(cfg)
 
@@ -40,9 +41,9 @@ def sim_towers(cfg):
 
         if cfg.parallel:
             print('parallel MC run on.......')
-            _list = [line for network in damaged_networks.itervalues()
+            list_ = [line for network in damaged_networks.itervalues()
                      for line in network.lines.itervalues()]
-            parmap.map(mc_loop_over_line, _list)
+            parmap.map(mc_loop_over_line, list_)
         else:
             print('serial MC run on.......')
             for event_key, network in damaged_networks.iteritems():
@@ -51,6 +52,9 @@ def sim_towers(cfg):
                     mc_loop_over_line(line)
 
         print('MC simulation took {} seconds'.format(time.time() - tic))
+
+        if cfg.line_interaction:
+            print('parallel line interaction......')
 
     return damaged_networks
 
@@ -64,4 +68,4 @@ if __name__ == '__main__':
 
     from wistl.config_class import TransmissionConfig
     conf = TransmissionConfig(cfg_file=args[0])
-    network_damage = sim_towers(conf)
+    sim_towers(conf)

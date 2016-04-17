@@ -32,8 +32,9 @@ class TransmissionConfig(object):
         self.random_seed = conf.getboolean(key, 'random_seed')
 
         # random seed
+        self.seed = None
         if self.random_seed:
-            self.seed = self.set_random_seed(conf)
+            self.set_random_seed(conf)
 
         # run_parameters
         key = 'run_parameters'
@@ -44,20 +45,26 @@ class TransmissionConfig(object):
             key, 'skip_non_cascading_collapse')
         self.adjust_design_by_topography = conf.getboolean(
             key, 'adjust_design_by_topography')
-        self.strainer = [x.strip() for x in conf.get(key,
-                                                     'Strainer').split(',')]
-        self.sel_lines = [x.strip() for x in conf.get(
-            key, 'selected_lines').split(',')]
+
+        self.strainer = []
+        for x in conf.get(key, 'Strainer').split(','):
+            self.strainer.append(x.strip())
+
+        self.selected_lines = []
+        for x in conf.get(key, 'selected_lines').split(','):
+            self.selected_lines.append(x.strip())
+
+        self.rtol = float(conf.get(key, 'relative_tolerance'))
+        self.atol = float(conf.get(key, 'absolute_tolerance'))
+
 
         # directories
         key = 'directories'
         self.path_gis_data = os.path.join(path_cfg_file,
                                           conf.get(key, 'gis_data'))
 
-        self.path_wind_scenario = []
-        for x in conf.get(key, 'wind_scenario').split(','):
-            self.path_wind_scenario.append(
-                os.path.join(path_cfg_file, x.strip()))
+        self.path_wind_scenario_base = os.path.join(
+            path_cfg_file, conf.get(key, 'wind_scenario'))
 
         self.path_input = os.path.join(path_cfg_file,
                                        conf.get(key, 'input'))
@@ -75,9 +82,20 @@ class TransmissionConfig(object):
                                                      'shape_line'))
 
         # wind_scenario
-        wind_file_name_format = conf.get('wind_scenario', 'file_name_format', 1)
+        self.scale = dict()
+        for event_id in conf.options('wind_scenario'):
+            self.scale[event_id] = []
+            for x in conf.get('wind_scenario', event_id).split(','):
+                try:
+                    self.scale[event_id].append(float(x))
+                except ValueError:
+                    pass
+
+        # format
+        wind_file_name_format = conf.get('format', 'wind_scenario', 1)
         self.wind_file_head = wind_file_name_format.split('%')[0]
         self.wind_file_tail = wind_file_name_format.split(')')[-1]
+        self.event_id_scale_str = conf.get('format', 'event_id_scale')
 
         # input
         self.file_design_value = os.path.join(self.path_input,
@@ -92,27 +110,19 @@ class TransmissionConfig(object):
         self.file_drag_height_by_type = os.path.join(
             self.path_input, conf.get('input', 'drag_height_by_type'))
 
+        self.file_topo_multiplier = None
+        self.file_design_adjustment_factor_by_topo = None
+        self.topo_multiplier = None
+        self.design_adjustment_factor_by_topo = None
         if self.adjust_design_by_topography:
-            self.file_topo_multiplier = os.path.join(
-                self.path_input, conf.get('input', 'topographic_multiplier'))
-            self.file_design_adjustment_factor_by_topo = os.path.join(
-                self.path_input, conf.get(
-                    'input', 'design_adjustment_factor_by_topography'))
-            self.topo_multiplier = self.read_topographic_multiplier()
-            self.design_adjustment_factor_by_topo = \
-                self.read_design_adjustment_factor_by_topography_mutliplier()
+            self.set_adjust_design_by_topography(conf)
 
+        self.file_line_interaction_metadata = None
+        self.line_interaction = None
+        self.prob_line_interaction_metadata = None
+        self.prob_line_interaction = None
         if conf.getboolean('run_parameters', 'line_interaction'):
-            self.line_interaction = dict()
-            for line in conf.options('line_interaction'):
-                self.line_interaction[line] = [
-                    x.strip() for x in conf.get('line_interaction',
-                                                line).split(',')]
-
-            self.file_line_interaction_metadata = os.path.join(
-                self.path_input, conf.get('input', 'line_interaction_metadata'))
-            self.prob_line_interaction_metadata, self.prob_line_interaction = \
-                self.read_prob_line_interaction()
+            self.set_line_interaction(conf)
 
         # read information
         self.design_value = self.read_design_value()
@@ -133,18 +143,46 @@ class TransmissionConfig(object):
         :param conf:
         :return:
         """
-        seed = dict()
+        self.seed = dict()
 
         rnd_events = conf.get('random_seed', 'events').split(',')
         rnd_lines = conf.get('random_seed', 'lines').split(',')
 
         for rnd_event in rnd_events:
-            (event_key, event_val) = self.split_str(rnd_event, ':')
+            (event_key, event_val) = split_str(rnd_event, ':')
 
             for rnd_line in rnd_lines:
-                (line_key, line_val) = self.split_str(rnd_line, ':')
-                seed.setdefault(event_key, {})[line_key] = event_val + line_val
-        return seed
+                (line_key, line_val) = split_str(rnd_line, ':')
+                self.seed.setdefault(event_key, {})[line_key] = \
+                    event_val + line_val
+
+    def set_adjust_design_by_topography(self, conf):
+
+        self.file_topo_multiplier = os.path.join(
+            self.path_input, conf.get('input', 'topographic_multiplier'))
+
+        self.file_design_adjustment_factor_by_topo = os.path.join(
+            self.path_input, conf.get(
+                'input', 'design_adjustment_factor_by_topography'))
+
+        self.topo_multiplier = self.read_topographic_multiplier()
+
+        self.design_adjustment_factor_by_topo = \
+            self.read_design_adjustment_factor_by_topography_mutliplier()
+
+    def set_line_interaction(self, conf):
+
+        self.line_interaction = dict()
+        for line in conf.options('line_interaction'):
+            self.line_interaction[line] = [
+                x.strip() for x in conf.get('line_interaction',
+                                            line).split(',')]
+
+        self.file_line_interaction_metadata = os.path.join(
+            self.path_input, conf.get('input', 'line_interaction_metadata'))
+
+        self.prob_line_interaction_metadata, self.prob_line_interaction = \
+            self.read_prob_line_interaction()
 
     # @staticmethod
     # def get_path(path_, file_):
@@ -155,17 +193,6 @@ class TransmissionConfig(object):
     #     """
     #     path_file_ = os.path.join(os.path.abspath(file_), os.pardir)
     #     return os.path.abspath(os.path.join(path_file_, path_))
-
-    @staticmethod
-    def split_str(str_, str_split):
-        """
-        split string with split_str
-        :param str_: string
-        :param str_split: split
-        :return: tuple of str and integer
-        """
-        list_ = str_.split(str_split)
-        return list_[0].strip(), int(list_[1])
 
     def read_design_value(self):
         """read design values by line
@@ -282,7 +309,7 @@ class TransmissionConfig(object):
 
     def read_terrain_multiplier(self):
         """
-        read terrain multiplier (ASNZ 1170.2:2011 Table 4.1)
+        read terrain multiplier (AS/NZS 1170.2:2011 Table 4.1)
         """
         try:
             data = pd.read_csv(self.file_terrain_multiplier,
@@ -352,3 +379,20 @@ class TransmissionConfig(object):
 
         assert len(data['threshold']) == len(data.keys()) - 2
         return data
+
+
+def split_str(str_, str_split):
+    """
+    split string with split_str
+    :param str_: string
+    :param str_split: split
+    :return: tuple of str and integer or float
+    """
+    list_ = str_.split(str_split)
+    try:
+        return list_[0].strip(), int(list_[1])
+    except ValueError:
+        try:
+            return list_[0].strip(), float(list_[1])
+        except ValueError:
+            return list_[0].strip(), list_[1].strip()

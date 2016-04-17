@@ -5,6 +5,7 @@ __author__ = 'Hyeuk Ryu'
 
 import unittest
 import pandas as pd
+import numpy as np
 import os
 
 from wistl.config_class import TransmissionConfig
@@ -25,7 +26,7 @@ class TestTransmission(unittest.TestCase):
 
         h5file = os.path.join(
             cls.conf.path_output,
-            damage_line.event_id,
+            damage_line.event_id_scale,
             '{}_{}.h5'.format(str_head, damage_line.name_output))
 
         return h5file
@@ -53,13 +54,14 @@ class TestTransmission(unittest.TestCase):
 
                     self.check_file_consistency_simulation_non_cascading(line)
 
-    def test_transmission_analytical_vs_simulation_non_cascading(self):
+    def test_transmission_analytical_vs_simulation_only_isolation(self):
 
-        if not self.conf.skip_non_cascading_collapse and self.conf.analytical:
-            for network in self.damaged_networks.itervalues():
-                for line in network.lines.itervalues():
+        ds = 'collapse'
 
-                    self.compare_anlytical_vs_simulation_non_cascading(line)
+        for network in self.damaged_networks.itervalues():
+            for line in network.lines.itervalues():
+                for tower in line.towers.itervalues():
+                    self.compare_analytical_vs_simulation_for_collapse(tower)
 
     def check_file_consistency_analytical(self, damage_line):
 
@@ -94,17 +96,17 @@ class TestTransmission(unittest.TestCase):
 
         h5file1 = os.path.join(
             self.conf.path_output,
-            damage_line.event_id,
+            damage_line.event_id_scale,
             'damage_prob_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
 
         h5file2 = os.path.join(
             self.conf.path_output,
-            damage_line.event_id,
+            damage_line.event_id_scale,
             'est_no_damage_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
 
         h5file3 = os.path.join(
             self.conf.path_output,
-            damage_line.event_id,
+            damage_line.event_id_scale,
             'prob_no_damage_simulation_non_cascading_{}.h5'.format(damage_line.name_output))
 
         for ds in self.conf.damage_states:
@@ -121,14 +123,13 @@ class TestTransmission(unittest.TestCase):
             pd.util.testing.assert_frame_equal(
                 df_value, damage_line.prob_no_damage_simulation_non_cascading[ds])
 
-    def compare_anlytical_vs_simulation_non_cascading(self, damage_line):
+    def compare_analytical_vs_simulation_for_collapse(self, tower):
 
-        for ds in self.conf.damage_states:
-
-            pd.util.testing.assert_frame_equal(
-                damage_line.damage_prob_analytical[ds],
-                damage_line.damage_prob_simulation_non_cascading[ds])
-
+        for key, grouped in tower.damage_isolation_mc['collapse'].groupby('id_time'):
+            np.testing.assert_almost_equal(
+                len(grouped)/float(self.conf.no_sims),
+                tower.prob_damage_isolation.ix[key, 'collapse'],
+                decimal=1)
 
 # class TestTransmissionConfig(unittest.TestCase):
 

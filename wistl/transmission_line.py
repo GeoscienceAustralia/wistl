@@ -2,9 +2,9 @@ from __future__ import print_function
 
 import os
 import copy
+import warnings
 import pandas as pd
 import numpy as np
-import warnings
 
 from geopy.distance import great_circle
 from scipy.stats import itemfreq
@@ -18,53 +18,54 @@ warnings.filterwarnings("ignore", lineno=100, module='tables')
 class TransmissionLine(object):
     """ class for a collection of towers """
 
-    def __init__(self, conf, df_towers, df_line):
+    def __init__(self, conf, df_towers, ps_line):
 
         self.conf = conf
         self.df_towers = df_towers
-        self.df_line = df_line
-        self.name = df_line['LineRoute']
+        self.ps_line = ps_line
 
-        name_ = self.name.split()
-        self.name_output = '_'.join(x for x in name_ if x.isalnum())
-
+        self.line_string = self.ps_line.line_string
+        self.coord = np.stack(self.ps_line.coord)
+        self.coord_lat_lon = np.stack(self.ps_line.coord_lat_lon)
+        self.name = ps_line.LineRoute
+        self.name_output = ps_line.name_output
         self.no_towers = len(self.df_towers)
 
-        self.coord_line = np.array(self.df_line['Shapes'].points)  # lon, lat
-        actual_span = self.calculate_distance_between_towers()
+        # reset index by tower location according to line shapefile
+        self.df_towers.index = self.sort_by_location()
 
-        self.id2name = dict()
-        self.coord_towers = np.zeros((self.no_towers, 2))
-        id_by_line_unsorted = []
-        name_by_line_unsorted = []
+        if self.conf.figure:
+            self.plot_tower_line()
 
-        for i, (key, val) in enumerate(df_towers.iterrows()):
-            self.id2name[key] = val['Name']
-            self.coord_towers[i, :] = val['Shapes'].points[0]  # [Lon, Lat]
-            id_by_line_unsorted.append(key)
-            name_by_line_unsorted.append(val['Name'])
-        self.sort_idx = self.sort_by_location()
-        self.id_by_line = [id_by_line_unsorted[x] for x in self.sort_idx]
-        self.name_by_line = [name_by_line_unsorted[x] for x in self.sort_idx]
+        self.id_by_line = range(self.no_towers)
+        self.id2name = self.df_towers['Name'].to_dict()
+        self.name_by_line = [self.df_towers.loc[i, 'Name'] for i in
+                             range(self.no_towers)]
+
+        self.df_towers = self.df_towers.join(
+            self.calculate_distance_between_towers())
 
         self.towers = dict()
-        for i, tid in enumerate(self.id_by_line):
-            val = df_towers.loc[tid, :].copy()
-            name = val['Name']
-            val['id'] = tid
-            val['actual_span'] = actual_span[i]
-            self.towers[name] = Tower(conf=self.conf, df_tower=val)
-            self.towers[name].id_sides = self.assign_id_both_sides(i)
-            self.towers[name].id_adj = self.assign_id_adj_towers(i)
+        for id_, ps_tower in self.df_towers.iterrows():
+            name_ = ps_tower.Name
+            self.towers[name_] = Tower(conf=self.conf, ps_tower=ps_tower)
+            self.towers[name_].id_sides = self.assign_id_both_sides(id_)
+            self.towers[name_].id_adj = self.assign_id_adj_towers(id_)
 
-        for key, val in self.towers.iteritems():
-            self.towers[key].id_adj = self.update_id_adj_towers(val)
-            self.towers[key].calculate_cond_pc_adj()
+        for tower in self.towers.itervalues():
+            tower.id_adj = \
+                self.update_id_adj_by_filtering_strainer(tower)
+            tower.calculate_cond_pc_adj()
 
         # moved from damage_line.py
-        self._event_id = None
-        self._time_index = None
-        self._path_event = None
+        self._event_tuple = None
+
+        self.event_id_scale = None
+        self.event_id = None
+        self.scale = None
+
+        self.time_index = None
+        self.path_event = None
 
         # analytical method
         self.damage_prob_analytical = dict()
@@ -79,50 +80,50 @@ class TransmissionLine(object):
         self.prob_no_damage_simulation_non_cascading = None
         self.est_no_damage_simulation_non_cascading = None
 
-    @property
-    def time_index(self):
-        return self._time_index
+        # parallel line interaction
+        self.damage_prob_simulation_line_interaction = dict()
+        self.prob_no_damage_simulation_line_interaction = None
+        self.est_no_damage_simulation_line_interaction = None
 
     @property
-    def event_id(self):
-        return self._event_id
+    def event_tuple(self):
+        return self._event_tuple
 
-    @property
-    def path_event(self):
-        return self._path_event
-
-    @path_event.setter
-    def path_event(self, path_event):
-        self._path_event = path_event
-
-    @event_id.setter
-    def event_id(self, event_id):
-        self._event_id = event_id
-        self._set_damage_tower()
+    @event_tuple.setter
+    def event_tuple(self, value):
+        try:
+            event_id_, scale_ = value
+        except ValueError:
+            raise ValueError("Pass an iterable with two items")
+        else:
+            self.event_id = event_id_
+            self.scale = scale_
+            self.path_event = os.path.join(self.conf.path_wind_scenario_base,
+                                           event_id_)
+            self.event_id_scale = '{}_s{:.1f}'.format(event_id_, scale_)
+            self._set_damage_tower()
 
     def _set_damage_tower(self):
 
-        key = None
-        for key, tower in self.towers.iteritems():
-            file_wind = os.path.join(self._path_event,
+        tower = None
+        for tower in self.towers.itervalues():
+            file_wind = os.path.join(self.path_event,
                                      tower.file_wind_base_name)
 
-            # set wind file, which also sets wind and time_index
-            self.towers[key].file_wind = file_wind
+            # set wind file, and compute damage prob. of tower in isolation
+            tower.event_tuple = (file_wind, self.scale)
+            # self.towers[key].compute_damage_prob_isolation()
 
-            # compute pc_wind and pc_adj
-            self.towers[key].compute_pc_wind()
-            self.towers[key].compute_pc_adj()
-
-        self._time_index = self.towers[key].time_index
+        self.time_index = tower.time_index
 
     def sort_by_location(self):
-        """ sort towers by location"""
+        """ sort towers by location
+        find the index of tower according to line
+        """
 
         idx_sorted = []
-        for item in self.coord_line:
-            diff = (self.coord_towers - np.ones((self.no_towers, 1)) *
-                    item[np.newaxis, :])
+        for item in self.df_towers.coord:
+            diff = self.coord - np.ones((self.no_towers, 1)) * np.stack(item)
             temp = np.linalg.norm(diff, axis=1)
             idx = np.argmin(temp)
             tf = abs(temp[idx]) < 1.0e-4
@@ -131,24 +132,29 @@ class TransmissionLine(object):
                 raise ValueError(msg)
             idx_sorted.append(idx)
 
-        if self.conf.figure:
-
-            import matplotlib
-            matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
-
-            plt.figure()
-            plt.plot(self.coord_line[:, 0],
-                     self.coord_line[:, 1], 'ro-',
-                     self.coord_towers[idx_sorted, 0],
-                     self.coord_towers[idx_sorted, 1], 'b-')
-            plt.title(self.name)
-            png_file = os.path.join(self.conf.path_output,
-                                    'line_{}.png'.format(self.name))
-            plt.savefig(png_file)
-            plt.close()
-
         return idx_sorted
+
+    def plot_tower_line(self):
+
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        coord_towers = []
+        for i in range(self.no_towers):
+            coord_towers.append(self.df_towers.loc[i, 'coord'])
+        coord_towers = np.array(coord_towers)
+
+        plt.figure()
+        plt.plot(self.coord[:, 0],
+                 self.coord[:, 1], 'ro',
+                 coord_towers[:, 0],
+                 coord_towers[:, 1], 'b-')
+        plt.title(self.name)
+        png_file = os.path.join(self.conf.path_output,
+                                'line_{}.png'.format(self.name))
+        plt.savefig(png_file)
+        plt.close()
 
     def assign_id_both_sides(self, idx):
         """
@@ -156,12 +162,10 @@ class TransmissionLine(object):
         :param idx: index of tower
         :return:
         """
-        if idx == 0:
-            return -1, self.id_by_line[idx + 1]
-        elif idx == self.no_towers - 1:
-            return self.id_by_line[idx - 1], -1
+        if idx == self.no_towers - 1:
+            return self.no_towers - 2, -1
         else:
-            return self.id_by_line[idx - 1], self.id_by_line[idx + 1]
+            return idx - 1, idx + 1
 
     def assign_id_adj_towers(self, idx):
         """
@@ -170,13 +174,12 @@ class TransmissionLine(object):
         :return:
         """
 
-        tid = self.id_by_line[idx]
-        max_no_adj_towers = self.towers[self.id2name[tid]].max_no_adj_towers
+        max_no_adj_towers = self.towers[self.id2name[idx]].max_no_adj_towers
 
         list_left = self.create_list_idx(idx, max_no_adj_towers, -1)
         list_right = self.create_list_idx(idx, max_no_adj_towers, 1)
 
-        return list_left[::-1] + [tid] + list_right
+        return list_left[::-1] + [idx] + list_right
 
     def create_list_idx(self, idx, no_towers, flag_direction):
         """
@@ -187,29 +190,28 @@ class TransmissionLine(object):
         :param flag_direction:
         :return:
         """
-        list_tid = []
+        list_id = []
         for i in range(no_towers):
             idx += flag_direction
             if idx < 0 or idx > self.no_towers - 1:
-                list_tid.append(-1)
+                list_id.append(-1)
             else:
-                list_tid.append(self.id_by_line[idx])
-        return list_tid
+                list_id.append(idx)
+        return list_id
 
     def calculate_distance_between_towers(self):
         """ calculate actual span between the towers """
-        dist_forward = np.zeros(len(self.coord_line) - 1)
-        for i, (pt0, pt1) in enumerate(zip(self.coord_line[0:-1],
-                                       self.coord_line[1:])):
-            dist_forward[i] = great_circle(pt0[::-1], pt1[::-1]).meters
+        dist_forward = np.zeros(len(self.coord_lat_lon) - 1)
+        for i, (pt0, pt1) in enumerate(zip(self.coord_lat_lon[0:-1],
+                                       self.coord_lat_lon[1:])):
+            dist_forward[i] = great_circle(pt0, pt1).meters
 
         actual_span = 0.5 * (dist_forward[0:-1] + dist_forward[1:])
         actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
         actual_span = np.append(actual_span, [0.5 * dist_forward[-1]])
+        return pd.DataFrame(actual_span, columns=['actual_span'])
 
-        return actual_span
-
-    def update_id_adj_towers(self, tower):
+    def update_id_adj_by_filtering_strainer(self, tower):
         """
         replace id of strain tower with -1
         :param tower:
@@ -217,17 +219,19 @@ class TransmissionLine(object):
         """
         id_adj = tower.id_adj
         for i, tid in enumerate(id_adj):
-            if tid >= 0:
-                function_ = self.towers[self.id2name[tid]].function
-                if function_ in self.conf.strainer:
+            try:
+                name_ = self.id2name[tid]
+            except KeyError:
+                pass
+            else:
+                if self.towers[name_].function in self.conf.strainer:
                     id_adj[i] = -1
         return id_adj
 
-    # Moved from damage_line.py
     def write_hdf5(self, file_str, val):
 
         h5file = os.path.join(self.conf.path_output,
-                              self.event_id,
+                              self.event_id_scale,
                               '{}_{}.h5'.format(file_str, self.name_output))
         hdf = pd.HDFStore(h5file)
 
@@ -245,17 +249,18 @@ class TransmissionLine(object):
         pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
         """
 
+        for tower in self.towers.itervalues():
+            tower.compute_damage_prob_adjacent()  # FIXME
+
         pc_adj_agg = np.zeros((self.no_towers,
                                self.no_towers,
                                len(self.time_index)))
 
         # prob of collapse
-        for i_row, name in enumerate(self.name_by_line):
-            for j in self.towers[name].pc_adj.keys():
-                j_col = self.id_by_line.index(j)
-                pc_adj_agg[i_row, j_col, :] = self.towers[name].pc_adj[j]
-            pc_adj_agg[i_row, i_row, :] = \
-                self.towers[name].pc_wind.collapse.values
+        for i, name in zip(self.id_by_line, self.name_by_line):
+            for j in self.towers[name].prob_damage_adjacent.keys():
+                pc_adj_agg[i, j, :] = self.towers[name].prob_damage_adjacent[j]
+            pc_adj_agg[i, i, :] = self.towers[name].prob_damage_isolation.collapse.values
 
         # pc_collapse.shape == (no_tower, no_time)
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
@@ -267,16 +272,16 @@ class TransmissionLine(object):
 
         # prob of non-collapse damage
         cds_list = copy.deepcopy(self.conf.damage_states)
-        cds_list.remove('collapse')  # non-collapse
+        cds_list.pop()  # remove the last item 'collapse'
 
         for ds in cds_list:
             temp = np.zeros_like(pc_collapse)
-            for i_row, name in enumerate(self.name_by_line):
-                val = (self.towers[name].pc_wind[ds].values -
-                       self.towers[name].pc_wind.collapse.values +
-                       pc_collapse[i_row, :])
+            for i, name in zip(self.id_by_line, self.name_by_line):
+                val = (self.towers[name].prob_damage_isolation[ds].values -
+                       self.towers[name].prob_damage_isolation.collapse.values +
+                       pc_collapse[i, :])
                 val = np.where(val > 1.0, [1.0], val)
-                temp[i_row, :] = val
+                temp[i, :] = val
 
             self.damage_prob_analytical[ds] = pd.DataFrame(
                 temp.T,
@@ -287,52 +292,117 @@ class TransmissionLine(object):
             self.write_hdf5(file_str='damage_prob_analytical',
                             val=self.damage_prob_analytical)
 
-    def compute_damage_probability_simulation(self):
+    # def compute_damage_probability_simulation(self, seed):
+    #
+    #     # perfect correlation within a single line
+    #     rnd_state = np.random.RandomState(seed)
+    #
+    #     rv = rnd_state.uniform(size=(self.conf.no_sims, len(self.time_index)))
+    #
+    #     tf_ds = np.zeros((self.no_towers,
+    #                       self.conf.no_sims,
+    #                       len(self.time_index)), dtype=bool)
+    #
+    #     # collapse by adjacent towers
+    #     for tower in self.towers.itervalues():
+    #
+    #         tower.compute_mc_adj(rv, seed)
+    #         # tower.determine_damage_isolation_mc(rv)
+    #         # tower.determine_damage_adjacent_mc(seed)
+    #
+    #         for id_time, item in tower.damage_adjacent_mc.iteritems():
+    #             for id_adj, id_sim in item.iteritems():
+    #                 for i in id_adj:
+    #                     tf_ds[i, id_sim, id_time] = True
+    #
+    #     cds_list = self.conf.damage_states[:]  # to avoid effect
+    #     cds_list.reverse()  # [collapse, minor]
+    #
+    #     tf_sim = dict()
+    #
+    #     # append damage state by direct wind
+    #     for ds in cds_list:
+    #         for i_row, name in enumerate(self.name_by_line):
+    #
+    #             for j, k in zip(self.towers[name].damage_isolation_mc[ds]['id_sim'],
+    #                             self.towers[name].damage_isolation_mc[ds]['id_time']):
+    #
+    #                 tf_ds[i_row, j, k] = True
+    #
+    #         self.damage_prob_simulation[ds] = pd.DataFrame(
+    #             np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
+    #             columns=self.name_by_line,
+    #             index=self.time_index)
+    #
+    #         tf_sim[ds] = np.copy(tf_ds)  #
+    #
+    #     # line_interaction
+    #     # if self.conf.line_interaction:
+    #
+    #     self.est_no_damage_simulation, self.prob_no_damage_simulation = \
+    #         self.compute_damage_stats(tf_sim)
+    #
+    #     if self.conf.save:
+    #
+    #         self.write_hdf5(file_str='damage_prob_simulation',
+    #                         val=self.damage_prob_simulation)
+    #
+    #         self.write_hdf5(file_str='est_no_damage_simulation',
+    #                         val=self.est_no_damage_simulation)
+    #
+    #         self.write_hdf5(file_str='prob_no_damage_simulation',
+    #                         val=self.prob_no_damage_simulation)
+
+    def compute_damage_probability_simulation(self, seed):
+
+        # perfect correlation within a single line
+        rnd_state = np.random.RandomState(seed)
+        rv = rnd_state.uniform(size=(self.conf.no_sims, len(self.time_index)))
 
         tf_ds = np.zeros((self.no_towers,
                           self.conf.no_sims,
                           len(self.time_index)), dtype=bool)
 
         # collapse by adjacent towers
-        for name in self.name_by_line:
+        for tower in self.towers.itervalues():
 
-            for j in self.towers[name].mc_adj.keys():  # time
+            # tower.compute_mc_adj(rv, seed)
+            tower.determine_damage_isolation_mc(rv)
+            tower.determine_damage_adjacent_mc(seed)
 
-                for k in self.towers[name].mc_adj[j].keys():  # fid
-
-                    id_sim = self.towers[name].mc_adj[j][k]
-
-                    for l in k:  # each fid
-
-                        tf_ds[self.id_by_line.index(l), id_sim, j] = True
+            for id_time, item in tower.damage_adjacent_mc.iteritems():
+                for id_adj, id_sim in item.iteritems():
+                    for i in id_adj:
+                        try:
+                            tf_ds[i, id_sim, id_time] = True
+                        except ValueError:
+                            msg = 'id:{},\nid_sim:{}\n,id_time:{}'.\
+                                format(i, id_sim, id_time)
+                            raise ValueError(msg)
 
         cds_list = self.conf.damage_states[:]  # to avoid effect
         cds_list.reverse()  # [collapse, minor]
 
         tf_sim = dict()
-
         # append damage state by direct wind
         for ds in cds_list:
+            for tower in self.towers.itervalues():
+                for id_time, grouped in \
+                        tower.damage_isolation_mc[ds].groupby('id_time'):
 
-            for i_row, name in enumerate(self.name_by_line):
-
-                for j, k in zip(self.towers[name].mc_wind[ds]['id_sim'],
-                                self.towers[name].mc_wind[ds]['id_time']):
-
-                    tf_ds[i_row, j, k] = True
+                    tf_ds[tower.id, grouped.id_sim.tolist(), id_time] = True
 
             self.damage_prob_simulation[ds] = pd.DataFrame(
                 np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
                 columns=self.name_by_line,
                 index=self.time_index)
 
-            tf_sim[ds] = np.copy(tf_ds)  # why copy??
+            tf_sim[ds] = np.copy(tf_ds)  #
 
         self.est_no_damage_simulation, self.prob_no_damage_simulation = \
             self.compute_damage_stats(tf_sim)
 
         if self.conf.save:
-
             self.write_hdf5(file_str='damage_prob_simulation',
                             val=self.damage_prob_simulation)
 
@@ -354,8 +424,8 @@ class TransmissionLine(object):
 
             for i_row, name in enumerate(self.name_by_line):
 
-                id_sim = self.towers[name].mc_wind[ds]['id_sim']
-                id_time = self.towers[name].mc_wind[ds]['id_time']
+                id_sim = self.towers[name].damage_isolation_mc[ds]['id_sim']
+                id_time = self.towers[name].damage_isolation_mc[ds]['id_time']
 
                 tf_ds[i_row, id_sim, id_time] = True
 
@@ -428,3 +498,23 @@ class TransmissionLine(object):
                 index=self.time_index)
 
         return est_damage_tower, prob_damage_tower
+
+    '''
+    def compute_damage_probability_simulation_line_interaction(self):
+
+        for tower in self.towers.iteritems():
+
+            # if
+
+            for target_line,
+                target_tower_id in tower.id_on_target_line.iteritems():
+
+                #
+
+        for target_line in self.conf.line_interaction[self.name]:
+
+            tf_ds = np.zeros((target_line.no_towers,
+                              self.conf.no_sims,
+                              len(self.time_index)), dtype=bool)
+
+    '''
