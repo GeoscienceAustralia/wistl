@@ -92,23 +92,23 @@ class TransmissionLine(object):
     @event_tuple.setter
     def event_tuple(self, value):
         try:
-            event_id_, scale_ = value
+            event_id, scale = value
         except ValueError:
             raise ValueError("Pass an iterable with two items")
         else:
-            self.event_id = event_id_
-            self.scale = scale_
+            self.event_id = event_id
+            self.scale = scale
             self.path_event = os.path.join(self.conf.path_wind_scenario_base,
-                                           event_id_)
-            self.event_id_scale = '{}_s{:.1f}'.format(event_id_, scale_)
+                                           event_id)
+            self.event_id_scale = self.conf.event_id_scale_str.format(
+                event_id=event_id, scale=scale)
             self._set_damage_tower()
 
     def _set_damage_tower(self):
 
         tower = None
         for tower in self.towers.itervalues():
-            file_wind = os.path.join(self.path_event,
-                                     tower.file_wind_base_name)
+            file_wind = os.path.join(self.path_event, tower.file_wind_base_name)
 
             # set wind file, and compute damage prob. of tower in isolation
             tower.event_tuple = (file_wind, self.scale)
@@ -122,8 +122,8 @@ class TransmissionLine(object):
         """
 
         idx_sorted = []
-        for item in self.df_towers.coord:
-            diff = self.coord - np.ones((self.no_towers, 1)) * np.stack(item)
+        for coord in self.df_towers.coord:
+            diff = self.coord - np.ones((self.no_towers, 1)) * np.stack(coord)
             temp = np.linalg.norm(diff, axis=1)
             idx = np.argmin(temp)
             tf = abs(temp[idx]) < 1.0e-4
@@ -248,19 +248,19 @@ class TransmissionLine(object):
         Pi,j: collapse probability due to collapse of j (=Pd(j)*Pc(i|j))
         pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
         """
-
-        for tower in self.towers.itervalues():
-            tower.compute_damage_prob_adjacent()  # FIXME
-
         pc_adj_agg = np.zeros((self.no_towers,
                                self.no_towers,
                                len(self.time_index)))
 
         # prob of collapse
-        for i, name in zip(self.id_by_line, self.name_by_line):
-            for j in self.towers[name].prob_damage_adjacent.keys():
-                pc_adj_agg[i, j, :] = self.towers[name].prob_damage_adjacent[j]
-            pc_adj_agg[i, i, :] = self.towers[name].prob_damage_isolation.collapse.values
+        for tower in self.towers.itervalues():
+            tower.compute_damage_prob_adjacent()  # FIXME
+
+            for key, value in tower.prob_damage_adjacent.iteritems():
+                pc_adj_agg[tower.id, key, :] = value
+
+            pc_adj_agg[tower.id, tower.id, :] = \
+                tower.prob_damage_isolation.collapse.values
 
         # pc_collapse.shape == (no_tower, no_time)
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
@@ -276,12 +276,11 @@ class TransmissionLine(object):
 
         for ds in cds_list:
             temp = np.zeros_like(pc_collapse)
-            for i, name in zip(self.id_by_line, self.name_by_line):
-                val = (self.towers[name].prob_damage_isolation[ds].values -
-                       self.towers[name].prob_damage_isolation.collapse.values +
-                       pc_collapse[i, :])
-                val = np.where(val > 1.0, [1.0], val)
-                temp[i, :] = val
+            for tower in self.towers.itervalues():
+                value = tower.prob_damage_isolation[ds].values \
+                        - tower.prob_damage_isolation.collapse.values \
+                        + pc_collapse[tower.id, :]
+                temp[tower.id, :] = np.where(value > 1.0, [1.0], value)
 
             self.damage_prob_analytical[ds] = pd.DataFrame(
                 temp.T,
@@ -291,67 +290,6 @@ class TransmissionLine(object):
         if self.conf.save:
             self.write_hdf5(file_str='damage_prob_analytical',
                             val=self.damage_prob_analytical)
-
-    # def compute_damage_probability_simulation(self, seed):
-    #
-    #     # perfect correlation within a single line
-    #     rnd_state = np.random.RandomState(seed)
-    #
-    #     rv = rnd_state.uniform(size=(self.conf.no_sims, len(self.time_index)))
-    #
-    #     tf_ds = np.zeros((self.no_towers,
-    #                       self.conf.no_sims,
-    #                       len(self.time_index)), dtype=bool)
-    #
-    #     # collapse by adjacent towers
-    #     for tower in self.towers.itervalues():
-    #
-    #         tower.compute_mc_adj(rv, seed)
-    #         # tower.determine_damage_isolation_mc(rv)
-    #         # tower.determine_damage_adjacent_mc(seed)
-    #
-    #         for id_time, item in tower.damage_adjacent_mc.iteritems():
-    #             for id_adj, id_sim in item.iteritems():
-    #                 for i in id_adj:
-    #                     tf_ds[i, id_sim, id_time] = True
-    #
-    #     cds_list = self.conf.damage_states[:]  # to avoid effect
-    #     cds_list.reverse()  # [collapse, minor]
-    #
-    #     tf_sim = dict()
-    #
-    #     # append damage state by direct wind
-    #     for ds in cds_list:
-    #         for i_row, name in enumerate(self.name_by_line):
-    #
-    #             for j, k in zip(self.towers[name].damage_isolation_mc[ds]['id_sim'],
-    #                             self.towers[name].damage_isolation_mc[ds]['id_time']):
-    #
-    #                 tf_ds[i_row, j, k] = True
-    #
-    #         self.damage_prob_simulation[ds] = pd.DataFrame(
-    #             np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
-    #             columns=self.name_by_line,
-    #             index=self.time_index)
-    #
-    #         tf_sim[ds] = np.copy(tf_ds)  #
-    #
-    #     # line_interaction
-    #     # if self.conf.line_interaction:
-    #
-    #     self.est_no_damage_simulation, self.prob_no_damage_simulation = \
-    #         self.compute_damage_stats(tf_sim)
-    #
-    #     if self.conf.save:
-    #
-    #         self.write_hdf5(file_str='damage_prob_simulation',
-    #                         val=self.damage_prob_simulation)
-    #
-    #         self.write_hdf5(file_str='est_no_damage_simulation',
-    #                         val=self.est_no_damage_simulation)
-    #
-    #         self.write_hdf5(file_str='prob_no_damage_simulation',
-    #                         val=self.prob_no_damage_simulation)
 
     def compute_damage_probability_simulation(self, seed):
 
@@ -370,15 +308,9 @@ class TransmissionLine(object):
             tower.determine_damage_isolation_mc(rv)
             tower.determine_damage_adjacent_mc(seed)
 
-            for id_time, item in tower.damage_adjacent_mc.iteritems():
-                for id_adj, id_sim in item.iteritems():
-                    for i in id_adj:
-                        try:
-                            tf_ds[i, id_sim, id_time] = True
-                        except ValueError:
-                            msg = 'id:{},\nid_sim:{}\n,id_time:{}'.\
-                                format(i, id_sim, id_time)
-                            raise ValueError(msg)
+            for id_adj, grouped in tower.damage_adjacent_mc.groupby('id_adj'):
+                for i in id_adj:
+                    tf_ds[i, grouped['id_sim'], grouped['id_time']] = True
 
         cds_list = self.conf.damage_states[:]  # to avoid effect
         cds_list.reverse()  # [collapse, minor]
@@ -387,10 +319,10 @@ class TransmissionLine(object):
         # append damage state by direct wind
         for ds in cds_list:
             for tower in self.towers.itervalues():
-                for id_time, grouped in \
-                        tower.damage_isolation_mc[ds].groupby('id_time'):
 
-                    tf_ds[tower.id, grouped.id_sim.tolist(), id_time] = True
+                tf_ds[tower.id,
+                      tower.damage_isolation_mc[ds].id_sim,
+                      tower.damage_isolation_mc[ds].id_time] = True
 
             self.damage_prob_simulation[ds] = pd.DataFrame(
                 np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
