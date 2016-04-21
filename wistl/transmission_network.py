@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from shapely.geometry import LineString, Point
+from geopy.distance import great_circle
 
 from wistl.transmission_line import TransmissionLine
 
@@ -22,12 +23,12 @@ def create_damaged_network(conf):
 
     damaged_networks = dict()
 
-    for event_id_ in conf.scale:
+    for event_id, scale_list in conf.scale.iteritems():
 
-        for scale_ in conf.scale[event_id_]:
+        for scale in scale_list:
 
-            event_id_scale = conf.event_id_scale_str.format(event_id=event_id_,
-                                                            scale=scale_)
+            event_id_scale = conf.event_id_scale_str.format(event_id=event_id,
+                                                            scale=scale)
 
             if event_id_scale in damaged_networks:
                 msg = '{} is already assigned'.format(event_id_scale)
@@ -35,12 +36,13 @@ def create_damaged_network(conf):
 
             path_output_scenario = os.path.join(conf.path_output,
                                                 event_id_scale)
+
             if not os.path.exists(path_output_scenario) and conf.save:
                 os.makedirs(path_output_scenario)
                 print('{} is created'.format(path_output_scenario))
 
             damaged_networks[event_id_scale] = TransmissionNetwork(conf)
-            damaged_networks[event_id_scale].event_tuple = (event_id_, scale_)
+            damaged_networks[event_id_scale].event_tuple = (event_id, scale)
 
     return damaged_networks
 
@@ -52,35 +54,31 @@ class TransmissionNetwork(object):
 
         self.conf = conf
 
-        self.df_towers = read_shape_file(self.conf.file_shape_tower)
-        self.df_towers = populate_df_towers(self.df_towers, self.conf)
-
-        self.df_lines = read_shape_file(self.conf.file_shape_line)
-        self.df_lines = populate_df_lines(self.df_lines)
-
         self._event_tuple = None
-
         self.event_id_scale = None
         self.event_id = None
         self.scale = None
         self.path_event = None
         self.time_index = None
 
-        self.lines = dict()
-        for name, grouped in self.df_towers.groupby('LineRoute'):
+        self.df_towers = read_shape_file(self.conf.file_shape_tower)
+        self.df_towers = populate_df_towers(self.df_towers, self.conf)
 
-            if name in self.conf.selected_lines:
+        self.df_lines = read_shape_file(self.conf.file_shape_line)
+        self.df_lines = populate_df_lines(self.df_lines)
+
+        self.lines = dict()
+        for line_name, grouped in self.df_towers.groupby('LineRoute'):
+
+            if line_name in self.conf.selected_lines:
                 try:
                     idx = self.df_lines[self.df_lines.LineRoute ==
-                                        name].index[0]
+                                        line_name].index[0]
                 except IndexError:
-                    msg = '{} not in the line shapefile'.format(name)
+                    msg = '{} not in the line shapefile'.format(line_name)
                     raise IndexError(msg)
 
-                # index reset for each line
-                # grouped.reset_index(inplace=True, drop=True)
-
-                self.lines[name] = TransmissionLine(
+                self.lines[line_name] = TransmissionLine(
                     conf=self.conf,
                     df_towers=grouped,
                     ps_line=self.df_lines.loc[idx])
@@ -98,17 +96,16 @@ class TransmissionNetwork(object):
     @event_tuple.setter
     def event_tuple(self, value):
         try:
-            event_id_, scale_ = value
+            event_id, scale = value
         except ValueError:
             raise ValueError("Pass a tuple of event_id and scale")
         else:
-            # self.event_tuple = value
-            self.event_id = event_id_
-            self.scale = scale_
+            self.event_id = event_id
+            self.scale = scale
             self.path_event = os.path.join(self.conf.path_wind_scenario_base,
-                                           event_id_)
+                                           event_id)
             self.event_id_scale = self.conf.event_id_scale_str.format(
-                event_id=event_id_, scale=scale_)
+                event_id=event_id, scale=scale)
             self._set_damage_line()
 
     def _set_damage_line(self):
@@ -199,103 +196,276 @@ def populate_df_lines(df_lines):
     :param df_lines:
     :return:
     """
-    df_lines = df_lines.merge(df_lines['Shapes'].apply(assign_shapely_data),
-                              left_index=True, right_index=True)
+    # coord, coord_lat_lon, line_string
+    df_lines['coord'] = df_lines['Shapes'].apply(lambda x: x.points)
+    df_lines['coord_lat_lon'] = df_lines['Shapes'].apply(
+        lambda x: np.array(x.points)[:, :-1].tolist())
+    df_lines['line_string'] = df_lines['Shapes'].apply(
+        lambda x: LineString(x.points))
+
+    # name_output
     df_lines['name_output'] = df_lines['LineRoute'].apply(
         lambda x: '_'.join(x for x in x.split() if x.isalnum()))
+
+    df_lines['actual_span'] = df_lines['coord_lat_lon'].apply(
+        calculate_distance_between_towers)
     return df_lines
-
-def assign_design_values(line_route, conf):
-    design_value = conf.design_value[line_route]
-    return pd.Series({'design_span': design_value['span'],
-                      'design_level': design_value['level'],
-                      'design_speed': design_value['speed'],
-                      'terrain_cat': design_value['cat']})
-
-def assign_shapely_data(x):
-    if len(x.points) == 1:
-        coord = x.points[0]
-        return pd.Series({'coord': coord,
-                          'coord_lat_lon': np.array(coord)[::-1].tolist(),
-                          'point': Point(coord)})
-    else:
-        coord = x.points
-        return pd.Series({'coord': coord,
-                          'coord_lat_lon': np.array(coord)[:, ::-1].tolist(),
-                          'line_string': LineString(coord)})
-
-    #     self.df_towers['point'] = \
-    #     df_towers.apply(lambda x: Point(x.Shapes.points[0]), axis=1)
-    # df_towers['coord'] = df_towers.apply(lambda x: x.Shapes.points[0], axis=1)
-    # df_towers['coord_lat_lon'] = \
-    #     df_towers.apply(lambda x: x.Shapes.points[0].tolist()[::-1], axis=1)
-
-    #
-    # df_lines['coord'], df_lines['coord_lat_lon'], df_lines['line_string'] = \
-    #     zip(*df_lines['Shapes'].map(assign_shapely_data))
-
-    # df_lines['line_string'] = \
-    #     df_lines.apply(lambda x: LineString(x.Shapes.points), axis=1)
-    # df_lines['coord'] = \
-    #     df_lines.apply(lambda x: x.Shapes.points, axis=1)
-    # df_lines['coord_lat_lon'] = \
-    #     df_lines.apply(lambda x: np.array(x.Shapes.points)[:, ::-1].tolist(),
-    #                    axis=1)
-    # df_lines['name_output'] = \
-    #     df_lines.apply(lambda x: '_'.join(x for x in x.LineRoute.split()
-    #                                       if x.isalnum()), axis=1)
 
 
 def populate_df_towers(df_towers, conf):
     """
-    add columns to df_towers
+    create columns of tower attributes: coord, coord_lat_lon, Point,
+    design_span, design_level, design_speed, terrain_cat, no_circuit,
+    file_wind_base_name, frag_func, frag_scale, frag_arg, cond_pc,
+    max_no_adj_towers, height_z, file_wind_base_name,
+
     :param df_towers:
     :param conf:
     :return:
     """
 
-    df_towers = df_towers.merge(df_towers['Shapes'].apply(assign_shapely_data),
-                                left_index=True, right_index=True)
-    df_towers = df_towers.merge(df_towers['LineRoute'].apply(
-        assign_design_values, args=(conf,)), left_index=True, right_index=True)
+    # coord, coord_lat_lon, Point
+    df_towers['coord'] = df_towers['Shapes'].apply(lambda x: x.points[0])
+    df_towers['coord_lat_lon'] = df_towers['Shapes'].apply(
+        lambda x: np.array(x.points[0])[::-1].tolist())
+    df_towers['point'] = df_towers['Shapes'].apply(lambda x: Point(x.points[0]))
+
+    # design_span, design_level, design_speed, terrain_cat
+    df_towers['design_span'] = df_towers['LineRoute'].apply(
+        lambda x: conf.design_value[x]['span'])
+    df_towers['design_level'] = df_towers['LineRoute'].apply(
+        lambda x: conf.design_value[x]['level'])
+    df_towers['design_speed'] = df_towers['LineRoute'].apply(
+        lambda x: conf.design_value[x]['speed'])
+    df_towers['terrain_cat'] = df_towers['LineRoute'].apply(
+        lambda x: conf.design_value[x]['cat'])
+
+    # adjust design speed
+    if conf.adjust_design_by_topography:
+        df_towers['design_speed'] *= df_towers['Name'].apply(
+            adjust_design_speed, args=(conf,))
+
+    # height_z
+    df_towers['height_z'] = df_towers['Function'].apply(
+        lambda x: conf.drag_height[x])
+
+    # file_wind_base_name
+    df_towers['file_wind_base_name'] = df_towers['Name'].apply(
+        lambda x: conf.wind_file_head + x + conf.wind_file_tail)
+    df_towers['no_circuit'] = 2  # double circuit for all towers
+
+    # frag_func, frag_scale, frag_arg
     df_towers = df_towers.merge(df_towers.apply(assign_fragility_parameters,
                                                 args=(conf,), axis=1),
                                 left_index=True, right_index=True)
-    df_towers['file_wind_base_name'] = df_towers['Name'].apply(
-        lambda x: conf.wind_file_head + x + conf.wind_file_tail)
+
+    # cond_pc, max_no_adj_towers
+    df_towers = df_towers.merge(df_towers.apply(assign_cond_collapse_prob,
+                                                args=(conf,), axis=1),
+                                left_index=True, right_index=True)
+
+    df_towers['factor_10_to_z'] = df_towers.apply(convert_10_to_z, args=(conf,),
+                                                  axis=1)
 
     return df_towers
 
-def assign_fragility_parameters(ps_tower, cfg):
+
+def mc_loop_over_line(damage_line):
+    """
+    mc simulation over transmission line
+    :param damage_line: instance of transmission line
+    :return: None but update attributes of
+    """
+
+    event_id = damage_line.event_id
+    line_name = damage_line.name
+
+    if damage_line.conf.random_seed:
+        try:
+            seed = damage_line.conf.seed[event_id][line_name]
+        except KeyError:
+            msg = '{}:{} is undefined. Check the config file'.format(
+                event_id, line_name)
+            raise KeyError(msg)
+    else:
+        seed = None
+
+    # perfect correlation within a single line
+    damage_line.compute_damage_probability_simulation(seed)
+
+    if not damage_line.conf.skip_non_cascading_collapse:
+        damage_line.compute_damage_probability_simulation_non_cascading()
+
+    try:
+        damage_line.conf.line_interaction[line_name]
+    except (TypeError, KeyError):
+        pass
+    else:
+        damage_line.compute_damage_probability_simulation_line_interaction()
+
+
+# def assign_design_values(line_route, conf):
+#     """
+#     assign design values
+#     :param line_route:
+#     :param conf:
+#     :return: pandas series
+#     """
+
+
+def assign_cond_collapse_prob(ps_tower, conf):
+    """ get dict of conditional collapse probabilities
+    :return: cond_pc, max_no_adj_towers
+    """
+
+    ps_cond = pd.Series({'cond_pc': dict(),
+                        'max_no_adj_towers': None})
+
+    att_value = ps_tower[conf.cond_collapse_prob_metadata['by']]
+    df_prob = conf.cond_collapse_prob[att_value]
+
+    att = conf.cond_collapse_prob_metadata[att_value]['by']
+    att_type = conf.cond_collapse_prob_metadata[att_value]['type']
+    tf_array = None
+    if att_type == 'string':
+        tf_array = df_prob[att] == ps_tower[att]
+    elif att_type == 'numeric':
+        tf_array = (df_prob[att + '_lower'] <= ps_tower[att]) & \
+                   (df_prob[att + '_upper'] > ps_tower[att])
+
+    # change to dictionary
+    ps_cond['cond_pc'] = dict(zip(df_prob.loc[tf_array, 'list'],
+                                  df_prob.loc[tf_array, 'probability']))
+    ps_cond['max_no_adj_towers'] = \
+        conf.cond_collapse_prob_metadata[att_value]['max_adj']
+
+    return ps_cond
+
+
+def convert_10_to_z(ps_tower, conf):
+    """
+    compute Mz,cat(h=z) / Mz,cat(h=10)
+    :param ps_tower:
+    :param conf:
+    :return: ratio of Mz,cat(z) to Mz,cat(10)
+    """
+    try:
+        terrain_cat = 'tc' + str(ps_tower.terrain_cat)
+    except AttributeError:
+        msg = 'attribute:{} is not found'.format('terrain_cat')
+        raise AttributeError(msg)
+
+    try:
+        terrain_multiplier_z = np.interp(
+            ps_tower.height_z,
+            conf.terrain_multiplier['height'],
+            conf.terrain_multiplier[terrain_cat])
+    except KeyError:
+        msg = '{} is undefined in {}'.format(
+            terrain_cat, conf.file_terrain_multiplier)
+        raise KeyError(msg)
+    except AttributeError:
+        msg = 'attribute:{} is not found'.format('height_z')
+        raise AttributeError(msg)
+
+    id10 = conf.terrain_multiplier['height'].index(10)
+    terrain_multiplier_10 = conf.terrain_multiplier[terrain_cat][id10]
+    return terrain_multiplier_z / terrain_multiplier_10
+
+
+# def assign_shapely_point(x):
+#     """
+#     assign shapely point
+#     :param shape: shapefile._Shape instance
+#     :return: pd.Series('coord': [lon, lat],
+#                        'coord_lat_lon': [lat, lon],
+#                        'point': Shapely.Point instance)
+#     """
+#     coord = shape.points[0]
+#     return pd.Series({'coord': coord,
+#                       'coord_lat_lon': np.array(coord)[::-1].tolist(),
+#                       'point': Point(coord)})
+
+
+# def assign_shapely_line(shape):
+#     """
+#     add pandas series data
+#     :param shape: shapefile._Shape instance
+#     :return: pd.Series('coord': list of [lon, lat],
+#                        'coord_lat_lon': list of [lat, lon],
+#                        'line_string': Shapely.LineString instance)
+#     """
+#     coord = shape.points
+#     return pd.Series({'coord': coord,
+#                       'coord_lat_lon': np.array(coord)[:, ::-1].tolist(),
+#                       'line_string': LineString(coord)})
+
+
+def assign_fragility_parameters(ps_tower, conf):
     """
 
     :param ps_tower:
-    :param cfg:
+    :param conf:
     :return:
     """
-    tf_array = np.ones((cfg.fragility.shape[0],), dtype=bool)
-    for att, att_type in zip(cfg.fragility_metadata['by'],
-                             cfg.fragility_metadata['type']):
+    tf_array = np.ones((conf.fragility.shape[0],), dtype=bool)
+    for att, att_type in zip(conf.fragility_metadata['by'],
+                             conf.fragility_metadata['type']):
         if att_type == 'string':
-            tf_array *= cfg.fragility[att] == ps_tower[att]
+            try:
+                tf_array *= conf.fragility[att] == ps_tower[att]
+            except AttributeError:
+                msg = 'attribute:{} is not defined'.format(att)
+                raise AttributeError(msg)
         elif att_type == 'numeric':
-            tf_array *= (cfg.fragility[att + '_lower'] <=
-                         ps_tower[att]) & \
-                        (cfg.fragility[att + '_upper'] >
-                         ps_tower[att])
+            try:
+                tf_array *= (conf.fragility[att + '_lower'] <= ps_tower[att]) &\
+                            (conf.fragility[att + '_upper'] > ps_tower[att])
+            except AttributeError:
+                msg = 'attribute:{} is not defined'.format(att)
+                raise AttributeError(msg)
+        else:
+            msg = 'attrib. type should be either string or numeric'
+            raise TypeError(msg)
 
-    params = pd.Series({'frag_scale': dict(), 'frag_arg': dict(), 'frag_func': None})
-    for ds in cfg.damage_states:
-        idx = tf_array & (cfg.fragility['limit_states'] == ds)
-        assert (sum(idx) == 1)
-        fn_form = cfg.fragility.loc[
-            idx, cfg.fragility_metadata['function']].values[0]
-        params['frag_func'] = fn_form
-        params['frag_scale'][ds] = cfg.fragility.loc[
-            idx, cfg.fragility_metadata[fn_form]['scale']].values[0]
-        params['frag_arg'][ds] = cfg.fragility.loc[
-            idx, cfg.fragility_metadata[fn_form]['arg']].values[0]
-    return params
+    ps_frag = pd.Series({'frag_scale': dict(), 'frag_arg': dict(),
+                        'frag_func': None})
+    for ds in conf.damage_states:
+        idx = tf_array & (conf.fragility['limit_states'] == ds)
+        ps_selected = conf.fragility.loc[idx]
+        assert sum(idx) == 1
+        ps_frag['frag_func'] = ps_selected[
+            conf.fragility_metadata['function']].values[0]
+        frag_func = conf.fragility_metadata[ps_frag['frag_func']]
+        ps_frag['frag_scale'][ds] = ps_selected[frag_func['scale']].values[0]
+        ps_frag['frag_arg'][ds] = ps_selected[frag_func['arg']].values[0]
+    return ps_frag
+
+
+def adjust_design_speed(tower_name, conf):
+    """
+    compute design adjustment factor based on topography
+    :param tower_name: tower name
+    :param conf:
+    :return:
+    """
+    id_topo = sum(conf.topo_multiplier[tower_name] >=
+                  conf.design_adjustment_factor_by_topo['threshold'])
+    return conf.design_adjustment_factor_by_topo[id_topo]
+
+
+def calculate_distance_between_towers(coord_lat_lon):
+    """ calculate actual span between the towers """
+    coord_lat_lon = np.stack(coord_lat_lon)
+    dist_forward = np.zeros(len(coord_lat_lon) - 1)
+    for i, (pt0, pt1) in enumerate(zip(coord_lat_lon[0:-1],
+                                       coord_lat_lon[1:])):
+        dist_forward[i] = great_circle(pt0, pt1).meters
+
+    actual_span = 0.5 * (dist_forward[0:-1] + dist_forward[1:])
+    actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
+    actual_span = np.append(actual_span, [0.5 * dist_forward[-1]])
+    return actual_span
 
 
 def find_id_nearest_pt(pt_coord, line_coord):
@@ -337,46 +507,3 @@ def read_shape_file(file_shape):
         data_frame['Shapes'] = shapes
 
     return data_frame
-
-
-def mc_loop_over_line(damage_line):
-    """
-    mc simulation over transmission line
-    :param damage_line: instance of transmission line
-    :return: None but update attributes of
-    """
-
-    event_id = damage_line.event_id
-    line_name = damage_line.name
-
-    if damage_line.conf.random_seed:
-        try:
-            seed = damage_line.conf.seed[event_id][line_name]
-        except KeyError:
-            msg = '{}:{} is undefined. Check the config file'.format(
-                event_id, line_name)
-            raise KeyError(msg)
-    else:
-        seed = None
-
-    # # perfect correlation within a single line
-    # rv = rnd_state.uniform(size=(damage_line.conf.no_sims,
-    #                              len(damage_line.time_index)))
-    #
-    # for tower in damage_line.towers.itervalues():
-    #     tower.compute_damage_prob_adjacent_by_simulation(rv, seed)
-
-    # perfect correlation within a single line
-    damage_line.compute_damage_probability_simulation(seed)
-
-    if not damage_line.conf.skip_non_cascading_collapse:
-        damage_line.compute_damage_probability_simulation_non_cascading()
-
-    try:
-        damage_line.conf.line_interaction[line_name]
-    except (TypeError, KeyError):
-        pass
-    else:
-        damage_line.compute_damage_probability_simulation_line_interaction()
-
-

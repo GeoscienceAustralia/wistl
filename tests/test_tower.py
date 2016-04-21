@@ -14,7 +14,8 @@ matplotlib
 import matplotlib.pyplot as plt
 
 from wistl.config_class import TransmissionConfig
-from wistl.transmission_network import TransmissionNetwork
+from wistl.transmission_network import TransmissionNetwork, populate_df_towers, \
+    populate_df_lines, assign_cond_collapse_prob
 from wistl.tower import Tower
 from test_config_class import assertDeepAlmostEqual
 
@@ -28,6 +29,8 @@ class TestTower(unittest.TestCase):
 
         cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
         cls.network = TransmissionNetwork(cls.conf)
+        # cls.df_towers = cls.network.df_towers
+        # cls.df_lines = cls.network.df_lines
         cls.network.event_tuple = ('test2', 2.5)
 
         cls.tower = cls.network.lines['Calaca - Amadeo'].towers['AC-100']
@@ -43,40 +46,49 @@ class TestTower(unittest.TestCase):
 
     def test_get_cond_collapse_prob(self):
 
+        # expected for AC-100
+        tmp = self.conf.cond_collapse_prob['Strainer']
+        selected = tmp.loc[tmp['design_level'] == 'low', :]
+        expected = selected.set_index('list').to_dict()['probability']
+        assertDeepAlmostEqual(self, self.tower.cond_pc, expected)
+
+        # Suspension or Terminal
+        # No information provided for height > 50
         list_function = ['Suspension'] * 2 + ['Terminal'] * 2
         list_value = [20.0, 50.0] * 2
+        conf = copy.deepcopy(self.conf)
+        ps_tower = copy.deepcopy(self.ps_tower)
 
         for func_, value_ in zip(list_function, list_value):
 
-            ps_tower = copy.deepcopy(self.ps_tower)
-            conf = copy.deepcopy(self.conf)
-
             ps_tower['Function'] = func_
             ps_tower['Height'] = value_
-            tower = Tower(conf, ps_tower)
 
-            if tower.cond_pc:
+            ps_tower = assign_cond_collapse_prob(ps_tower, conf)
+            if ps_tower.cond_pc:
                 tmp = conf.cond_collapse_prob[func_]
                 expected = tmp.set_index('list').to_dict()['probability']
-                assertDeepAlmostEqual(self, tower.cond_pc, expected)
+                assertDeepAlmostEqual(self, ps_tower.cond_pc, expected)
 
+        # Strainer
         list_function = ['Strainer'] * 2
         list_value = ['low', 'high']
 
         for func_, value_ in zip(list_function, list_value):
 
-            ps_tower = copy.deepcopy(self.ps_tower)
             ps_tower['Function'] = func_
             conf = copy.deepcopy(self.conf)
-
             conf.design_value[self.ps_tower['LineRoute']]['level'] = value_
-            tower = Tower(conf, ps_tower)
 
-            if tower.cond_pc:
+            ps_tower['design_level']
+            # ps_tower = populate_df_towers(ps_tower, conf)
+            ps_tower = assign_cond_collapse_prob(ps_tower, conf)
+
+            if ps_tower.cond_pc:
                 tmp = conf.cond_collapse_prob[func_]
                 expected = tmp.loc[tmp['design_level'] == value_, :].set_index('list').to_dict()['probability']
-                assertDeepAlmostEqual(self, tower.cond_pc, expected)
-
+                assertDeepAlmostEqual(self, ps_tower.cond_pc, expected)
+    '''
     def test_assign_design_speed(self):
 
         expected = 75.0 * 1.2
@@ -140,11 +152,9 @@ class TestTower(unittest.TestCase):
             tower = Tower(conf, self.ps_tower)
             self.assertEqual(tower.convert_factor, expected)
 
-    '''
-    def test_calculate_cond_pc_adj(self):
-        """included in test_transmission_line.py"""
-        pass
-    '''
+    # def test_calculate_cond_pc_adj(self):
+    #     """included in test_transmission_line.py"""
+    #     pass
 
     def test_determine_damage_state_by_simulation(self):
 
@@ -230,6 +240,7 @@ class TestTower(unittest.TestCase):
                 len(damage_adjacent_mc[i][(0, 2)])))
 
         print('{}'.format(len(wind_mc['collapse']['id_time'])))
+    '''
 
 if __name__ == '__main__':
     unittest.main()

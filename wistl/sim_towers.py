@@ -29,7 +29,7 @@ def sim_towers(cfg):
         for event_key, network in damaged_networks.iteritems():
             print(' event: {}'.format(event_key))
 
-            for line_key, line in network.lines.iteritems():
+            for line in network.lines.itervalues():
                 line.compute_damage_probability_analytical()
 
         print('Analytical method took {} seconds'.format(time.time() - tic))
