@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from shapely.geometry import LineString, Point
+from geopy.distance import great_circle
 
 from wistl.transmission_line import TransmissionLine
 
@@ -22,12 +23,12 @@ def create_damaged_network(conf):
 
     damaged_networks = dict()
 
-    for event_id_ in conf.scale:
+    for event_id, scale_list in conf.scale.iteritems():
 
-        for scale_ in conf.scale[event_id_]:
+        for scale in scale_list:
 
-            event_id_scale = conf.event_id_scale_str.format(event_id=event_id_,
-                                                            scale=scale_)
+            event_id_scale = conf.event_id_scale_str.format(event_id=event_id,
+                                                            scale=scale)
 
             if event_id_scale in damaged_networks:
                 msg = '{} is already assigned'.format(event_id_scale)
@@ -35,12 +36,13 @@ def create_damaged_network(conf):
 
             path_output_scenario = os.path.join(conf.path_output,
                                                 event_id_scale)
+
             if not os.path.exists(path_output_scenario) and conf.save:
                 os.makedirs(path_output_scenario)
                 print('{} is created'.format(path_output_scenario))
 
             damaged_networks[event_id_scale] = TransmissionNetwork(conf)
-            damaged_networks[event_id_scale].event_tuple = (event_id_, scale_)
+            damaged_networks[event_id_scale].event_tuple = (event_id, scale)
 
     return damaged_networks
 
@@ -51,12 +53,13 @@ class TransmissionNetwork(object):
     def __init__(self, conf):
 
         self.conf = conf
-
-        self.df_towers = read_shape_file(self.conf.file_shape_tower)
-        self.df_towers = populate_df_towers(self.df_towers, self.conf)
-
-        self.df_lines = read_shape_file(self.conf.file_shape_line)
+        self.df_lines = read_shape_file(conf.file_shape_line)
         self.df_lines = populate_df_lines(self.df_lines)
+        conf.no_towers_by_line = \
+            self.df_lines.set_index('LineRoute').to_dict()['no_towers']
+
+        self.df_towers = read_shape_file(conf.file_shape_tower)
+        self.df_towers = populate_df_towers(self.df_towers, conf)
 
         self._event_tuple = None
 
@@ -67,29 +70,26 @@ class TransmissionNetwork(object):
         self.time_index = None
 
         self.lines = dict()
-        for name, grouped in self.df_towers.groupby('LineRoute'):
+        for line_name, grouped in self.df_towers.groupby('LineRoute'):
 
-            if name in self.conf.selected_lines:
+            if line_name in self.conf.selected_lines:
                 try:
                     idx = self.df_lines[self.df_lines.LineRoute ==
-                                        name].index[0]
+                                        line_name].index[0]
                 except IndexError:
-                    msg = '{} not in the line shapefile'.format(name)
+                    msg = '{} not in the line shapefile'.format(line_name)
                     raise IndexError(msg)
 
-                # index reset for each line
-                # grouped.reset_index(inplace=True, drop=True)
-
-                self.lines[name] = TransmissionLine(
+                self.lines[line_name] = TransmissionLine(
                     conf=self.conf,
-                    df_towers=grouped,
+                    df_towers=grouped.copy(),
                     ps_line=self.df_lines.loc[idx])
 
         if conf.line_interaction:
-            self._set_line_interaction()
+            self.set_line_interaction()
 
             if conf.figure:
-                self._plot_line_interaction()
+                self.plot_line_interaction()
 
     @property
     def event_tuple(self):
@@ -98,20 +98,19 @@ class TransmissionNetwork(object):
     @event_tuple.setter
     def event_tuple(self, value):
         try:
-            event_id_, scale_ = value
+            event_id, scale = value
         except ValueError:
             raise ValueError("Pass a tuple of event_id and scale")
         else:
-            # self.event_tuple = value
-            self.event_id = event_id_
-            self.scale = scale_
+            self.event_id = event_id
+            self.scale = scale
             self.path_event = os.path.join(self.conf.path_wind_scenario_base,
-                                           event_id_)
+                                           event_id)
             self.event_id_scale = self.conf.event_id_scale_str.format(
-                event_id=event_id_, scale=scale_)
-            self._set_damage_line()
+                event_id=event_id, scale=scale)
+            self.set_damage_line()
 
-    def _set_damage_line(self):
+    def set_damage_line(self):
         # assign event information to instances of TransmissionLine
 
         line = None
@@ -121,16 +120,17 @@ class TransmissionNetwork(object):
         # assuming same time index for each tower in the same network
         self.time_index = line.time_index
 
-    def _set_line_interaction(self):
+    def set_line_interaction(self):
 
         for line_name, line in self.lines.iteritems():
 
-            for target_line in self.conf.line_interaction[line_name]:
+            for tower in line.towers.itervalues():
+                id_on_target_line = dict()
 
-                line_string = self.lines[target_line].line_string
-                line_coord = self.lines[target_line].coord
+                for target_line in self.conf.line_interaction[line_name]:
 
-                for tower in line.towers.itervalues():
+                    line_string = self.lines[target_line].line_string
+                    line_coord = self.lines[target_line].coord
 
                     closest_pt_on_line = line_string.interpolate(
                         line_string.project(tower.point))
@@ -145,13 +145,13 @@ class TransmissionNetwork(object):
 
                     if dist_from_line < tower.height:
 
-                        id_pt = find_id_nearest_pt(closest_pt_coord,
-                                                   line_coord)
+                        id_on_target_line[target_line] = \
+                            find_id_nearest_pt(closest_pt_coord, line_coord)
 
-                        tower.id_on_target_line[target_line] = \
-                            self.lines[target_line].id_by_line[id_pt]
+                if id_on_target_line:
+                    tower.id_on_target_line = id_on_target_line
 
-    def _plot_line_interaction(self):
+    def plot_line_interaction(self):
 
         for line_name, line in self.lines.iteritems():
 
@@ -166,7 +166,6 @@ class TransmissionNetwork(object):
                          '--', label=target_line)
 
                 for tower in line.towers.itervalues():
-
                     try:
                         id_pt = tower.id_on_target_line[target_line]
                     except KeyError:
@@ -199,11 +198,28 @@ def populate_df_lines(df_lines):
     :param df_lines:
     :return:
     """
-    df_lines = df_lines.merge(df_lines['Shapes'].apply(assign_shapely_data),
+    df_lines = df_lines.merge(df_lines['Shapes'].apply(assign_shapely_line),
                               left_index=True, right_index=True)
     df_lines['name_output'] = df_lines['LineRoute'].apply(
         lambda x: '_'.join(x for x in x.split() if x.isalnum()))
+    df_lines['no_towers'] = df_lines['coord'].apply(lambda x: len(x))
+    df_lines['actual_span'] = df_lines['coord_lat_lon'].apply(
+        calculate_distance_between_towers)
     return df_lines
+
+
+def calculate_distance_between_towers(coord_lat_lon):
+    """ calculate actual span between the towers """
+    coord_lat_lon = np.stack(coord_lat_lon)
+    dist_forward = np.zeros(len(coord_lat_lon) - 1)
+    for i, (pt0, pt1) in enumerate(zip(coord_lat_lon[0:-1], coord_lat_lon[1:])):
+        dist_forward[i] = great_circle(pt0, pt1).meters
+
+    actual_span = 0.5 * (dist_forward[0:-1] + dist_forward[1:])
+    actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
+    actual_span = np.append(actual_span, [0.5 * dist_forward[-1]])
+    return actual_span
+
 
 def assign_design_values(line_route, conf):
     design_value = conf.design_value[line_route]
@@ -212,17 +228,17 @@ def assign_design_values(line_route, conf):
                       'design_speed': design_value['speed'],
                       'terrain_cat': design_value['cat']})
 
-def assign_shapely_data(x):
-    if len(x.points) == 1:
-        coord = x.points[0]
-        return pd.Series({'coord': coord,
-                          'coord_lat_lon': np.array(coord)[::-1].tolist(),
-                          'point': Point(coord)})
-    else:
-        coord = x.points
-        return pd.Series({'coord': coord,
-                          'coord_lat_lon': np.array(coord)[:, ::-1].tolist(),
-                          'line_string': LineString(coord)})
+def assign_shapely_point(shape):
+    coord = shape.points[0]
+    return pd.Series({'coord': coord,
+                      'coord_lat_lon': np.array(coord)[::-1].tolist(),
+                      'point': Point(coord)})
+
+def assign_shapely_line(shape):
+    coord = shape.points
+    return pd.Series({'coord': coord,
+                      'coord_lat_lon': np.array(coord)[:, ::-1].tolist(),
+                      'line_string': LineString(coord)})
 
     #     self.df_towers['point'] = \
     #     df_towers.apply(lambda x: Point(x.Shapes.points[0]), axis=1)
@@ -254,7 +270,7 @@ def populate_df_towers(df_towers, conf):
     :return:
     """
 
-    df_towers = df_towers.merge(df_towers['Shapes'].apply(assign_shapely_data),
+    df_towers = df_towers.merge(df_towers['Shapes'].apply(assign_shapely_point),
                                 left_index=True, right_index=True)
     df_towers = df_towers.merge(df_towers['LineRoute'].apply(
         assign_design_values, args=(conf,)), left_index=True, right_index=True)
@@ -263,38 +279,38 @@ def populate_df_towers(df_towers, conf):
                                 left_index=True, right_index=True)
     df_towers['file_wind_base_name'] = df_towers['Name'].apply(
         lambda x: conf.wind_file_head + x + conf.wind_file_tail)
-
     return df_towers
 
-def assign_fragility_parameters(ps_tower, cfg):
+
+def assign_fragility_parameters(ps_tower, conf):
     """
 
     :param ps_tower:
-    :param cfg:
+    :param conf:
     :return:
     """
-    tf_array = np.ones((cfg.fragility.shape[0],), dtype=bool)
-    for att, att_type in zip(cfg.fragility_metadata['by'],
-                             cfg.fragility_metadata['type']):
+    tf_array = np.ones((conf.fragility.shape[0],), dtype=bool)
+    for att, att_type in zip(conf.fragility_metadata['by'],
+                             conf.fragility_metadata['type']):
         if att_type == 'string':
-            tf_array *= cfg.fragility[att] == ps_tower[att]
+            tf_array *= conf.fragility[att] == ps_tower[att]
         elif att_type == 'numeric':
-            tf_array *= (cfg.fragility[att + '_lower'] <=
+            tf_array *= (conf.fragility[att + '_lower'] <=
                          ps_tower[att]) & \
-                        (cfg.fragility[att + '_upper'] >
+                        (conf.fragility[att + '_upper'] >
                          ps_tower[att])
 
     params = pd.Series({'frag_scale': dict(), 'frag_arg': dict(), 'frag_func': None})
-    for ds in cfg.damage_states:
-        idx = tf_array & (cfg.fragility['limit_states'] == ds)
+    for ds in conf.damage_states:
+        idx = tf_array & (conf.fragility['limit_states'] == ds)
         assert (sum(idx) == 1)
-        fn_form = cfg.fragility.loc[
-            idx, cfg.fragility_metadata['function']].values[0]
+        fn_form = conf.fragility.loc[
+            idx, conf.fragility_metadata['function']].values[0]
         params['frag_func'] = fn_form
-        params['frag_scale'][ds] = cfg.fragility.loc[
-            idx, cfg.fragility_metadata[fn_form]['scale']].values[0]
-        params['frag_arg'][ds] = cfg.fragility.loc[
-            idx, cfg.fragility_metadata[fn_form]['arg']].values[0]
+        params['frag_scale'][ds] = conf.fragility.loc[
+            idx, conf.fragility_metadata[fn_form]['scale']].values[0]
+        params['frag_arg'][ds] = conf.fragility.loc[
+            idx, conf.fragility_metadata[fn_form]['arg']].values[0]
     return params
 
 
@@ -359,13 +375,6 @@ def mc_loop_over_line(damage_line):
     else:
         seed = None
 
-    # # perfect correlation within a single line
-    # rv = rnd_state.uniform(size=(damage_line.conf.no_sims,
-    #                              len(damage_line.time_index)))
-    #
-    # for tower in damage_line.towers.itervalues():
-    #     tower.compute_damage_prob_adjacent_by_simulation(rv, seed)
-
     # perfect correlation within a single line
     damage_line.compute_damage_probability_simulation(seed)
 
@@ -379,4 +388,4 @@ def mc_loop_over_line(damage_line):
     else:
         damage_line.compute_damage_probability_simulation_line_interaction()
 
-
+    return damage_line

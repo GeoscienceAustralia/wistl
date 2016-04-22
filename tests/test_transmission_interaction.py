@@ -18,14 +18,8 @@ class TestTransmission(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
-        cls.conf.save = False
-
-        if cls.conf.parallel:
-            cls.damaged_networks, cls.damaged_lines = \
-                sim_towers(cls.conf)
-        else:
-            cls.damaged_networks, _ = sim_towers(cls.conf)
+        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test_line_interaction.cfg'))
+        cls.damaged_networks = sim_towers(cls.conf)
 
     @classmethod
     def h5file_full(cls, damage_line, str_head):
@@ -47,37 +41,27 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_simulation(self):
 
         if self.conf.simulation:
-            if self.conf.parallel:
-                for line in self.damaged_lines:
+            for network in self.damaged_networks.itervalues():
+                for line in network.lines.itervalues():
+
                     self.check_file_consistency_simulation(line)
-            else:
-                for network in self.damaged_networks.itervalues():
-                    for line in network.lines.itervalues():
-                        self.check_file_consistency_simulation(line)
 
     def test_transmission_simulation_non_cascading(self):
 
         if not self.conf.skip_non_cascading_collapse:
-            if self.conf.parallel:
-                for line in self.damaged_lines:
-                    self.check_file_consistency_simulation_non_cascading(line)
-            else:
-                for network in self.damaged_networks.itervalues():
-                    for line in network.lines.itervalues():
+            for network in self.damaged_networks.itervalues():
+                for line in network.lines.itervalues():
 
-                        self.check_file_consistency_simulation_non_cascading(line)
+                    self.check_file_consistency_simulation_non_cascading(line)
 
     def test_transmission_analytical_vs_simulation_only_isolation(self):
 
-        if self.conf.parallel:
-            for line in self.damaged_lines:
+        ds = 'collapse'
+
+        for network in self.damaged_networks.itervalues():
+            for line in network.lines.itervalues():
                 for tower in line.towers.itervalues():
                     self.compare_analytical_vs_simulation_for_collapse(tower)
-        else:
-            for network in self.damaged_networks.itervalues():
-                for line in network.lines.itervalues():
-                    for tower in line.towers.itervalues():
-                        self.compare_analytical_vs_simulation_for_collapse(tower)
 
     def check_file_consistency_analytical(self, damage_line):
 

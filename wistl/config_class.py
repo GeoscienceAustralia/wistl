@@ -57,7 +57,6 @@ class TransmissionConfig(object):
         self.rtol = float(conf.get(key, 'relative_tolerance'))
         self.atol = float(conf.get(key, 'absolute_tolerance'))
 
-
         # directories
         key = 'directories'
         self.path_gis_data = os.path.join(path_cfg_file,
@@ -110,19 +109,23 @@ class TransmissionConfig(object):
         self.file_drag_height_by_type = os.path.join(
             self.path_input, conf.get('input', 'drag_height_by_type'))
 
-        self.file_topo_multiplier = None
-        self.file_design_adjustment_factor_by_topo = None
-        self.topo_multiplier = None
-        self.design_adjustment_factor_by_topo = None
+        # adjust design wind speed based on topography
         if self.adjust_design_by_topography:
             self.set_adjust_design_by_topography(conf)
+        else:
+            self.file_topo_multiplier = None
+            self.file_design_adjustment_factor_by_topo = None
+            self.topo_multiplier = None
+            self.design_adjustment_factor_by_topo = None
 
-        self.file_line_interaction_metadata = None
-        self.line_interaction = None
-        self.prob_line_interaction_metadata = None
-        self.prob_line_interaction = None
+        # parallel line interaction
         if conf.getboolean('run_parameters', 'line_interaction'):
             self.set_line_interaction(conf)
+        else:
+            self.file_line_interaction_metadata = None
+            self.line_interaction = None
+            self.prob_line_interaction_metadata = None
+            self.prob_line_interaction = None
 
         # read information
         self.design_value = self.read_design_value()
@@ -136,6 +139,17 @@ class TransmissionConfig(object):
         self.terrain_multiplier = self.read_terrain_multiplier()
 
         self.drag_height = self.read_drag_height_by_type()
+
+        self._no_towers_by_line = dict()
+
+    @property
+    def no_towers_by_line(self):
+        return self._no_towers_by_line
+
+    @no_towers_by_line.setter
+    def no_towers_by_line(self, value):
+        assert isinstance(value, dict)
+        self._no_towers_by_line = value
 
     def set_random_seed(self, conf):
         """

@@ -80,23 +80,26 @@ class Tower(object):
         self.damage_adjacent_mc = pd.DataFrame(None, columns=['id_adj',
                                                               'id_time',
                                                               'id_sim'])
+        self.damage_interaction_mc = pd.DataFrame(None, columns=['no_collapse',
+                                                                 'id_time',
+                                                                 'id_sim'])
 
         # line interaction
         self._id_on_target_line = dict()
-        self._cond_parallel_line = None
+        self.cond_pc_line_mc = {'no_collapse': None, 'cum_prob': None}
         self._mc_parallel_line = None
 
     @property
     def event_tuple(self):
         return self._event_tuple
 
+    # @property
+    # def cond_pc_line(self):
+    #     return self._cond_pc_line
+
     @property
     def id_on_target_line(self):
         return self._id_on_target_line
-
-    @property
-    def cond_parallel_line(self):
-        return self._cond_parallel_line
 
     @property
     def mc_parallel_line(self):
@@ -111,15 +114,15 @@ class Tower(object):
         else:
             self.file_wind = file_wind_
             self.scale = scale_
-            self._set_wind()
+            self.set_wind()
             self.compute_damage_prob_isolation()
 
     @id_on_target_line.setter
     def id_on_target_line(self, id_on_target_line):
         self._id_on_target_line = id_on_target_line
-        self._get_cond_prob_line_interaction()
+        self.get_cond_prob_line_interaction()
 
-    def _set_wind(self):
+    def set_wind(self):
         """
         set the wind, time_index variables given a file_wind
         """
@@ -241,7 +244,7 @@ class Tower(object):
 
             # check whether MC simulation is close to analytical
             prob_damage_isolation_mc = pd.Series(
-                np.sum(ds_wind[:, ] >= ids, axis=0) / float(self.conf.no_sims),
+                np.sum(ds_wind[:, ] >= ids, axis=0) / float(rv.shape[0]),
                 index=self.prob_damage_isolation.index)
 
             idx_not_close, = np.where(~np.isclose(prob_damage_isolation_mc,
@@ -297,6 +300,42 @@ class Tower(object):
             # remove case with no adjacent tower collapse
             self.damage_adjacent_mc = adj_mc.loc[pd.notnull(ps_)]
 
+    def determine_damage_by_interaction(self, seed=None):
+        """
+
+        :param seed: seed is None if no seed number is provided
+        :return:
+        """
+
+        if self.cond_pc_line_mc['cum_prob']:
+
+            if self.conf.random_seed:
+                rnd_state = np.random.RandomState(seed + 50)  # replication
+            else:
+                rnd_state = np.random.RandomState()
+
+            # generate regardless of time index
+            no_sim_collapse = len(
+                self.damage_isolation_mc['collapse']['id_time'])
+            rv = rnd_state.uniform(size=no_sim_collapse)
+
+            list_idx_cond = map(lambda rv_: sum(
+                rv_ >= self.cond_pc_line_mc['cum_prob']), rv)
+            idx_no_adjacent_collapse = len(self.cond_pc_line_mc['cum_prob'])
+
+            # list of idx of adjacent towers in collapse
+            ps_ = pd.Series([self.cond_pc_line_mc['no_collapse'][x]
+                             if x < idx_no_adjacent_collapse
+                             else None for x in list_idx_cond],
+                            index=self.damage_isolation_mc['collapse'].index,
+                            name='no_collapse')
+
+            adj_mc = pd.concat([self.damage_isolation_mc['collapse'], ps_],
+                               axis=1)
+
+            # remove case with no adjacent tower collapse
+            self.damage_interaction_mc = adj_mc.loc[pd.notnull(ps_)]
+
     def get_cond_collapse_prob(self):
         """ get dict of conditional collapse probabilities
         :return: cond_pc, max_no_adj_towers
@@ -323,12 +362,11 @@ class Tower(object):
 
         return cond_pc, max_no_adj_towers
 
-    def _get_cond_prob_line_interaction(self):
+    def get_cond_prob_line_interaction(self):
         """ get dict of conditional collapse probabilities
         :return: cond_prob_line
         """
 
-        # FIXME: move to transmission_line
         att = self.conf.prob_line_interaction_metadata['by']
         att_type = self.conf.prob_line_interaction_metadata['type']
         df_prob = self.conf.prob_line_interaction
@@ -340,9 +378,10 @@ class Tower(object):
             tf_array = (df_prob[att + '_lower'] <= self.ps_tower[att]) & \
                        (df_prob[att + '_upper'] > self.ps_tower[att])
 
-        # change to dictionary
-        return dict(zip(df_prob.loc[tf_array, 'no_collapse'],
-                        df_prob.loc[tf_array, 'probability']))
+        self.cond_pc_line_mc['no_collapse'] = \
+            df_prob.loc[tf_array, 'no_collapse'].tolist()
+        self.cond_pc_line_mc['cum_prob'] = np.cumsum(
+            df_prob.loc[tf_array, 'probability']).tolist()
 
     def adjust_design_speed(self):
         """ determine design speed """

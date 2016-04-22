@@ -36,6 +36,7 @@ def sim_towers(cfg):
 
     tic = time.time()
 
+    damaged_lines = None
     if cfg.simulation:
         print('Computing damage probability using simulation method')
 
@@ -43,7 +44,7 @@ def sim_towers(cfg):
             print('parallel MC run on.......')
             list_ = [line for network in damaged_networks.itervalues()
                      for line in network.lines.itervalues()]
-            parmap.map(mc_loop_over_line, list_)
+            damaged_lines = parmap.map(mc_loop_over_line, list_)
         else:
             print('serial MC run on.......')
             for event_key, network in damaged_networks.iteritems():
@@ -56,7 +57,7 @@ def sim_towers(cfg):
         if cfg.line_interaction:
             print('parallel line interaction......')
 
-    return damaged_networks
+    return damaged_networks, damaged_lines
 
 if __name__ == '__main__':
 
