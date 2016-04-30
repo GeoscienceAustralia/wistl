@@ -10,7 +10,7 @@ import StringIO
 import numpy as np
 
 from collections import OrderedDict
-from wistl.config_class import TransmissionConfig, split_str
+from wistl.config import TransmissionConfig, split_str
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 

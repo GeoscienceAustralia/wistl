@@ -9,7 +9,8 @@ import time
 import sys
 import parmap
 
-from wistl.transmission_network import create_damaged_network, mc_loop_over_line
+from wistl.transmission_network import create_damaged_network, \
+    mc_loop_over_line, compute_damage_probability_simulation_line_interaction
 
 
 def sim_towers(cfg):
@@ -27,8 +28,7 @@ def sim_towers(cfg):
         print('Computing damage probability using analytical method')
 
         for event_key, network in damaged_networks.iteritems():
-            print(' event: {}'.format(event_key))
-
+            # print(' event: {}'.format(event_key))
             for line_key, line in network.lines.iteritems():
                 line.compute_damage_probability_analytical()
 
@@ -42,20 +42,37 @@ def sim_towers(cfg):
 
         if cfg.parallel:
             print('parallel MC run on.......')
-            list_ = [line for network in damaged_networks.itervalues()
-                     for line in network.lines.itervalues()]
-            damaged_lines = parmap.map(mc_loop_over_line, list_)
+
+            list_line = []
+            for network in damaged_networks.itervalues():
+                for line in network.lines.itervalues():
+                    list_line.append(line)
+
+            damaged_lines = parmap.map(mc_loop_over_line, list_line)
+
+            collection_by_event_and_line = dict()
+            for line in damaged_lines:
+                collection_by_event_and_line.setdefault(
+                    line.event_id_scale, {})[line.name] = line
+
         else:
             print('serial MC run on.......')
-            for event_key, network in damaged_networks.iteritems():
-                print(' event: {}'.format(event_key))
-                for line in network.lines.itervalues():
-                    mc_loop_over_line(line)
 
-        print('MC simulation took {} seconds'.format(time.time() - tic))
+            collection_by_event_and_line = dict()
+
+            for event_key, network in damaged_networks.iteritems():
+                # print(' event: {}'.format(event_key))
+                for line in network.lines.itervalues():
+                    collection_by_event_and_line.setdefault(
+                        line.event_id_scale, {})[line.name] = \
+                        mc_loop_over_line(line)
 
         if cfg.line_interaction:
-            print('parallel line interaction......')
+
+            for collection_by_event in collection_by_event_and_line.itervalues():
+                compute_damage_probability_simulation_line_interaction(collection_by_event)
+
+        print('MC simulation took {} seconds'.format(time.time() - tic))
 
     return damaged_networks, damaged_lines
 
@@ -67,6 +84,6 @@ if __name__ == '__main__':
         print('python sim_towers.py <config-file>')
         sys.exit(1)
 
-    from wistl.config_class import TransmissionConfig
+    from wistl.config import TransmissionConfig
     conf = TransmissionConfig(cfg_file=args[0])
     sim_towers(conf)

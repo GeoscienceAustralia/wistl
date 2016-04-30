@@ -13,10 +13,10 @@ import matplotlib
 matplotlib
 import matplotlib.pyplot as plt
 
-from wistl.config_class import TransmissionConfig
+from wistl.config import TransmissionConfig
 from wistl.transmission_network import TransmissionNetwork
 from wistl.tower import Tower
-from test_config_class import assertDeepAlmostEqual
+from test_config import assertDeepAlmostEqual
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 

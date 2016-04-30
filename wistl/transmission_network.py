@@ -48,7 +48,7 @@ def create_damaged_network(conf):
 
 
 class TransmissionNetwork(object):
-    """ class for a collection of wistl lines"""
+    """ class for a collection of transmission lines"""
 
     def __init__(self, conf):
 
@@ -135,9 +135,9 @@ class TransmissionNetwork(object):
                     closest_pt_on_line = line_string.interpolate(
                         line_string.project(tower.point))
 
-                    closest_pt_coord = np.array(closest_pt_on_line.coords)
+                    closest_pt_coord = np.array(closest_pt_on_line.coords)[0, :]
 
-                    closest_pt_lat_lon = closest_pt_coord[:, ::-1]
+                    closest_pt_lat_lon = closest_pt_coord[::-1]
 
                     # compute distance
                     dist_from_line = geopy.distance.great_circle(
@@ -146,7 +146,8 @@ class TransmissionNetwork(object):
                     if dist_from_line < tower.height:
 
                         id_on_target_line[target_line] = \
-                            find_id_nearest_pt(closest_pt_coord, line_coord)
+                        {'id': find_id_nearest_pt(closest_pt_coord, line_coord),
+                         'vector': unit_vector(closest_pt_coord - tower.coord)}
 
                 if id_on_target_line:
                     tower.id_on_target_line = id_on_target_line
@@ -167,7 +168,7 @@ class TransmissionNetwork(object):
 
                 for tower in line.towers.itervalues():
                     try:
-                        id_pt = tower.id_on_target_line[target_line]
+                        id_pt = tower.id_on_target_line[target_line][0]
                     except KeyError:
                         plt.plot(tower.coord[0], tower.coord[1], 'ko')
                     else:
@@ -208,60 +209,6 @@ def populate_df_lines(df_lines):
     return df_lines
 
 
-def calculate_distance_between_towers(coord_lat_lon):
-    """ calculate actual span between the towers """
-    coord_lat_lon = np.stack(coord_lat_lon)
-    dist_forward = np.zeros(len(coord_lat_lon) - 1)
-    for i, (pt0, pt1) in enumerate(zip(coord_lat_lon[0:-1], coord_lat_lon[1:])):
-        dist_forward[i] = great_circle(pt0, pt1).meters
-
-    actual_span = 0.5 * (dist_forward[0:-1] + dist_forward[1:])
-    actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
-    actual_span = np.append(actual_span, [0.5 * dist_forward[-1]])
-    return actual_span
-
-
-def assign_design_values(line_route, conf):
-    design_value = conf.design_value[line_route]
-    return pd.Series({'design_span': design_value['span'],
-                      'design_level': design_value['level'],
-                      'design_speed': design_value['speed'],
-                      'terrain_cat': design_value['cat']})
-
-def assign_shapely_point(shape):
-    coord = shape.points[0]
-    return pd.Series({'coord': coord,
-                      'coord_lat_lon': np.array(coord)[::-1].tolist(),
-                      'point': Point(coord)})
-
-def assign_shapely_line(shape):
-    coord = shape.points
-    return pd.Series({'coord': coord,
-                      'coord_lat_lon': np.array(coord)[:, ::-1].tolist(),
-                      'line_string': LineString(coord)})
-
-    #     self.df_towers['point'] = \
-    #     df_towers.apply(lambda x: Point(x.Shapes.points[0]), axis=1)
-    # df_towers['coord'] = df_towers.apply(lambda x: x.Shapes.points[0], axis=1)
-    # df_towers['coord_lat_lon'] = \
-    #     df_towers.apply(lambda x: x.Shapes.points[0].tolist()[::-1], axis=1)
-
-    #
-    # df_lines['coord'], df_lines['coord_lat_lon'], df_lines['line_string'] = \
-    #     zip(*df_lines['Shapes'].map(assign_shapely_data))
-
-    # df_lines['line_string'] = \
-    #     df_lines.apply(lambda x: LineString(x.Shapes.points), axis=1)
-    # df_lines['coord'] = \
-    #     df_lines.apply(lambda x: x.Shapes.points, axis=1)
-    # df_lines['coord_lat_lon'] = \
-    #     df_lines.apply(lambda x: np.array(x.Shapes.points)[:, ::-1].tolist(),
-    #                    axis=1)
-    # df_lines['name_output'] = \
-    #     df_lines.apply(lambda x: '_'.join(x for x in x.LineRoute.split()
-    #                                       if x.isalnum()), axis=1)
-
-
 def populate_df_towers(df_towers, conf):
     """
     add columns to df_towers
@@ -282,12 +229,68 @@ def populate_df_towers(df_towers, conf):
     return df_towers
 
 
+def calculate_distance_between_towers(coord_lat_lon):
+    """
+    calculate actual span between the towers
+    :param coord_lat_lon: list of coord in lat, lon
+    :return: array of actual span between towers
+    """
+    coord_lat_lon = np.stack(coord_lat_lon)
+    dist_forward = np.zeros(len(coord_lat_lon) - 1)
+    for i, (pt0, pt1) in enumerate(zip(coord_lat_lon[0:-1], coord_lat_lon[1:])):
+        dist_forward[i] = great_circle(pt0, pt1).meters
+
+    actual_span = 0.5 * (dist_forward[0:-1] + dist_forward[1:])
+    actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
+    actual_span = np.append(actual_span, [0.5 * dist_forward[-1]])
+    return actual_span
+
+
+def assign_design_values(line_route, conf):
+    """
+    create pandas series of design level related values
+    :param line_route: line route name
+    :param conf: an instance of TransmissionConfig
+    :return: pandas series of design_span, design_level, design_speed, and
+             terrain cat
+    """
+    design_value = conf.design_value[line_route]
+    return pd.Series({'design_span': design_value['span'],
+                      'design_level': design_value['level'],
+                      'design_speed': design_value['speed'],
+                      'terrain_cat': design_value['cat']})
+
+
+def assign_shapely_point(shape):
+    """
+    create pandas series of coord, coord_lat_lon, and Point
+    :param shape: Shapefile instance
+    :return: pandas series of coord, coord_lat_lon, and Point
+    """
+    coord = np.array(shape.points[0])
+    return pd.Series({'coord': coord,
+                      'coord_lat_lon': coord[::-1],
+                      'point': Point(coord)})
+
+
+def assign_shapely_line(shape):
+    """
+    create pandas series of coord, coord_lat_lon, and line_string
+    :param shape: Shapefile instance
+    :return: pandas series of coord, coord_lat_lon, and line_string
+    """
+    coord = shape.points
+    return pd.Series({'coord': coord,
+                      'coord_lat_lon': np.array(coord)[:, ::-1].tolist(),
+                      'line_string': LineString(coord)})
+
+
 def assign_fragility_parameters(ps_tower, conf):
     """
-
-    :param ps_tower:
-    :param conf:
-    :return:
+    assign fragility parameters by Type, Function, Dev Angle
+    :param ps_tower: pandas series of towers
+    :param conf: an instance of TransmissionConfig
+    :return: pandas series of frag_func, frag_scale, frag_arg
     """
     tf_array = np.ones((conf.fragility.shape[0],), dtype=bool)
     for att, att_type in zip(conf.fragility_metadata['by'],
@@ -300,7 +303,8 @@ def assign_fragility_parameters(ps_tower, conf):
                         (conf.fragility[att + '_upper'] >
                          ps_tower[att])
 
-    params = pd.Series({'frag_scale': dict(), 'frag_arg': dict(), 'frag_func': None})
+    params = pd.Series({'frag_scale': dict(), 'frag_arg': dict(),
+                        'frag_func': None})
     for ds in conf.damage_states:
         idx = tf_array & (conf.fragility['limit_states'] == ds)
         assert (sum(idx) == 1)
@@ -316,11 +320,12 @@ def assign_fragility_parameters(ps_tower, conf):
 
 def find_id_nearest_pt(pt_coord, line_coord):
     """
-    :param pt_coord: (,1)
-    :param line_coord: (,2)
-    :return:
+    find the index of line_coord matching point coord
+    :param pt_coord: (2,)
+    :param line_coord: (#,2)
+    :return: index of the nearest in the line_coord
     """
-    assert pt_coord.shape[1] == 2
+    assert pt_coord.shape == (2,)
     assert line_coord.shape[1] == 2
     diff = np.linalg.norm(line_coord - pt_coord, axis=1)
 
@@ -386,6 +391,83 @@ def mc_loop_over_line(damage_line):
     except (TypeError, KeyError):
         pass
     else:
-        damage_line.compute_damage_probability_simulation_line_interaction()
+        damage_line.determine_damage_by_interaction_at_line_level(seed)
 
     return damage_line
+
+
+def compute_damage_probability_simulation_line_interaction(damaged_network):
+    """
+
+    :param damaged_network: a dictionary of damaged lines
+    :return:
+    """
+
+    for line_name, damaged_line in damaged_network.iteritems():
+
+        tf_ds = np.zeros((damaged_line.no_towers,
+                          damaged_line.conf.no_sims,
+                          len(damaged_line.time_index)), dtype=bool)
+
+        for key, value in damaged_line.conf.line_interaction.iteritems():
+            if line_name in value:
+
+                tf_ds += damaged_network[key].tf_array_by_line[line_name]
+
+        # append collapse by adjacent towers
+        for tower in damaged_line.towers.itervalues():
+
+            for id_adj, grouped in tower.damage_adjacent_mc.groupby('id_adj'):
+                for i in id_adj:
+                    tf_ds[i,
+                          grouped['id_sim'].values,
+                          grouped['id_time'].values] = True
+
+        # override non-collapse damage states
+        cds_list = damaged_line.conf.damage_states[:]  # to avoid effect
+        cds_list.reverse()  # [collapse, minor]
+
+        tf_sim = dict()
+
+        # append damage state by direct wind
+        for ds in cds_list:
+            for tower in damaged_line.towers.itervalues():
+
+                tf_ds[tower.id,
+                      tower.damage_isolation_mc[ds]['id_sim'].values,
+                      tower.damage_isolation_mc[ds]['id_time'].values] = True
+
+            damaged_line.damage_prob_line_interaction[ds] = \
+                pd.DataFrame(np.sum(tf_ds, axis=1).T / float(damaged_line.conf.no_sims),
+                             columns=damaged_line.name_by_line,
+                             index=damaged_line.time_index)
+
+            tf_sim[ds] = np.copy(tf_ds)
+
+        # compute mean and std of no. of towers for each of damage states
+        damaged_line.est_no_damage_line_interaction,
+        damaged_line.prob_no_damage_line_interaction = \
+            damaged_line.compute_damage_stats(tf_sim)
+
+        if damaged_line.conf.save:
+            damaged_line.write_hdf5(
+                file_str='damage_prob_line_interaction',
+                value=damaged_line.damage_prob_line_interaction)
+
+            damaged_line.write_hdf5(
+                file_str='est_no_damage_line_interaction',
+                value=damaged_line.est_no_damage_line_interaction)
+
+            damaged_line.write_hdf5(
+                file_str='prob_no_damage_line_interaction',
+                value=damaged_line.prob_no_damage_line_interaction)
+
+
+def unit_vector(vector):
+    """
+    create unit vector
+    :param vector: tuple(x, y)
+    :return: unit vector
+
+    """
+    return vector / np.linalg.norm(vector)

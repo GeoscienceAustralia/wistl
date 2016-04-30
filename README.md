@@ -52,4 +52,4 @@ To run tests use either `nose` or `unittest`:
     nosetests
 
 #### Parallel vs Serial run
-A dedicated config file has not been implemented yet and the configuration is managed by the `TransmissionConfig` class inside the `config_class.py`. The value `self.parallel = 1` indicates that Monte Carlo simulations will be performed in parallel using all the (hyperthreaded) cores available on the computer. To change to serial computation, simply change to `self.parallel = 0` instead.
+A dedicated config file has not been implemented yet and the configuration is managed by the `TransmissionConfig` class inside the `config.py`. The value `self.parallel = 1` indicates that Monte Carlo simulations will be performed in parallel using all the (hyperthreaded) cores available on the computer. To change to serial computation, simply change to `self.parallel = 0` instead.

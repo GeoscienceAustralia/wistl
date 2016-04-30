@@ -54,10 +54,12 @@ class Tower(object):
         self.convert_factor = self.convert_10_to_z()
 
         self.cond_pc, self.max_no_adj_towers = self.get_cond_collapse_prob()
+        self.id_adj = self.assign_id_adj_towers()
 
+        # print('{}'.format(self.id_adj))
         # computed by functions in transmission_line class
-        self.id_sides = None  # (left, right) ~ assign_id_both_sides
-        self.id_adj = None  # (23,24,0,25,26) ~ update_id_adj_towers
+        # self.id_sides = None  # (left, right) ~ assign_id_both_sides
+        # self.id_adj = None  # (23,24,0,25,26) ~ update_id_adj_towers
 
         # computed by calculate_cond_pc_adj
         self.cond_pc_adj = None  # dict
@@ -75,7 +77,7 @@ class Tower(object):
             None, columns=self.conf.damage_states)
         self.prob_damage_adjacent = dict()
 
-        # simulation method
+        # simulation method: determine_damage_isolation_mc,
         self.damage_isolation_mc = None
         self.damage_adjacent_mc = pd.DataFrame(None, columns=['id_adj',
                                                               'id_time',
@@ -127,19 +129,17 @@ class Tower(object):
         set the wind, time_index variables given a file_wind
         """
         try:
-            data = self.scale * pd.read_csv(self.file_wind,
-                                            header=0,
-                                            parse_dates=[0],
-                                            index_col=[0],
-                                            usecols=[0, 3, 6],
-                                            names=['', '', '', 'speed', '', '',
-                                                   'bearing', ''])
+            data = pd.read_csv(self.file_wind,
+                               parse_dates=[0],
+                               index_col=[0],
+                               usecols=[0, 3, 6])
+            data['Speed'] *= self.scale
         except IOError:
             msg = 'file {} does not exist'.format(self.file_wind)
             raise IOError(msg)
 
-        speed = data['speed'].values
-        bearing = np.deg2rad(data['bearing'].values)
+        speed = data['Speed'].values
+        bearing = np.deg2rad(data['Bearing'].values)
 
         # angle of conductor relative to NS
         t0 = np.deg2rad(self.strong_axis) - np.pi / 2.0
@@ -300,9 +300,9 @@ class Tower(object):
             # remove case with no adjacent tower collapse
             self.damage_adjacent_mc = adj_mc.loc[pd.notnull(ps_)]
 
-    def determine_damage_by_interaction(self, seed=None):
+    def determine_damage_by_interaction_at_tower_level(self, seed=None):
         """
-
+        determine damage to tower in target line
         :param seed: seed is None if no seed number is provided
         :return:
         """
@@ -468,3 +468,40 @@ class Tower(object):
             cond_pc_adj.pop(0)
 
         self.cond_pc_adj = cond_pc_adj
+
+    def assign_id_adj_towers(self):
+        """
+        assign id of adjacent towers which can be affected by collapse
+        :param idx: index of tower
+        :return:
+        """
+
+        max_no_towers = self.conf.no_towers_by_line[self.line_route]
+
+        list_left = self.create_list_idx(self.id, self.max_no_adj_towers,
+                                         max_no_towers, -1)
+        list_right = self.create_list_idx(self.id, self.max_no_adj_towers,
+                                          max_no_towers, 1)
+
+        return list_left[::-1] + [self.id] + list_right
+
+    @staticmethod
+    def create_list_idx(idx, no_towers, max_no_towers, flag_direction):
+        """
+        create list of adjacent towers in each direction (flag=+/-1)
+
+        :param idx: tower index
+        :param no_towers: no of towers on either side
+        :param max_no_towers: max. no of towers
+        :param flag_direction: +1/-l
+        :return:
+        """
+
+        list_id = []
+        for i in range(no_towers):
+            idx += flag_direction
+            if idx < 0 or idx > max_no_towers - 1:
+                list_id.append(-1)
+            else:
+                list_id.append(idx)
+        return list_id

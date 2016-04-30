@@ -2,7 +2,7 @@ __author__ = 'sudipta'
 import os
 import unittest
 from wistl.transmission_network import create_damaged_network
-from wistl.config_class import TransmissionConfig
+from wistl.config import TransmissionConfig
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 

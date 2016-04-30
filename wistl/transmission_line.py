@@ -3,11 +3,11 @@ from __future__ import print_function
 import os
 import copy
 import warnings
+import itertools
 import pandas as pd
 import numpy as np
 
 from scipy.stats import itemfreq
-from geopy.distance import great_circle
 
 from wistl.tower import Tower
 
@@ -48,9 +48,10 @@ class TransmissionLine(object):
         self.est_no_damage_simulation_non_cascading = None
 
         # parallel line interaction
-        self.damage_prob_simulation_line_interaction = dict()
-        self.prob_no_damage_simulation_line_interaction = None
-        self.est_no_damage_simulation_line_interaction = None
+        self.tf_array_by_line = dict()
+        self.damage_prob_line_interaction = dict()
+        self.prob_no_damage_line_interaction = None
+        self.est_no_damage_line_interaction = None
 
         self.line_string = self.ps_line.line_string
         self.coord = np.stack(self.ps_line.coord)
@@ -81,9 +82,10 @@ class TransmissionLine(object):
         for id_, ps_tower in self.df_towers.iterrows():
             name_ = ps_tower.Name
             self.towers[name_] = Tower(conf=self.conf, ps_tower=ps_tower)
-            self.towers[name_].id_adj = self.assign_id_adj_towers(id_)
+            # self.towers[name_].id_adj = self.assign_id_adj_towers(id_)
 
         for tower in self.towers.itervalues():
+            # print('{}'.format(tower.id_adj))
             tower.id_adj = \
                 self.update_id_adj_by_filtering_strainer(tower)
             tower.calculate_cond_pc_adj()
@@ -159,37 +161,37 @@ class TransmissionLine(object):
         plt.savefig(png_file)
         plt.close()
 
-    def assign_id_adj_towers(self, idx):
-        """
-        assign id of adjacent towers which can be affected by collapse
-        :param idx: index of tower
-        :return:
-        """
-
-        max_no_adj_towers = self.towers[self.id2name[idx]].max_no_adj_towers
-
-        list_left = self.create_list_idx(idx, max_no_adj_towers, -1)
-        list_right = self.create_list_idx(idx, max_no_adj_towers, 1)
-
-        return list_left[::-1] + [idx] + list_right
-
-    def create_list_idx(self, idx, no_towers, flag_direction):
-        """
-        create list of adjacent towers in each direction (flag=+/-1)
-
-        :param idx:
-        :param no_towers:
-        :param flag_direction:
-        :return:
-        """
-        list_id = []
-        for i in range(no_towers):
-            idx += flag_direction
-            if idx < 0 or idx > self.no_towers - 1:
-                list_id.append(-1)
-            else:
-                list_id.append(idx)
-        return list_id
+    # def assign_id_adj_towers(self, idx):
+    #     """
+    #     assign id of adjacent towers which can be affected by collapse
+    #     :param idx: index of tower
+    #     :return:
+    #     """
+    #
+    #     max_no_adj_towers = self.towers[self.id2name[idx]].max_no_adj_towers
+    #
+    #     list_left = self.create_list_idx(idx, max_no_adj_towers, -1)
+    #     list_right = self.create_list_idx(idx, max_no_adj_towers, 1)
+    #
+    #     return list_left[::-1] + [idx] + list_right
+    #
+    # def create_list_idx(self, idx, no_towers, flag_direction):
+    #     """
+    #     create list of adjacent towers in each direction (flag=+/-1)
+    #
+    #     :param idx:
+    #     :param no_towers:
+    #     :param flag_direction:
+    #     :return:
+    #     """
+    #     list_id = []
+    #     for i in range(no_towers):
+    #         idx += flag_direction
+    #         if idx < 0 or idx > self.no_towers - 1:
+    #             list_id.append(-1)
+    #         else:
+    #             list_id.append(idx)
+    #     return list_id
 
     # def calculate_distance_between_towers(self):
     #     """ calculate actual span between the towers """
@@ -220,7 +222,7 @@ class TransmissionLine(object):
                     id_adj[i] = -1
         return id_adj
 
-    def write_hdf5(self, file_str, val):
+    def write_hdf5(self, file_str, value):
 
         h5file = os.path.join(self.conf.path_output,
                               self.event_id_scale,
@@ -228,7 +230,11 @@ class TransmissionLine(object):
         hdf = pd.HDFStore(h5file)
 
         for ds in self.conf.damage_states:
-            hdf.put(ds, val[ds], format='table', data_columns=True)
+            try:
+                hdf.put(ds, value[ds], format='table', data_columns=True)
+            except TypeError:
+                msg = '{0} of {1} is empty'.format(ds, h5file)
+                print(msg)
         hdf.close()
         print('{} is created'.format(h5file))
 
@@ -281,7 +287,7 @@ class TransmissionLine(object):
 
         if self.conf.save:
             self.write_hdf5(file_str='damage_prob_analytical',
-                            val=self.damage_prob_analytical)
+                            value=self.damage_prob_analytical)
 
     def compute_damage_probability_simulation(self, seed):
 
@@ -302,19 +308,20 @@ class TransmissionLine(object):
 
             for id_adj, grouped in tower.damage_adjacent_mc.groupby('id_adj'):
                 for i in id_adj:
-                    tf_ds[i, grouped['id_sim'], grouped['id_time']] = True
+                    tf_ds[i, grouped['id_sim'].values, grouped['id_time'].values] = True
 
         cds_list = self.conf.damage_states[:]  # to avoid effect
         cds_list.reverse()  # [collapse, minor]
 
         tf_sim = dict()
+
         # append damage state by direct wind
         for ds in cds_list:
             for tower in self.towers.itervalues():
 
                 tf_ds[tower.id,
-                      tower.damage_isolation_mc[ds].id_sim,
-                      tower.damage_isolation_mc[ds].id_time] = True
+                      tower.damage_isolation_mc[ds]['id_sim'].values,
+                      tower.damage_isolation_mc[ds]['id_time'].values] = True
 
             self.damage_prob_simulation[ds] = pd.DataFrame(
                 np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
@@ -328,13 +335,13 @@ class TransmissionLine(object):
 
         if self.conf.save:
             self.write_hdf5(file_str='damage_prob_simulation',
-                            val=self.damage_prob_simulation)
+                            value=self.damage_prob_simulation)
 
             self.write_hdf5(file_str='est_no_damage_simulation',
-                            val=self.est_no_damage_simulation)
+                            value=self.est_no_damage_simulation)
 
             self.write_hdf5(file_str='prob_no_damage_simulation',
-                            val=self.prob_no_damage_simulation)
+                            value=self.prob_no_damage_simulation)
 
     def compute_damage_probability_simulation_non_cascading(self):
 
@@ -348,8 +355,8 @@ class TransmissionLine(object):
 
             for i_row, name in enumerate(self.name_by_line):
 
-                id_sim = self.towers[name].damage_isolation_mc[ds]['id_sim']
-                id_time = self.towers[name].damage_isolation_mc[ds]['id_time']
+                id_sim = self.towers[name].damage_isolation_mc[ds]['id_sim'].values
+                id_time = self.towers[name].damage_isolation_mc[ds]['id_time'].values
 
                 tf_ds[i_row, id_sim, id_time] = True
 
@@ -367,13 +374,13 @@ class TransmissionLine(object):
         if self.conf.save:
 
             self.write_hdf5(file_str='damage_prob_simulation_non_cascading',
-                            val=self.damage_prob_simulation_non_cascading)
+                            value=self.damage_prob_simulation_non_cascading)
 
             self.write_hdf5(file_str='est_no_damage_simulation_non_cascading',
-                            val=self.est_no_damage_simulation_non_cascading)
+                            value=self.est_no_damage_simulation_non_cascading)
 
             self.write_hdf5(file_str='prob_no_damage_simulation_non_cascading',
-                            val=self.prob_no_damage_simulation_non_cascading)
+                            value=self.prob_no_damage_simulation_non_cascading)
 
     def compute_damage_stats(self, tf_sim):
         """
@@ -423,55 +430,98 @@ class TransmissionLine(object):
 
         return est_damage_tower, prob_damage_tower
 
-    def compute_damage_probability_simulation_line_interaction(self, seed):
-        '''
-        compute damage probability due to parallel line interaction using MC simulation
+    def determine_damage_by_interaction_at_line_level(self, seed=None):
+        """
+        compute damage probability due to parallel line interaction using MC
+        simulation
         :param seed:
         :return:
-        '''
+        """
 
-        # perfect correlation within a single line
-        rnd_state = np.random.RandomState(seed)
-        rv = rnd_state.uniform(size=(self.conf.no_sims, len(self.time_index)))
+        for target_line in self.conf.line_interaction[self.name]:
+            self.tf_array_by_line[target_line] = np.zeros((
+                self.conf.no_towers_by_line[target_line],
+                self.conf.no_sims,
+                len(self.time_index)), dtype=bool)
 
-        tf_ds = np.zeros((self.no_towers,
-                          self.conf.no_sims,
-                          len(self.time_index)), dtype=bool)
-
-        # collapse by adjacent towers
         for tower in self.towers.itervalues():
 
             # determine damage state by line interaction
             # damage_interaction_mc['id_sim', 'id_time', 'no_collapse']
-            tower.determine_damage_by_interaction(seed)
+            tower.determine_damage_by_interaction_at_tower_level(seed)
 
-            # if multiple target_line then make a decision???
-            # can be changed from time to time
+            for id_time, grouped \
+                    in tower.damage_interaction_mc.groupby('id_time'):
 
-            for id_time, grouped in tower.damage_interaction_mc.groupby('id_time'):
+                wind_vector = unit_vector_by_bearing(
+                    tower.wind['Bearing'][id_time])
 
-                #tower.
+                angle = dict()
+                for line_name, value in tower.id_on_target_line.iteritems():
+                    angle[line_name] = angle_between_unit_vectors(
+                        wind_vector, value['vector'])
 
-                for i in id_adj:
-                    tf_ds[i, grouped['id_sim'], grouped['id_time']] = True
+                target_line = min(angle, key=angle.get)
+
+                if angle[target_line] < 180:
+
+                    target_tower_id = tower.id_on_target_line[target_line]['id']
+                    max_no_towers = self.conf.no_towers_by_line[target_line]
+
+                    for no_collapse, subgroup in grouped.groupby('no_collapse'):
+
+                        no_towers_on_either_side = int(no_collapse / 2)
+
+                        list_one_direction = tower.create_list_idx(
+                            target_tower_id, no_towers_on_either_side,
+                            max_no_towers, +1)
+
+                        list_another_direction = tower.create_list_idx(
+                            target_tower_id, no_towers_on_either_side,
+                            max_no_towers, -1)
+
+                        list_towers = [x for x in list_one_direction
+                                       + [target_tower_id]
+                                       + list_another_direction if x >= 0]
+
+                        for item in itertools.product(list_towers,
+                                                   subgroup['id_sim'].values):
+                            self.tf_array_by_line[target_line][
+                                item[0], item[1], id_time] = True
+                else:
+                    msg = 'tower:{}, angle: {}, wind:{}'.format(
+                        tower.name, angle[target_line], wind_vector)
+                    print(msg)
 
 
-        for target_line in self.conf.line_interaction[self.name]:
+def unit_vector_by_bearing(angle_deg):
+    """
+    return unit vector given bearing
+    :param angle_deg: 0-360
+    :return: unit vector given bearing in degree
+    """
+    angle_rad = np.deg2rad(angle_deg)
+    return np.array([ -1.0 * np.sin(angle_rad), -1.0 * np.cos(angle_rad)])
 
-            # self.determine_damage_by_interaction()
 
-            tf_ds = np.zeros((self.conf.no_towers_by_line[target_line],
-                              self.conf.no_sims,
-                              len(self.time_index)), dtype=bool)
+def angle_between_unit_vectors(v1, v2):
+    """
+    compute angle between two unit vectors
+    :param v1: vector 1
+    :param v2: vector 2
+    :return: the angle in degree between vectors 'v1' and 'v2'
 
-            for tower in self.towers.iteritems():
+            >>> angle_between_unit_vectors((1, 0), (0, 1))
+            90.0
+            >>> angle_between_unit_vectors((1, 0), (1, 0))
+            0.0
+            >>> angle_between_unit_vectors((1, 0), (-1, 0))
+            180.0
 
-                pass
-            # if
+    """
+    #     v1_u = unit_vector(v1)
+    #     v2_u = unit_vector(v2)
+    return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
 
-            # for target_line,
-            #     target_tower_id in tower.id_on_target_line.iteritems():
-            #
-            #     #
 
 

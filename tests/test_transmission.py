@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 
-from wistl.config_class import TransmissionConfig
+from wistl.config import TransmissionConfig
 from wistl.sim_towers import sim_towers
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))

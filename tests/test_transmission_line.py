@@ -14,9 +14,9 @@ import numpy as np
 import copy
 import pandas as pd
 
-from wistl.config_class import TransmissionConfig
+from wistl.config import TransmissionConfig
 from wistl.transmission_line import TransmissionLine
-from test_config_class import assertDeepAlmostEqual
+from test_config import assertDeepAlmostEqual
 from wistl.transmission_network import read_shape_file, populate_df_lines, \
     populate_df_towers
 
