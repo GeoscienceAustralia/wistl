@@ -26,8 +26,8 @@ class TestTower(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
-        cls.network = TransmissionNetwork(cls.conf)
+        cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
+        cls.network = TransmissionNetwork(cls.cfg)
         cls.network.event_tuple = ('test2', 2.5)
 
         cls.tower = cls.network.lines['Calaca - Amadeo'].towers['AC-100']
@@ -49,14 +49,14 @@ class TestTower(unittest.TestCase):
         for func_, value_ in zip(list_function, list_value):
 
             ps_tower = copy.deepcopy(self.ps_tower)
-            conf = copy.deepcopy(self.conf)
+            cfg = copy.deepcopy(self.cfg)
 
             ps_tower['Function'] = func_
             ps_tower['Height'] = value_
-            tower = Tower(conf, ps_tower)
+            tower = Tower(cfg, ps_tower)
 
             if tower.cond_pc:
-                tmp = conf.cond_collapse_prob[func_]
+                tmp = cfg.cond_collapse_prob[func_]
                 expected = tmp.set_index('list').to_dict()['probability']
                 assertDeepAlmostEqual(self, tower.cond_pc, expected)
 
@@ -67,46 +67,46 @@ class TestTower(unittest.TestCase):
 
             ps_tower = copy.deepcopy(self.ps_tower)
             ps_tower['Function'] = func_
-            conf = copy.deepcopy(self.conf)
+            cfg = copy.deepcopy(self.cfg)
 
-            conf.design_value[self.ps_tower['LineRoute']]['level'] = value_
-            tower = Tower(conf, ps_tower)
+            cfg.design_value[self.ps_tower['LineRoute']]['level'] = value_
+            tower = Tower(cfg, ps_tower)
 
             if tower.cond_pc:
-                tmp = conf.cond_collapse_prob[func_]
+                tmp = cfg.cond_collapse_prob[func_]
                 expected = tmp.loc[tmp['design_level'] == value_, :].set_index('list').to_dict()['probability']
                 assertDeepAlmostEqual(self, tower.cond_pc, expected)
 
     def test_assign_design_speed(self):
 
         expected = 75.0 * 1.2
-        conf = copy.deepcopy(self.conf)
-        conf.adjust_design_by_topo = True
-        conf.topo_multiplier[self.ps_tower['Name']] = 1.15
-        tower = Tower(conf, self.ps_tower)
+        cfg = copy.deepcopy(self.cfg)
+        cfg.adjust_design_by_topo = True
+        cfg.topo_multiplier[self.ps_tower['Name']] = 1.15
+        tower = Tower(cfg, self.ps_tower)
         self.assertEqual(tower.design_speed, expected)
 
         expected = 75.0
-        conf.adjust_design_by_topo = False
-        tower = Tower(self.conf, self.ps_tower)
+        cfg.adjust_design_by_topo = False
+        tower = Tower(self.cfg, self.ps_tower)
         self.assertEqual(tower.design_speed, expected)
 
     def test_compute_collapse_capacity(self):
 
         ps_tower = copy.deepcopy(self.ps_tower)
-        conf = copy.deepcopy(self.conf)
+        cfg = copy.deepcopy(self.cfg)
 
-        conf.design_value[ps_tower['LineRoute']]['span'] = 20.0
+        cfg.design_value[ps_tower['LineRoute']]['span'] = 20.0
         ps_tower['actual_span'] = 10.0
-        tower = Tower(conf, ps_tower)
+        tower = Tower(cfg, ps_tower)
 
         self.assertEqual(tower.collapse_capacity,
                          tower.design_speed/np.sqrt(0.75))
 
         # design wind span < actual span
-        conf.design_value[ps_tower['LineRoute']]['span'] = 20.0
+        cfg.design_value[ps_tower['LineRoute']]['span'] = 20.0
         ps_tower['actual_span'] = 25.0
-        tower = Tower(conf, ps_tower)
+        tower = Tower(cfg, ps_tower)
 
         self.assertEqual(tower.collapse_capacity,
                          tower.design_speed/1.0)
@@ -120,24 +120,24 @@ class TestTower(unittest.TestCase):
 
         height_z = 15.4   # Suspension
         for cat_, mzcat10_ in zip(category, mzcat10):
-            conf = copy.deepcopy(self.conf)
-            conf.design_value[self.ps_tower['LineRoute']]['cat'] = cat_
+            cfg = copy.deepcopy(self.cfg)
+            cfg.design_value[self.ps_tower['LineRoute']]['cat'] = cat_
             ps_tower = copy.deepcopy(self.ps_tower)
             ps_tower.Function = 'Suspension'
-            expected = np.interp(height_z, conf.terrain_multiplier['height'],
-                                 conf.terrain_multiplier['tc'+ str(cat_)])/mzcat10_
-            tower = Tower(conf, ps_tower)
+            expected = np.interp(height_z, cfg.terrain_multiplier['height'],
+                                 cfg.terrain_multiplier['tc'+ str(cat_)])/mzcat10_
+            tower = Tower(cfg, ps_tower)
             self.assertEqual(tower.convert_factor, expected)
 
         height_z = 12.2  # Strainer, Terminal
         for cat_, mzcat10_ in zip(category, mzcat10):
-            conf = copy.deepcopy(self.conf)
+            cfg = copy.deepcopy(self.cfg)
             # ps_tower = copy.deepcopy(self.ps_tower)
             # ps_tower['Function'] = 'Strainer'
-            conf.design_value[self.ps_tower['LineRoute']]['cat'] = cat_
-            expected = np.interp(height_z, conf.terrain_multiplier['height'],
-                                 conf.terrain_multiplier['tc'+str(cat_)])/mzcat10_
-            tower = Tower(conf, self.ps_tower)
+            cfg.design_value[self.ps_tower['LineRoute']]['cat'] = cat_
+            expected = np.interp(height_z, cfg.terrain_multiplier['height'],
+                                 cfg.terrain_multiplier['tc'+str(cat_)])/mzcat10_
+            tower = Tower(cfg, self.ps_tower)
             self.assertEqual(tower.convert_factor, expected)
 
     '''
@@ -164,19 +164,19 @@ class TestTower(unittest.TestCase):
         rv = rnd_state.uniform(size=(no_sims, len(wp.index)))
 
         tf_array = np.array([rv < wp[ds].values for ds in
-                             self.conf.damage_states])
+                             self.cfg.damage_states])
         ds_wind = np.sum(tf_array, axis=0)
 
         for i, (_, value) in enumerate(wp.iterrows()):
-            for j, ds in enumerate(self.conf.damage_states, 1):
+            for j, ds in enumerate(self.cfg.damage_states, 1):
                 sim_result = np.sum(ds_wind[:, i] >= j) / float(no_sims)
                 # print('{}:{}'.format(sim_result, value[ds]))
                 np.testing.assert_almost_equal(sim_result, value[ds],
                                                decimal=1)
         tower.determine_damage_isolation_mc(rv)
 
-        wind_mc = {ds: dict() for ds in self.conf.damage_states}
-        for i, ds in enumerate(self.conf.damage_states, 1):
+        wind_mc = {ds: dict() for ds in self.cfg.damage_states}
+        for i, ds in enumerate(self.cfg.damage_states, 1):
             wind_mc[ds]['id_sim'], wind_mc[ds]['id_time'] = \
                 np.where(ds_wind == i)
             np.testing.assert_almost_equal(wind_mc[ds]['id_sim'],

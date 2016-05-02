@@ -15,64 +15,52 @@ from geopy.distance import great_circle
 from wistl.transmission_line import TransmissionLine
 
 
-def create_damaged_network(conf):
+def create_transmission_network_under_wind_event(event_tuple, cfg):
     """ create dict of transmission network
-    :param conf: instance of config class
-    :return: dictionary of damaged_networks
+    :param event_tuple: tuple of event_id and scale
+    :param cfg: instance of config class
+    :return: an instance of TransmissionNetwork
     """
 
-    damaged_networks = dict()
+    network = TransmissionNetwork(cfg)
+    event_id, scale = event_tuple
+    network.event_tuple = (event_id, scale)
 
-    for event_id, scale_list in conf.scale.iteritems():
-
-        for scale in scale_list:
-
-            event_id_scale = conf.event_id_scale_str.format(event_id=event_id,
-                                                            scale=scale)
-
-            if event_id_scale in damaged_networks:
-                msg = '{} is already assigned'.format(event_id_scale)
-                raise KeyError(msg)
-
-            path_output_scenario = os.path.join(conf.path_output,
-                                                event_id_scale)
-
-            if not os.path.exists(path_output_scenario) and conf.save:
-                os.makedirs(path_output_scenario)
-                print('{} is created'.format(path_output_scenario))
-
-            damaged_networks[event_id_scale] = TransmissionNetwork(conf)
-            damaged_networks[event_id_scale].event_tuple = (event_id, scale)
-
-    return damaged_networks
+    return network
 
 
 class TransmissionNetwork(object):
     """ class for a collection of transmission lines"""
 
-    def __init__(self, conf):
+    def __init__(self, cfg):
 
-        self.conf = conf
-        self.df_lines = read_shape_file(conf.file_shape_line)
+        self.cfg = cfg
+
+        # read and process line information
+        self.df_lines = read_shape_file(cfg.file_shape_line)
         self.df_lines = populate_df_lines(self.df_lines)
-        conf.no_towers_by_line = \
+        cfg.no_towers_by_line = \
             self.df_lines.set_index('LineRoute').to_dict()['no_towers']
 
-        self.df_towers = read_shape_file(conf.file_shape_tower)
-        self.df_towers = populate_df_towers(self.df_towers, conf)
+        # read and process tower information
+        self.df_towers = read_shape_file(cfg.file_shape_tower)
+        self.df_towers = populate_df_towers(self.df_towers, cfg)
 
+        # assigned outside
         self._event_tuple = None
 
+        # assigned in @event_tuple.setter
         self.event_id_scale = None
         self.event_id = None
         self.scale = None
         self.path_event = None
         self.time_index = None
+        self.path_output = None
 
         self.lines = dict()
         for line_name, grouped in self.df_towers.groupby('LineRoute'):
 
-            if line_name in self.conf.selected_lines:
+            if line_name in self.cfg.selected_lines:
                 try:
                     idx = self.df_lines[self.df_lines.LineRoute ==
                                         line_name].index[0]
@@ -81,14 +69,14 @@ class TransmissionNetwork(object):
                     raise IndexError(msg)
 
                 self.lines[line_name] = TransmissionLine(
-                    conf=self.conf,
+                    cfg=self.cfg,
                     df_towers=grouped.copy(),
                     ps_line=self.df_lines.loc[idx])
 
-        if conf.line_interaction:
+        if cfg.line_interaction:
             self.set_line_interaction()
 
-            if conf.figure:
+            if cfg.figure:
                 self.plot_line_interaction()
 
     @property
@@ -104,10 +92,15 @@ class TransmissionNetwork(object):
         else:
             self.event_id = event_id
             self.scale = scale
-            self.path_event = os.path.join(self.conf.path_wind_scenario_base,
+            self.path_event = os.path.join(self.cfg.path_wind_scenario_base,
                                            event_id)
-            self.event_id_scale = self.conf.event_id_scale_str.format(
+            self.event_id_scale = self.cfg.event_id_scale_str.format(
                 event_id=event_id, scale=scale)
+            self.path_output = os.path.join(self.cfg.path_output,
+                                            self.event_id_scale)
+            if not os.path.exists(self.path_output) and self.cfg.save:
+                os.makedirs(self.path_output)
+                print('{} is created'.format(self.path_output))
             self.set_damage_line()
 
     def set_damage_line(self):
@@ -127,7 +120,7 @@ class TransmissionNetwork(object):
             for tower in line.towers.itervalues():
                 id_on_target_line = dict()
 
-                for target_line in self.conf.line_interaction[line_name]:
+                for target_line in self.cfg.line_interaction[line_name]:
 
                     line_string = self.lines[target_line].line_string
                     line_coord = self.lines[target_line].coord
@@ -145,9 +138,11 @@ class TransmissionNetwork(object):
 
                     if dist_from_line < tower.height:
 
-                        id_on_target_line[target_line] = \
-                        {'id': find_id_nearest_pt(closest_pt_coord, line_coord),
-                         'vector': unit_vector(closest_pt_coord - tower.coord)}
+                        id_on_target_line[target_line] = {
+                            'id': find_id_nearest_pt(closest_pt_coord,
+                                                     line_coord),
+                            'vector': unit_vector(closest_pt_coord -
+                                                  tower.coord)}
 
                 if id_on_target_line:
                     tower.id_on_target_line = id_on_target_line
@@ -160,7 +155,7 @@ class TransmissionNetwork(object):
             plt.plot(line.coord[:, 0],
                      line.coord[:, 1], '-', label=line_name)
 
-            for target_line in self.conf.line_interaction[line_name]:
+            for target_line in self.cfg.line_interaction[line_name]:
 
                 plt.plot(self.lines[target_line].coord[:, 0],
                          self.lines[target_line].coord[:, 1],
@@ -187,7 +182,7 @@ class TransmissionNetwork(object):
             plt.legend(loc=0)
             plt.xlabel('Longitude')
             plt.ylabel('Latitude')
-            png_file = os.path.join(self.conf.path_output,
+            png_file = os.path.join(self.cfg.path_output,
                                     'line_interaction_{}.png'.format(line_name))
             plt.savefig(png_file)
             plt.close()
@@ -209,23 +204,23 @@ def populate_df_lines(df_lines):
     return df_lines
 
 
-def populate_df_towers(df_towers, conf):
+def populate_df_towers(df_towers, cfg):
     """
     add columns to df_towers
     :param df_towers:
-    :param conf:
+    :param cfg:
     :return:
     """
 
     df_towers = df_towers.merge(df_towers['Shapes'].apply(assign_shapely_point),
                                 left_index=True, right_index=True)
     df_towers = df_towers.merge(df_towers['LineRoute'].apply(
-        assign_design_values, args=(conf,)), left_index=True, right_index=True)
+        assign_design_values, args=(cfg,)), left_index=True, right_index=True)
     df_towers = df_towers.merge(df_towers.apply(assign_fragility_parameters,
-                                                args=(conf,), axis=1),
+                                                args=(cfg,), axis=1),
                                 left_index=True, right_index=True)
     df_towers['file_wind_base_name'] = df_towers['Name'].apply(
-        lambda x: conf.wind_file_head + x + conf.wind_file_tail)
+        lambda x: cfg.wind_file_head + x + cfg.wind_file_tail)
     return df_towers
 
 
@@ -246,15 +241,15 @@ def calculate_distance_between_towers(coord_lat_lon):
     return actual_span
 
 
-def assign_design_values(line_route, conf):
+def assign_design_values(line_route, cfg):
     """
     create pandas series of design level related values
     :param line_route: line route name
-    :param conf: an instance of TransmissionConfig
+    :param cfg: an instance of TransmissionConfig
     :return: pandas series of design_span, design_level, design_speed, and
              terrain cat
     """
-    design_value = conf.design_value[line_route]
+    design_value = cfg.design_value[line_route]
     return pd.Series({'design_span': design_value['span'],
                       'design_level': design_value['level'],
                       'design_speed': design_value['speed'],
@@ -285,36 +280,36 @@ def assign_shapely_line(shape):
                       'line_string': LineString(coord)})
 
 
-def assign_fragility_parameters(ps_tower, conf):
+def assign_fragility_parameters(ps_tower, cfg):
     """
     assign fragility parameters by Type, Function, Dev Angle
     :param ps_tower: pandas series of towers
-    :param conf: an instance of TransmissionConfig
+    :param cfg: an instance of TransmissionConfig
     :return: pandas series of frag_func, frag_scale, frag_arg
     """
-    tf_array = np.ones((conf.fragility.shape[0],), dtype=bool)
-    for att, att_type in zip(conf.fragility_metadata['by'],
-                             conf.fragility_metadata['type']):
+    tf_array = np.ones((cfg.fragility.shape[0],), dtype=bool)
+    for att, att_type in zip(cfg.fragility_metadata['by'],
+                             cfg.fragility_metadata['type']):
         if att_type == 'string':
-            tf_array *= conf.fragility[att] == ps_tower[att]
+            tf_array *= cfg.fragility[att] == ps_tower[att]
         elif att_type == 'numeric':
-            tf_array *= (conf.fragility[att + '_lower'] <=
+            tf_array *= (cfg.fragility[att + '_lower'] <=
                          ps_tower[att]) & \
-                        (conf.fragility[att + '_upper'] >
+                        (cfg.fragility[att + '_upper'] >
                          ps_tower[att])
 
     params = pd.Series({'frag_scale': dict(), 'frag_arg': dict(),
                         'frag_func': None})
-    for ds in conf.damage_states:
-        idx = tf_array & (conf.fragility['limit_states'] == ds)
+    for ds in cfg.damage_states:
+        idx = tf_array & (cfg.fragility['limit_states'] == ds)
         assert (sum(idx) == 1)
-        fn_form = conf.fragility.loc[
-            idx, conf.fragility_metadata['function']].values[0]
+        fn_form = cfg.fragility.loc[
+            idx, cfg.fragility_metadata['function']].values[0]
         params['frag_func'] = fn_form
-        params['frag_scale'][ds] = conf.fragility.loc[
-            idx, conf.fragility_metadata[fn_form]['scale']].values[0]
-        params['frag_arg'][ds] = conf.fragility.loc[
-            idx, conf.fragility_metadata[fn_form]['arg']].values[0]
+        params['frag_scale'][ds] = cfg.fragility.loc[
+            idx, cfg.fragility_metadata[fn_form]['scale']].values[0]
+        params['frag_arg'][ds] = cfg.fragility.loc[
+            idx, cfg.fragility_metadata[fn_form]['arg']].values[0]
     return params
 
 
@@ -360,7 +355,7 @@ def read_shape_file(file_shape):
     return data_frame
 
 
-def mc_loop_over_line(damage_line):
+def compute_damage_probability_per_line(damage_line):
     """
     mc simulation over transmission line
     :param damage_line: instance of transmission line
@@ -370,9 +365,9 @@ def mc_loop_over_line(damage_line):
     event_id = damage_line.event_id
     line_name = damage_line.name
 
-    if damage_line.conf.random_seed:
+    if damage_line.cfg.random_seed:
         try:
-            seed = damage_line.conf.seed[event_id][line_name]
+            seed = damage_line.cfg.seed[event_id][line_name]
         except KeyError:
             msg = '{}:{} is undefined. Check the config file'.format(
                 event_id, line_name)
@@ -380,14 +375,18 @@ def mc_loop_over_line(damage_line):
     else:
         seed = None
 
+    # compute damage probability analytically
+    if damage_line.cfg.analytical:
+        damage_line.compute_damage_probability_analytical()
+
     # perfect correlation within a single line
     damage_line.compute_damage_probability_simulation(seed)
 
-    if not damage_line.conf.skip_non_cascading_collapse:
+    if not damage_line.cfg.skip_non_cascading_collapse:
         damage_line.compute_damage_probability_simulation_non_cascading()
 
     try:
-        damage_line.conf.line_interaction[line_name]
+        damage_line.cfg.line_interaction[line_name]
     except (TypeError, KeyError):
         pass
     else:
@@ -396,71 +395,89 @@ def mc_loop_over_line(damage_line):
     return damage_line
 
 
-def compute_damage_probability_simulation_line_interaction(damaged_network):
+def compute_damage_probability_line_interaction_per_network(network):
     """
 
-    :param damaged_network: a dictionary of damaged lines
+    :param network: a dictionary of lines
     :return:
     """
 
-    for line_name, damaged_line in damaged_network.iteritems():
+    for line_name, line in network.iteritems():
 
-        tf_ds = np.zeros((damaged_line.no_towers,
-                          damaged_line.conf.no_sims,
-                          len(damaged_line.time_index)), dtype=bool)
+        tf_ds = np.zeros((line.no_towers,
+                          line.cfg.no_sims,
+                          len(line.time_index)), dtype=bool)
 
-        for key, value in damaged_line.conf.line_interaction.iteritems():
-            if line_name in value:
+        for trigger_line, target_lines in line.cfg.line_interaction.iteritems():
 
-                tf_ds += damaged_network[key].tf_array_by_line[line_name]
+            if line_name in target_lines:
 
-        # append collapse by adjacent towers
-        for tower in damaged_line.towers.itervalues():
+                try:
+                    pd_id = pd.DataFrame(np.vstack(
+                        network[trigger_line].damage_index_line_interaction[
+                            line_name]),
+                        columns=['id_tower', 'id_sim', 'id_time'],
+                        dtype=np.int64)
+                except ValueError:
+                    print('{}'.format(
+                        network[trigger_line].damage_index_line_interaction[
+                            line_name]))
+                else:
 
-            for id_adj, grouped in tower.damage_adjacent_mc.groupby('id_adj'):
-                for i in id_adj:
-                    tf_ds[i,
-                          grouped['id_sim'].values,
-                          grouped['id_time'].values] = True
+                    id_tower = pd_id['id_tower'].values
+                    id_sim = pd_id['id_sim'].values
+                    id_time = pd_id['id_time'].values
 
-        # override non-collapse damage states
-        cds_list = damaged_line.conf.damage_states[:]  # to avoid effect
+                    try:
+                        tf_ds[id_tower, id_sim, id_time] = True
+                    except IndexError:
+                        print('{}:{}:{}'.format(pd_id.head(),
+                                                pd_id.dtypes,
+                                                'why???'))
+                        print('trigger:{}, {}, {}'.format(trigger_line,
+                                                          line_name,
+                                                          line.event_id_scale))
+
+        # append damage state by line itself
+        # due to either direct wind and adjacent towers
+        # also need to override non-collapse damage states
+
+        cds_list = line.cfg.damage_states[:]  # to avoid effect
         cds_list.reverse()  # [collapse, minor]
 
         tf_sim = dict()
 
         # append damage state by direct wind
         for ds in cds_list:
-            for tower in damaged_line.towers.itervalues():
 
-                tf_ds[tower.id,
-                      tower.damage_isolation_mc[ds]['id_sim'].values,
-                      tower.damage_isolation_mc[ds]['id_time'].values] = True
-
-            damaged_line.damage_prob_line_interaction[ds] = \
-                pd.DataFrame(np.sum(tf_ds, axis=1).T / float(damaged_line.conf.no_sims),
-                             columns=damaged_line.name_by_line,
-                             index=damaged_line.time_index)
+            # append collapse by adjacent towers
+            tf_ds[line.damage_index_simulation[ds]['id_tower'],
+                  line.damage_index_simulation[ds]['id_sim'],
+                  line.damage_index_simulation[ds]['id_time']] = True
 
             tf_sim[ds] = np.copy(tf_ds)
 
+            line.damage_prob_line_interaction[ds] = \
+                pd.DataFrame(np.sum(tf_ds, axis=1).T / float(line.cfg.no_sims),
+                             columns=line.name_by_line,
+                             index=line.time_index)
+
         # compute mean and std of no. of towers for each of damage states
-        damaged_line.est_no_damage_line_interaction,
-        damaged_line.prob_no_damage_line_interaction = \
-            damaged_line.compute_damage_stats(tf_sim)
+        (line.est_no_damage_line_interaction,
+            line.prob_no_damage_line_interaction) = \
+            line.compute_damage_stats(tf_sim)
 
-        if damaged_line.conf.save:
-            damaged_line.write_hdf5(
-                file_str='damage_prob_line_interaction',
-                value=damaged_line.damage_prob_line_interaction)
+        if line.cfg.save:
+            line.write_hdf5(file_str='damage_prob_line_interaction',
+                            value=line.damage_prob_line_interaction)
 
-            damaged_line.write_hdf5(
-                file_str='est_no_damage_line_interaction',
-                value=damaged_line.est_no_damage_line_interaction)
+            line.write_hdf5(file_str='est_no_damage_line_interaction',
+                            value=line.est_no_damage_line_interaction)
 
-            damaged_line.write_hdf5(
-                file_str='prob_no_damage_line_interaction',
-                value=damaged_line.prob_no_damage_line_interaction)
+            line.write_hdf5(file_str='prob_no_damage_line_interaction',
+                            value=line.prob_no_damage_line_interaction)
+
+    return network
 
 
 def unit_vector(vector):

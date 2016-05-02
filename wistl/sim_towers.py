@@ -9,72 +9,74 @@ import time
 import sys
 import parmap
 
-from wistl.transmission_network import create_damaged_network, \
-    mc_loop_over_line, compute_damage_probability_simulation_line_interaction
+from wistl.transmission_network import compute_damage_probability_per_line, \
+    create_transmission_network_under_wind_event, \
+    compute_damage_probability_line_interaction_per_network
 
 
 def sim_towers(cfg):
     """
     main function
     :param cfg: an instance of TransmissionConfig
-    :return:
+    :return: damaged_networks: list of damaged networks, dictionaries of
+                               damaged lines
     """
 
-    damaged_networks = create_damaged_network(cfg)
-
     tic = time.time()
+    damaged_networks = []
 
-    if cfg.analytical:
-        print('Computing damage probability using analytical method')
+    if cfg.parallel:
+        print('parallel MC run on.......')
 
-        for event_key, network in damaged_networks.iteritems():
-            # print(' event: {}'.format(event_key))
-            for line_key, line in network.lines.iteritems():
-                line.compute_damage_probability_analytical()
+        # create transmission network with wind event
+        networks = parmap.map(
+            create_transmission_network_under_wind_event,
+            cfg.event_id_scale, cfg)
 
-        print('Analytical method took {} seconds'.format(time.time() - tic))
+        lines = []
+        for network in networks:
+            for line in network.lines.itervalues():
+                lines.append(line)
 
-    tic = time.time()
+        # compute damage probability for each pair of line and wind event
+        damaged_lines = parmap.map(compute_damage_probability_per_line, lines)
 
-    damaged_lines = None
-    if cfg.simulation:
-        print('Computing damage probability using simulation method')
-
-        if cfg.parallel:
-            print('parallel MC run on.......')
-
-            list_line = []
-            for network in damaged_networks.itervalues():
-                for line in network.lines.itervalues():
-                    list_line.append(line)
-
-            damaged_lines = parmap.map(mc_loop_over_line, list_line)
-
-            collection_by_event_and_line = dict()
-            for line in damaged_lines:
-                collection_by_event_and_line.setdefault(
-                    line.event_id_scale, {})[line.name] = line
-
-        else:
-            print('serial MC run on.......')
-
-            collection_by_event_and_line = dict()
-
-            for event_key, network in damaged_networks.iteritems():
-                # print(' event: {}'.format(event_key))
-                for line in network.lines.itervalues():
-                    collection_by_event_and_line.setdefault(
-                        line.event_id_scale, {})[line.name] = \
-                        mc_loop_over_line(line)
+        nested_dic = dict()
+        for line in damaged_lines:
+            nested_dic.setdefault(line.event_id_scale, {})[line.name] = line
 
         if cfg.line_interaction:
+            damaged_networks = parmap.map(
+                compute_damage_probability_line_interaction_per_network,
+                [network for network in nested_dic.itervalues()])
+        else:
+            damaged_networks = [network for network in nested_dic.itervalues()]
 
-            for collection_by_event in collection_by_event_and_line.itervalues():
-                compute_damage_probability_simulation_line_interaction(collection_by_event)
+    else:
+        print('serial MC run on.......')
 
-        print('MC simulation took {} seconds'.format(time.time() - tic))
+        # create transmission network with wind event
+        for event_id_scale in cfg.event_id_scale:
 
-    return damaged_networks, damaged_lines
+            network = create_transmission_network_under_wind_event(
+                event_id_scale, cfg)
+
+            for line in network.lines.itervalues():
+                compute_damage_probability_per_line(line)
+
+            network_dic = {line.name: line for
+                           line in network.lines.itervalues()}
+
+            if cfg.line_interaction:
+                network_dic = \
+                    compute_damage_probability_line_interaction_per_network(
+                        network_dic)
+
+            damaged_networks.append(network_dic)
+
+    print('MC simulation took {} seconds'.format(time.time() - tic))
+
+    return damaged_networks
 
 if __name__ == '__main__':
 

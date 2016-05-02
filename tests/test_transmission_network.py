@@ -13,8 +13,8 @@ class TransmissionNetworkTest(unittest.TestCase):
     def setUpClass(cls):
         conf_path = os.path.join(BASE_DIR, 'test.cfg')
         assert os.path.exists(conf_path), 'config file path wrong'
-        cls.conf = TransmissionConfig(conf_path)
-        cls.damaged_networks = create_damaged_network(cls.conf)
+        cls.cfg = TransmissionConfig(conf_path)
+        cls.damaged_networks = create_damaged_network(cls.cfg)
 
     def test_time_index(self):
         keys = self.damaged_networks.keys()  # get the keys
@@ -26,7 +26,7 @@ class TransmissionNetworkTest(unittest.TestCase):
 
     def test_number_of_damaged_networks(self):
         self.assertEqual(len(self.damaged_networks),
-                         len([i for x in self.conf.scale.itervalues()
+                         len([i for x in self.cfg.scale.itervalues()
                               for i in x ]))
 
     def test_damaged_network_type(self):

@@ -27,21 +27,21 @@ class TestTransmissionLine(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.conf = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
+        cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
 
-        cls.conf.no_sims = 10000
-        cls.all_towers = read_shape_file(cls.conf.file_shape_tower)
+        cls.cfg.no_sims = 10000
+        cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)
         cls.all_towers.loc[1, 'Function'] = 'Suspension'
-        populate_df_towers(cls.all_towers, cls.conf)
+        populate_df_towers(cls.all_towers, cls.cfg)
 
-        cls.all_lines = read_shape_file(cls.conf.file_shape_line)
+        cls.all_lines = read_shape_file(cls.cfg.file_shape_line)
         populate_df_lines(cls.all_lines)
 
         # Calaca - Amadeo
         df_line = cls.all_lines.loc[0, :]
         tf = cls.all_towers['LineRoute'] == df_line['LineRoute']
         df_towers = cls.all_towers.loc[tf, :]
-        cls.line0 = TransmissionLine(cls.conf, df_towers, df_line)
+        cls.line0 = TransmissionLine(cls.cfg, df_towers, df_line)
 
         # a bit of change
         df_towers = copy.deepcopy(cls.all_towers.loc[[3, 4, 5, 0, 2, 1], :])
@@ -49,7 +49,7 @@ class TestTransmissionLine(unittest.TestCase):
         df_towers.loc[1, 'Function'] = 'Terminal'
         df_towers.loc[[5, 4, 3, 2], 'Function'] = 'Suspension'
         df_towers.loc[0, 'Function'] = 'Strainer'
-        cls.line1 = TransmissionLine(cls.conf, df_towers, df_line)
+        cls.line1 = TransmissionLine(cls.cfg, df_towers, df_line)
         # original index is ignored, and then re-assigned based on the line
         # print('{}'.format(df_towers.Function))
 
@@ -73,7 +73,7 @@ class TestTransmissionLine(unittest.TestCase):
         tf = self.all_towers['LineRoute'] == ps_line['LineRoute']
         df_towers = self.all_towers.loc[tf, :]
         df_towers.index = [3, 5, 4, 0, 1, 2]
-        line = TransmissionLine(self.conf, df_towers, ps_line)
+        line = TransmissionLine(self.cfg, df_towers, ps_line)
 
         expected = dict()
         expected['id_by_line'] = range(6)
@@ -118,7 +118,7 @@ class TestTransmissionLine(unittest.TestCase):
         tf = self.all_towers['LineRoute'] == df_line['LineRoute']
         df_towers = copy.deepcopy(self.all_towers.loc[tf, :])
         df_towers.loc[:, 'Function'] = 'Suspension'
-        line = TransmissionLine(self.conf, df_towers, df_line)
+        line = TransmissionLine(self.cfg, df_towers, df_line)
 
         expected = {0: [-1, -1, 0, 1, 2],
                     1: [-1, 0, 1, 2, 3],
@@ -295,21 +295,21 @@ class TestTransmissionLine(unittest.TestCase):
         scale = 2.5
         self.line1.event_tuple = (event_id, scale)
 
-        seed = self.conf.seed[event_id][self.line1.name]
+        seed = self.cfg.seed[event_id][self.line1.name]
         rnd_state = np.random.RandomState(seed)
 
-        rv = rnd_state.uniform(size=(self.conf.no_sims,
+        rv = rnd_state.uniform(size=(self.cfg.no_sims,
                                      len(self.line1.time_index)))
 
-        # tf_ds = pd.Panel(np.zeros((self.conf.no_sims,
+        # tf_ds = pd.Panel(np.zeros((self.cfg.no_sims,
         #                            len(self.line1.time_index),
         #                            self.line1.no_towers), dtype=bool),
-        #                  items=range(self.conf.no_sims),
+        #                  items=range(self.cfg.no_sims),
         #                  major_axis=self.line1.time_index,
         #                  minor_axis=self.line1.name_by_line)
 
         tf_ds = np.zeros((self.line1.no_towers,
-                          self.conf.no_sims,
+                          self.cfg.no_sims,
                           len(self.line1.time_index)), dtype=bool)
 
         for name, tower in self.line1.towers.iteritems():
@@ -327,7 +327,7 @@ class TestTransmissionLine(unittest.TestCase):
 
             # for key, grouped in tower.damage_mc['collapse'].groupby('id_time'):
             #
-            #     np.testing.assert_almost_equal(len(grouped)/float(self.conf.no_sims),
+            #     np.testing.assert_almost_equal(len(grouped)/float(self.cfg.no_sims),
             #                                    tower.prob_damage_isolation.ix[key, 'collapse'],
             #                                    decimal=1)
 
@@ -348,14 +348,14 @@ class TestTransmissionLine(unittest.TestCase):
         scale = 2.5
         self.line1.event_tuple = (event_id, scale)
 
-        seed = self.conf.seed[event_id][self.line1.name]
+        seed = self.cfg.seed[event_id][self.line1.name]
         rnd_state = np.random.RandomState(seed)
 
-        rv = rnd_state.uniform(size=(self.conf.no_sims,
+        rv = rnd_state.uniform(size=(self.cfg.no_sims,
                                      len(self.line1.time_index)))
 
         tf_ds = np.zeros((self.line1.no_towers,
-                          self.conf.no_sims,
+                          self.cfg.no_sims,
                           len(self.line1.time_index)), dtype=bool)
 
         # for name, tower in self.line1.towers.iteritems():

@@ -18,11 +18,18 @@ warnings.filterwarnings("ignore", lineno=100, module='tables')
 class TransmissionLine(object):
     """ class for a collection of towers """
 
-    def __init__(self, conf, df_towers, ps_line):
+    def __init__(self, cfg, df_towers, ps_line):
 
-        self.conf = conf
+        self.cfg = cfg
         self.ps_line = ps_line
         self.df_towers = df_towers
+
+        self.line_string = self.ps_line.line_string
+        self.coord = np.stack(self.ps_line.coord)
+        self.coord_lat_lon = np.stack(self.ps_line.coord_lat_lon)
+        self.name = ps_line.LineRoute
+        self.name_output = ps_line.name_output
+        self.no_towers = len(self.df_towers)
 
         # moved from damage_line.py
         self._event_tuple = None
@@ -39,6 +46,7 @@ class TransmissionLine(object):
 
         # simulation method
         self.damage_prob_simulation = dict()
+        self.damage_index_simulation = dict()
         self.prob_no_damage_simulation = None
         self.est_no_damage_simulation = None
 
@@ -48,22 +56,20 @@ class TransmissionLine(object):
         self.est_no_damage_simulation_non_cascading = None
 
         # parallel line interaction
-        self.tf_array_by_line = dict()
+        if self.cfg.line_interaction:
+            self.damage_index_line_interaction = {target_line: [] for
+                target_line in self.cfg.line_interaction[self.name]}
+        else:
+            self.damage_index_line_interaction = None
         self.damage_prob_line_interaction = dict()
         self.prob_no_damage_line_interaction = None
         self.est_no_damage_line_interaction = None
 
-        self.line_string = self.ps_line.line_string
-        self.coord = np.stack(self.ps_line.coord)
-        self.coord_lat_lon = np.stack(self.ps_line.coord_lat_lon)
-        self.name = ps_line.LineRoute
-        self.name_output = ps_line.name_output
-        self.no_towers = len(self.df_towers)
 
         # reset index by tower location according to line shapefile
         self.df_towers.index = self.sort_by_location()
 
-        if self.conf.figure:
+        if self.cfg.figure:
             self.plot_tower_line()
 
         self.id_by_line = range(self.no_towers)
@@ -81,7 +87,7 @@ class TransmissionLine(object):
         self.towers = dict()
         for id_, ps_tower in self.df_towers.iterrows():
             name_ = ps_tower.Name
-            self.towers[name_] = Tower(conf=self.conf, ps_tower=ps_tower)
+            self.towers[name_] = Tower(cfg=self.cfg, ps_tower=ps_tower)
             # self.towers[name_].id_adj = self.assign_id_adj_towers(id_)
 
         for tower in self.towers.itervalues():
@@ -103,9 +109,9 @@ class TransmissionLine(object):
         else:
             self.event_id = event_id
             self.scale = scale
-            self.path_event = os.path.join(self.conf.path_wind_scenario_base,
+            self.path_event = os.path.join(self.cfg.path_wind_scenario_base,
                                            event_id)
-            self.event_id_scale = self.conf.event_id_scale_str.format(
+            self.event_id_scale = self.cfg.event_id_scale_str.format(
                 event_id=event_id, scale=scale)
             self.set_damage_tower()
 
@@ -156,7 +162,7 @@ class TransmissionLine(object):
                  coord_towers[:, 0],
                  coord_towers[:, 1], 'b-')
         plt.title(self.name)
-        png_file = os.path.join(self.conf.path_output,
+        png_file = os.path.join(self.cfg.path_output,
                                 'line_{}.png'.format(self.name))
         plt.savefig(png_file)
         plt.close()
@@ -218,18 +224,18 @@ class TransmissionLine(object):
             except KeyError:
                 pass
             else:
-                if self.towers[name_].function in self.conf.strainer:
+                if self.towers[name_].function in self.cfg.strainer:
                     id_adj[i] = -1
         return id_adj
 
     def write_hdf5(self, file_str, value):
 
-        h5file = os.path.join(self.conf.path_output,
+        h5file = os.path.join(self.cfg.path_output,
                               self.event_id_scale,
                               '{}_{}.h5'.format(file_str, self.name_output))
         hdf = pd.HDFStore(h5file)
 
-        for ds in self.conf.damage_states:
+        for ds in self.cfg.damage_states:
             try:
                 hdf.put(ds, value[ds], format='table', data_columns=True)
             except TypeError:
@@ -269,7 +275,7 @@ class TransmissionLine(object):
             index=self.time_index)
 
         # prob of non-collapse damage
-        cds_list = copy.deepcopy(self.conf.damage_states)
+        cds_list = copy.deepcopy(self.cfg.damage_states)
         cds_list.pop()  # remove the last item 'collapse'
 
         for ds in cds_list:
@@ -285,7 +291,7 @@ class TransmissionLine(object):
                 columns=self.name_by_line,
                 index=self.time_index)
 
-        if self.conf.save:
+        if self.cfg.save:
             self.write_hdf5(file_str='damage_prob_analytical',
                             value=self.damage_prob_analytical)
 
@@ -293,10 +299,10 @@ class TransmissionLine(object):
 
         # perfect correlation within a single line
         rnd_state = np.random.RandomState(seed)
-        rv = rnd_state.uniform(size=(self.conf.no_sims, len(self.time_index)))
+        rv = rnd_state.uniform(size=(self.cfg.no_sims, len(self.time_index)))
 
         tf_ds = np.zeros((self.no_towers,
-                          self.conf.no_sims,
+                          self.cfg.no_sims,
                           len(self.time_index)), dtype=bool)
 
         # collapse by adjacent towers
@@ -310,7 +316,7 @@ class TransmissionLine(object):
                 for i in id_adj:
                     tf_ds[i, grouped['id_sim'].values, grouped['id_time'].values] = True
 
-        cds_list = self.conf.damage_states[:]  # to avoid effect
+        cds_list = self.cfg.damage_states[:]  # to avoid effect
         cds_list.reverse()  # [collapse, minor]
 
         tf_sim = dict()
@@ -323,17 +329,25 @@ class TransmissionLine(object):
                       tower.damage_isolation_mc[ds]['id_sim'].values,
                       tower.damage_isolation_mc[ds]['id_time'].values] = True
 
+            id_tower, id_sim, id_time = np.where(tf_ds)
+
+            self.damage_index_simulation[ds] = pd.DataFrame(
+                np.vstack((id_tower, id_sim, id_time)).T,
+                columns=['id_tower', 'id_sim', 'id_time'])
+
             self.damage_prob_simulation[ds] = pd.DataFrame(
-                np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
+                np.sum(tf_ds, axis=1).T / float(self.cfg.no_sims),
                 columns=self.name_by_line,
                 index=self.time_index)
 
             tf_sim[ds] = np.copy(tf_ds)  #
 
+        # save tf_sim[ds]
         self.est_no_damage_simulation, self.prob_no_damage_simulation = \
             self.compute_damage_stats(tf_sim)
 
-        if self.conf.save:
+
+        if self.cfg.save:
             self.write_hdf5(file_str='damage_prob_simulation',
                             value=self.damage_prob_simulation)
 
@@ -347,10 +361,10 @@ class TransmissionLine(object):
 
         tf_sim_non_cascading = dict()
 
-        for ds in self.conf.damage_states:
+        for ds in self.cfg.damage_states:
 
             tf_ds = np.zeros((self.no_towers,
-                              self.conf.no_sims,
+                              self.cfg.no_sims,
                               len(self.time_index)), dtype=bool)
 
             for i_row, name in enumerate(self.name_by_line):
@@ -361,7 +375,7 @@ class TransmissionLine(object):
                 tf_ds[i_row, id_sim, id_time] = True
 
             self.damage_prob_simulation_non_cascading[ds] = pd.DataFrame(
-                np.sum(tf_ds, axis=1).T / float(self.conf.no_sims),
+                np.sum(tf_ds, axis=1).T / float(self.cfg.no_sims),
                 columns=self.name_by_line,
                 index=self.time_index)
 
@@ -371,7 +385,7 @@ class TransmissionLine(object):
             self.prob_no_damage_simulation_non_cascading = \
             self.compute_damage_stats(tf_sim_non_cascading)
 
-        if self.conf.save:
+        if self.cfg.save:
 
             self.write_hdf5(file_str='damage_prob_simulation_non_cascading',
                             value=self.damage_prob_simulation_non_cascading)
@@ -395,7 +409,7 @@ class TransmissionLine(object):
 
         no_time = len(self.time_index)
         no_towers = self.no_towers
-        no_sims = self.conf.no_sims
+        no_sims = self.cfg.no_sims
 
         for ds in tf_sim:
 
@@ -438,11 +452,23 @@ class TransmissionLine(object):
         :return:
         """
 
-        for target_line in self.conf.line_interaction[self.name]:
-            self.tf_array_by_line[target_line] = np.zeros((
-                self.conf.no_towers_by_line[target_line],
-                self.conf.no_sims,
-                len(self.time_index)), dtype=bool)
+        # for target_line in self.cfg.line_interaction[self.name]:
+        #
+        #     damage_index_line_interaction[target_line] = \
+
+        # print('trigger line: {}'.format(self.name))
+        # for target_line in self.cfg.line_interaction[self.name]:
+        #
+        #     damage_index_line_interaction[target_line] = \
+        #         pd.DataFrame(columns=['id_tower', 'id_sim', 'id_time'],
+        #                      dtype=np.int64)
+
+            # self.tf_array_by_line[target_line] = np.zeros((
+            #     self.cfg.no_towers_by_line[target_line],
+            #     self.cfg.no_sims,
+            #     len(self.time_index)), dtype=bool)
+
+        #print('target in: {}'.format(self.damage_index_line_interaction[target_line].dtypes))
 
         for tower in self.towers.itervalues():
 
@@ -466,7 +492,7 @@ class TransmissionLine(object):
                 if angle[target_line] < 180:
 
                     target_tower_id = tower.id_on_target_line[target_line]['id']
-                    max_no_towers = self.conf.no_towers_by_line[target_line]
+                    max_no_towers = self.cfg.no_towers_by_line[target_line]
 
                     for no_collapse, subgroup in grouped.groupby('no_collapse'):
 
@@ -484,10 +510,26 @@ class TransmissionLine(object):
                                        + [target_tower_id]
                                        + list_another_direction if x >= 0]
 
-                        for item in itertools.product(list_towers,
-                                                   subgroup['id_sim'].values):
-                            self.tf_array_by_line[target_line][
-                                item[0], item[1], id_time] = True
+                        list_id = list(itertools.product(list_towers,
+                                                    subgroup['id_sim'].values,
+                                                    [id_time]))
+
+                        # try:
+                        #     df_id = pd.DataFrame(list_id, columns=['id_tower',
+                        #                                        'id_sim',
+                        #                                        'id_time'],
+                        #                          dtype=np.int64)
+                        # except IndexError:
+                        #     print('IndexError')
+
+                        if len(list_id) > 0:
+
+                            self.damage_index_line_interaction[
+                                target_line].append(list_id)
+
+                        # for item in ):
+                        #     self.damage_index_line_interaction[target_line][
+                        #         item[0], item[1], id_time] = True
                 else:
                     msg = 'tower:{}, angle: {}, wind:{}'.format(
                         tower.name, angle[target_line], wind_vector)

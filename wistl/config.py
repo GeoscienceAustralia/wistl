@@ -18,100 +18,99 @@ class TransmissionConfig(object):
             msg = 'Error: file {} not found'.format(cfg_file)
             sys.exit(msg)
 
-        conf = ConfigParser.ConfigParser()
-        conf.optionxform = str
-        conf.read(cfg_file)
+        cfg = ConfigParser.ConfigParser()
+        cfg.optionxform = str
+        cfg.read(cfg_file)
 
         path_cfg_file = os.path.dirname(os.path.realpath(cfg_file))
 
         # run_type
         key = 'run_type'
-        self.parallel = conf.getboolean(key, 'parallel')
-        self.save = conf.getboolean(key, 'save')
-        self.figure = conf.getboolean(key, 'figure')
-        self.random_seed = conf.getboolean(key, 'random_seed')
+        self.parallel = cfg.getboolean(key, 'parallel')
+        self.save = cfg.getboolean(key, 'save')
+        self.figure = cfg.getboolean(key, 'figure')
+        self.random_seed = cfg.getboolean(key, 'random_seed')
 
         # random seed
         self.seed = None
         if self.random_seed:
-            self.set_random_seed(conf)
+            self.set_random_seed(cfg)
 
         # run_parameters
         key = 'run_parameters'
-        self.no_sims = conf.getint(key, 'number_simulations')
-        self.analytical = conf.getboolean(key, 'run_analytical')
-        self.simulation = conf.getboolean(key, 'run_simulation')
-        self.skip_non_cascading_collapse = conf.getboolean(
+        self.no_sims = cfg.getint(key, 'number_simulations')
+        self.analytical = cfg.getboolean(key, 'run_analytical')
+        self.simulation = cfg.getboolean(key, 'run_simulation')
+        self.skip_non_cascading_collapse = cfg.getboolean(
             key, 'skip_non_cascading_collapse')
-        self.adjust_design_by_topography = conf.getboolean(
+        self.adjust_design_by_topography = cfg.getboolean(
             key, 'adjust_design_by_topography')
 
         self.strainer = []
-        for x in conf.get(key, 'Strainer').split(','):
+        for x in cfg.get(key, 'Strainer').split(','):
             self.strainer.append(x.strip())
 
         self.selected_lines = []
-        for x in conf.get(key, 'selected_lines').split(','):
+        for x in cfg.get(key, 'selected_lines').split(','):
             self.selected_lines.append(x.strip())
 
-        self.rtol = float(conf.get(key, 'relative_tolerance'))
-        self.atol = float(conf.get(key, 'absolute_tolerance'))
+        self.rtol = float(cfg.get(key, 'relative_tolerance'))
+        self.atol = float(cfg.get(key, 'absolute_tolerance'))
 
         # directories
         key = 'directories'
         self.path_gis_data = os.path.join(path_cfg_file,
-                                          conf.get(key, 'gis_data'))
+                                          cfg.get(key, 'gis_data'))
 
         self.path_wind_scenario_base = os.path.join(
-            path_cfg_file, conf.get(key, 'wind_scenario'))
+            path_cfg_file, cfg.get(key, 'wind_scenario'))
 
         self.path_input = os.path.join(path_cfg_file,
-                                       conf.get(key, 'input'))
+                                       cfg.get(key, 'input'))
 
         self.path_output = os.path.join(path_cfg_file,
-                                        conf.get(key, 'output'))
+                                        cfg.get(key, 'output'))
 
         # gis_data
         self.file_shape_tower = os.path.join(self.path_gis_data,
-                                             conf.get('gis_data',
+                                             cfg.get('gis_data',
                                                       'shape_tower'))
 
         self.file_shape_line = os.path.join(self.path_gis_data,
-                                            conf.get('gis_data',
+                                            cfg.get('gis_data',
                                                      'shape_line'))
 
         # wind_scenario
-        self.scale = dict()
-        for event_id in conf.options('wind_scenario'):
-            self.scale[event_id] = []
-            for x in conf.get('wind_scenario', event_id).split(','):
+        self.event_id_scale = []
+        for event_id in cfg.options('wind_scenario'):
+            for x in cfg.get('wind_scenario', event_id).split(','):
                 try:
-                    self.scale[event_id].append(float(x))
+                    self.event_id_scale.append((event_id, float(x)))
                 except ValueError:
                     pass
 
         # format
-        wind_file_name_format = conf.get('format', 'wind_scenario', 1)
+        wind_file_name_format = cfg.get('format', 'wind_scenario', 1)
         self.wind_file_head = wind_file_name_format.split('%')[0]
         self.wind_file_tail = wind_file_name_format.split(')')[-1]
-        self.event_id_scale_str = conf.get('format', 'event_id_scale')
+        self.event_id_scale_str = cfg.get('format', 'event_id_scale')
 
         # input
         self.file_design_value = os.path.join(self.path_input,
-                                              conf.get('input', 'design_value'))
+                                              cfg.get('input', 'design_value'))
         self.file_fragility_metadata = os.path.join(
-            self.path_input, conf.get('input', 'fragility_metadata'))
+            self.path_input, cfg.get('input', 'fragility_metadata'))
         self.file_cond_collapse_prob_metadata = os.path.join(
-            self.path_input, conf.get(
+            self.path_input, cfg.get(
                 'input', 'conditional_collapse_probability_metadata'))
         self.file_terrain_multiplier = os.path.join(
-            self.path_input, conf.get('input', 'terrain_height_multiplier'))
+            self.path_input, cfg.get('input', 'terrain_height_multiplier'))
         self.file_drag_height_by_type = os.path.join(
-            self.path_input, conf.get('input', 'drag_height_by_type'))
+            self.path_input, cfg.get('input', 'drag_height_by_type'))
 
         # adjust design wind speed based on topography
         if self.adjust_design_by_topography:
-            self.set_adjust_design_by_topography(conf)
+            self.set_adjust_design_by_topography(cfg)
         else:
             self.file_topo_multiplier = None
             self.file_design_adjustment_factor_by_topo = None
@@ -119,8 +118,8 @@ class TransmissionConfig(object):
             self.design_adjustment_factor_by_topo = None
 
         # parallel line interaction
-        if conf.getboolean('run_parameters', 'line_interaction'):
-            self.set_line_interaction(conf)
+        if cfg.getboolean('run_parameters', 'line_interaction'):
+            self.set_line_interaction(cfg)
         else:
             self.file_line_interaction_metadata = None
             self.line_interaction = None
@@ -151,16 +150,16 @@ class TransmissionConfig(object):
         assert isinstance(value, dict)
         self._no_towers_by_line = value
 
-    def set_random_seed(self, conf):
+    def set_random_seed(self, cfg):
         """
         read random seed info
-        :param conf:
+        :param cfg:
         :return:
         """
         self.seed = dict()
 
-        rnd_events = conf.get('random_seed', 'events').split(',')
-        rnd_lines = conf.get('random_seed', 'lines').split(',')
+        rnd_events = cfg.get('random_seed', 'events').split(',')
+        rnd_lines = cfg.get('random_seed', 'lines').split(',')
 
         for rnd_event in rnd_events:
             (event_key, event_val) = split_str(rnd_event, ':')
@@ -170,13 +169,13 @@ class TransmissionConfig(object):
                 self.seed.setdefault(event_key, {})[line_key] = \
                     event_val + line_val
 
-    def set_adjust_design_by_topography(self, conf):
+    def set_adjust_design_by_topography(self, cfg):
 
         self.file_topo_multiplier = os.path.join(
-            self.path_input, conf.get('input', 'topographic_multiplier'))
+            self.path_input, cfg.get('input', 'topographic_multiplier'))
 
         self.file_design_adjustment_factor_by_topo = os.path.join(
-            self.path_input, conf.get(
+            self.path_input, cfg.get(
                 'input', 'design_adjustment_factor_by_topography'))
 
         self.topo_multiplier = self.read_topographic_multiplier()
@@ -184,16 +183,16 @@ class TransmissionConfig(object):
         self.design_adjustment_factor_by_topo = \
             self.read_design_adjustment_factor_by_topography_mutliplier()
 
-    def set_line_interaction(self, conf):
+    def set_line_interaction(self, cfg):
 
         self.line_interaction = dict()
-        for line in conf.options('line_interaction'):
+        for line in cfg.options('line_interaction'):
             self.line_interaction[line] = [
-                x.strip() for x in conf.get('line_interaction',
+                x.strip() for x in cfg.get('line_interaction',
                                             line).split(',')]
 
         self.file_line_interaction_metadata = os.path.join(
-            self.path_input, conf.get('input', 'line_interaction_metadata'))
+            self.path_input, cfg.get('input', 'line_interaction_metadata'))
 
         self.prob_line_interaction_metadata, self.prob_line_interaction = \
             self.read_prob_line_interaction()
