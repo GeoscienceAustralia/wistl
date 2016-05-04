@@ -114,12 +114,12 @@ class Tower(object):
     @event_tuple.setter
     def event_tuple(self, value):
         try:
-            file_wind_, scale_ = value
+            file_wind, scale = value
         except ValueError:
             raise ValueError("Pass an iterable with two items")
         else:
-            self.file_wind = file_wind_
-            self.scale = scale_
+            self.file_wind = file_wind
+            self.scale = scale
             self.set_wind()
             self.compute_damage_prob_isolation()
 
@@ -258,8 +258,8 @@ class Tower(object):
                                                   rtol=self.cfg.rtol))
 
             for idx in idx_not_close:
-                print('{}:{}'.format(prob_damage_isolation_mc.ix[idx],
-                                     self.prob_damage_isolation[ds].ix[idx]))
+                print('prob. {} from simulation {:.3f}, analytical: {:.3f}'.format(ds, prob_damage_isolation_mc.ix[idx],
+                           self.prob_damage_isolation[ds].ix[idx]))
 
         self.damage_isolation_mc = mc_wind
 

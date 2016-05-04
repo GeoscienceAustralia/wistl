@@ -14,7 +14,7 @@ class TransmissionConfig(object):
     """
     def __init__(self, cfg_file=None):
 
-        if not os.path.exists(cfg_file):
+        if not os.path.isfile(cfg_file):
             msg = 'Error: file {} not found'.format(cfg_file)
             sys.exit(msg)
 
@@ -73,12 +73,10 @@ class TransmissionConfig(object):
 
         # gis_data
         self.file_shape_tower = os.path.join(self.path_gis_data,
-                                             cfg.get('gis_data',
-                                                      'shape_tower'))
+                                             cfg.get('gis_data', 'shape_tower'))
 
         self.file_shape_line = os.path.join(self.path_gis_data,
-                                            cfg.get('gis_data',
-                                                     'shape_line'))
+                                            cfg.get('gis_data', 'shape_line'))
 
         # wind_scenario
         self.event_id_scale = []
@@ -186,10 +184,19 @@ class TransmissionConfig(object):
     def set_line_interaction(self, cfg):
 
         self.line_interaction = dict()
+        selected_lines = self.selected_lines[:]
         for line in cfg.options('line_interaction'):
             self.line_interaction[line] = [
-                x.strip() for x in cfg.get('line_interaction',
-                                            line).split(',')]
+                x.strip() for x in cfg.get('line_interaction', line).split(',')]
+            try:
+                selected_lines.remove(line)
+            except ValueError:
+                print('Warning: {} is excluded in the simulation'.format(line))
+
+        # check completeness
+        if selected_lines:
+            raise KeyError('No line interaction info provided for {}'.format(
+                selected_lines))
 
         self.file_line_interaction_metadata = os.path.join(
             self.path_input, cfg.get('input', 'line_interaction_metadata'))

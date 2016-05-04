@@ -20,6 +20,7 @@ class TestTransmission(unittest.TestCase):
     def setUpClass(cls):
         cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
         cls.cfg.save = False
+        cls.cfg.figure = False
 
         cls.damaged_networks = sim_towers(cls.cfg)
         # if cls.cfg.parallel:

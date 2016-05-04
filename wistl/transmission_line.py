@@ -4,6 +4,9 @@ import os
 import copy
 import warnings
 import itertools
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
@@ -31,7 +34,6 @@ class TransmissionLine(object):
         self.name_output = ps_line.name_output
         self.no_towers = len(self.df_towers)
 
-        # moved from damage_line.py
         self._event_tuple = None
 
         self.event_id_scale = None
@@ -65,7 +67,6 @@ class TransmissionLine(object):
         self.prob_no_damage_line_interaction = None
         self.est_no_damage_line_interaction = None
 
-
         # reset index by tower location according to line shapefile
         self.df_towers.index = self.sort_by_location()
 
@@ -74,26 +75,15 @@ class TransmissionLine(object):
 
         self.id_by_line = range(self.no_towers)
         self.id2name = self.df_towers['Name'].to_dict()
-        self.name_by_line = [self.df_towers.loc[i, 'Name'] for i in
-                             range(self.no_towers)]
-        #print('{}'.format(self.df_towers['actual_span']))
+        self.name_by_line = [self.id2name[i] for i in range(self.no_towers)]
         self.df_towers.loc[:, 'actual_span'] = ps_line['actual_span']
-        # for i, value in enumerate(ps_line['actual_span']):
-        #     self.df_towers.loc[i, 'actual_span'] = value
-            #ps_line['actual_span']
-        #self.df_towers = self.df_towers.join(
-        #    self.calculate_distance_between_towers())
 
         self.towers = dict()
         for id_, ps_tower in self.df_towers.iterrows():
-            name_ = ps_tower.Name
-            self.towers[name_] = Tower(cfg=self.cfg, ps_tower=ps_tower)
-            # self.towers[name_].id_adj = self.assign_id_adj_towers(id_)
+            self.towers[ps_tower.Name] = Tower(cfg=self.cfg, ps_tower=ps_tower)
 
         for tower in self.towers.itervalues():
-            # print('{}'.format(tower.id_adj))
-            tower.id_adj = \
-                self.update_id_adj_by_filtering_strainer(tower)
+            tower.id_adj = self.update_id_adj_by_filtering_strainer(tower)
             tower.calculate_cond_pc_adj()
 
     @property
@@ -105,7 +95,8 @@ class TransmissionLine(object):
         try:
             event_id, scale = value
         except ValueError:
-            raise ValueError("Pass an iterable with two items")
+            msg = "Pass a tuple of event_id and scale"
+            raise ValueError(msg)
         else:
             self.event_id = event_id
             self.scale = scale
@@ -120,12 +111,15 @@ class TransmissionLine(object):
         tower = None
         for tower in self.towers.itervalues():
             file_wind = os.path.join(self.path_event, tower.file_wind_base_name)
-
             # set wind file, and compute damage prob. of tower in isolation
             tower.event_tuple = (file_wind, self.scale)
-            # self.towers[key].compute_damage_prob_isolation()
 
-        self.time_index = tower.time_index
+        try:
+            # assuming same time index for each tower in the same network
+            self.time_index = tower.time_index
+        except AttributeError:
+            msg = 'No transmission tower created'
+            raise AttributeError(msg)
 
     def sort_by_location(self):
         """ sort towers by location
@@ -147,10 +141,6 @@ class TransmissionLine(object):
 
     def plot_tower_line(self):
 
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-
         coord_towers = []
         for i in range(self.no_towers):
             coord_towers.append(self.df_towers.loc[i, 'coord'])
@@ -162,9 +152,15 @@ class TransmissionLine(object):
                  coord_towers[:, 0],
                  coord_towers[:, 1], 'b-')
         plt.title(self.name)
+
         png_file = os.path.join(self.cfg.path_output,
                                 'line_{}.png'.format(self.name))
+
+        if not os.path.exists(self.cfg.path_output):
+            os.makedirs(self.cfg.path_output)
+
         plt.savefig(png_file)
+        print('{} is created'.format(png_file))
         plt.close()
 
     # def assign_id_adj_towers(self, idx):
@@ -564,6 +560,47 @@ def angle_between_unit_vectors(v1, v2):
     #     v1_u = unit_vector(v1)
     #     v2_u = unit_vector(v2)
     return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
+
+
+def compute_damage_probability_per_line(damage_line):
+    """
+    mc simulation over transmission line
+    :param damage_line: instance of transmission line
+    :return: None but update attributes of
+    """
+
+    event_id = damage_line.event_id
+    line_name = damage_line.name
+
+    if damage_line.cfg.random_seed:
+        try:
+            seed = damage_line.cfg.seed[event_id][line_name]
+        except KeyError:
+            msg = '{}:{} is undefined. Check the config file'.format(
+                event_id, line_name)
+            raise KeyError(msg)
+    else:
+        seed = None
+
+    # compute damage probability analytically
+    if damage_line.cfg.analytical:
+        damage_line.compute_damage_probability_analytical()
+
+    # perfect correlation within a single line
+    damage_line.compute_damage_probability_simulation(seed)
+
+    if not damage_line.cfg.skip_non_cascading_collapse:
+        damage_line.compute_damage_probability_simulation_non_cascading()
+
+    try:
+        damage_line.cfg.line_interaction[line_name]
+    except (TypeError, KeyError):
+        pass
+    else:
+        damage_line.determine_damage_by_interaction_at_line_level(seed)
+
+    return damage_line
+
 
 
 

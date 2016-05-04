@@ -9,9 +9,10 @@ import time
 import sys
 import parmap
 
-from wistl.transmission_network import compute_damage_probability_per_line, \
-    create_transmission_network_under_wind_event, \
-    compute_damage_probability_line_interaction_per_network
+from wistl.transmission_network import (
+    create_transmission_network_under_wind_event,
+    compute_damage_probability_line_interaction_per_network)
+from wistl.transmission_line import compute_damage_probability_per_line
 
 
 def sim_towers(cfg):
