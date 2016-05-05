@@ -313,10 +313,7 @@ class Tower(object):
 
         if self.cond_pc_line_mc['cum_prob']:
 
-            if self.cfg.random_seed:
-                rnd_state = np.random.RandomState(seed + 50)  # replication
-            else:
-                rnd_state = np.random.RandomState()
+            rnd_state = np.random.RandomState(seed + 50)  # replication
 
             # generate regardless of time index
             no_sim_collapse = len(

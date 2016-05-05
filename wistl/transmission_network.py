@@ -389,35 +389,37 @@ def compute_damage_probability_line_interaction_per_network(network):
                           line.cfg.no_sims,
                           len(line.time_index)), dtype=bool)
 
+        tf_ds_itself = np.zeros((line.no_towers,
+                                 line.cfg.no_sims,
+                                 len(line.time_index)), dtype=bool)
+
         for trigger_line, target_lines in line.cfg.line_interaction.iteritems():
 
             if line_name in target_lines:
 
                 try:
-                    pd_id = pd.DataFrame(np.vstack(
+                    pd_id = np.vstack(
                         network[trigger_line].damage_index_line_interaction[
-                            line_name]),
-                        columns=['id_tower', 'id_sim', 'id_time'],
-                        dtype=np.int64)
+                            line_name])
                 except ValueError:
-                    print('{}'.format(
-                        network[trigger_line].damage_index_line_interaction[
-                            line_name]))
+                    print('no interaction applied: from {} to {}'.format(
+                        trigger_line, line_name))
                 else:
+                    print('interaction applied: from {} to {}'.format(
+                        trigger_line, line_name))
+                    # id_tower = pd_id['id_tower'].values
+                    # id_sim = pd_id['id_sim'].values
+                    # id_time = pd_id['id_time'].values
 
-                    id_tower = pd_id['id_tower'].values
-                    id_sim = pd_id['id_sim'].values
-                    id_time = pd_id['id_time'].values
-
-                    try:
-                        tf_ds[id_tower, id_sim, id_time] = True
-                    except IndexError:
-                        print('{}:{}:{}'.format(pd_id.head(),
-                                                pd_id.dtypes,
-                                                'why???'))
-                        print('trigger:{}, {}, {}'.format(trigger_line,
-                                                          line_name,
-                                                          line.event_id_scale))
+                    # try:
+                    tf_ds[pd_id[:, 0], pd_id[:, 1], pd_id[:, 2]] = True
+                    # except IndexError:
+                    #     print('{}:{}:{}'.format(pd_id.head(),
+                    #                             pd_id.dtypes,
+                    #                             'why???'))
+                    #     print('trigger:{}, {}, {}'.format(trigger_line,
+                    #                                       line_name,
+                    #                                       line.event_id_scale))
 
         # append damage state by line itself
         # due to either direct wind and adjacent towers
@@ -442,6 +444,17 @@ def compute_damage_probability_line_interaction_per_network(network):
                              columns=line.name_by_line,
                              index=line.time_index)
 
+        # check whether collapse induced by line interaction
+        tf_ds_itself[line.damage_index_simulation['collapse']['id_tower'],
+                     line.damage_index_simulation['collapse']['id_sim'],
+                     line.damage_index_simulation['collapse']['id_time']] = True
+
+        collapse_by_interaction = np.logical_xor(tf_sim['collapse'],
+                                                 tf_ds_itself)
+
+        if np.any(collapse_by_interaction):
+            print('{} is affected by line interaction'.format(line_name))
+
         # compute mean and std of no. of towers for each of damage states
         (line.est_no_damage_line_interaction,
             line.prob_no_damage_line_interaction) = \
@@ -456,6 +469,7 @@ def compute_damage_probability_line_interaction_per_network(network):
 
             line.write_hdf5(file_str='prob_no_damage_line_interaction',
                             value=line.prob_no_damage_line_interaction)
+
 
     return network
 

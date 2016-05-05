@@ -342,7 +342,6 @@ class TransmissionLine(object):
         self.est_no_damage_simulation, self.prob_no_damage_simulation = \
             self.compute_damage_stats(tf_sim)
 
-
         if self.cfg.save:
             self.write_hdf5(file_str='damage_prob_simulation',
                             value=self.damage_prob_simulation)
