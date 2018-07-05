@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-__author__ = 'Hyeuk Ryu'
-
 import unittest
 import pandas as pd
+import logging
 import os
 import StringIO
+import tempfile
 import numpy as np
 
-from collections import OrderedDict
-from wistl.config import TransmissionConfig, split_str
+from wistl.config import Config, split_str
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -62,11 +61,15 @@ def assertDeepAlmostEqual(test_case, expected, actual, *args, **kwargs):
         raise exc
 
 
-class TestTransmissionConfig(unittest.TestCase):
+class TestConfig(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
+
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger)
 
     # def test_get_path(self):
     #
@@ -86,13 +89,6 @@ class TestTransmissionConfig(unittest.TestCase):
 
     def test_read_design_value(self):
 
-        self.cfg.file_design_value = StringIO.StringIO("""\
-lineroute, design wind speed, design wind span, terrain category, design level
-Calaca - Amadeo, 75.0, 400.0, 2, low
-Calaca - Santa Rosa, 51.389, 400.0, 2, low""")
-
-        result = self.cfg.read_design_value()
-
         expected = {'Calaca - Amadeo': {'cat': 2,
                                         'level': 'low',
                                         'span': 400.0,
@@ -101,80 +97,93 @@ Calaca - Santa Rosa, 51.389, 400.0, 2, low""")
                                             'level': 'low',
                                             'span': 400.0,
                                             'speed': 51.389}}
+        self.cfg._design_value_by_line = None
 
-        assertDeepAlmostEqual(self, expected, result)
+        self.cfg.file_design_value = StringIO.StringIO("""\
+        lineroute, design wind speed, design wind span, terrain category, design level
+        Calaca - Amadeo, 75.0, 400.0, 2, low
+        Calaca - Santa Rosa, 51.389, 400.0, 2, low""")
+
+        assertDeepAlmostEqual(self, expected, self.cfg.design_value_by_line)
 
     def test_read_fragility(self):
 
-        fragility_metadata = StringIO.StringIO("""\
-[main]
-by: Type, Function, DevAngle
-type: string, string, numeric
-limit_states: minor, collapse
-function: form
-file: ./fragility.csv
-
-[lognorm]
-scale: param1
-arg: param2""")
-
-        fragility = StringIO.StringIO("""\
-Type,Function,DevAngle_lower,DevAngle_upper,limit_states,form,param1,param2
-Lattice Tower,Suspension,0,360,minor,lognorm,1.02,0.02
-Lattice Tower,Suspension,0,360,collapse,lognorm,1.05,0.03
-Lattice Tower,Terminal,0,360,minor,lognorm,1.02,0.02
-Lattice Tower,Terminal,0,360,collapse,lognorm,1.05,0.03
-Lattice Tower,Strainer,0,5,minor,lognorm,1.143,0.032
-Lattice Tower,Strainer,0,5,collapse,lognorm,1.18,0.04
-Lattice Tower,Strainer,5,15,minor,lognorm,1.173,0.032
-Lattice Tower,Strainer,5,15,collapse,lognorm,1.21,0.04
-Lattice Tower,Strainer,15,30,minor,lognorm,1.208,0.032
-Lattice Tower,Strainer,15,30,collapse,lognorm,1.245,0.04
-Lattice Tower,Strainer,30,360,minor,lognorm,1.243,0.032
-Lattice Tower,Strainer,30,360,collapse,lognorm,1.28,0.04
-Steel Pole,Suspension,0,360,minor,lognorm,3.85,0.05
-Steel Pole,Suspension,0,360,collapse,lognorm,4.02,0.05
-Steel Pole,Terminal,0,360,minor,lognorm,3.85,0.05
-Steel Pole,Terminal,0,360,collapse,lognorm,4.02,0.05
-Steel Pole,Strainer,0,5,minor,lognorm,3.85,0.05
-Steel Pole,Strainer,0,5,collapse,lognorm,4.02,0.05
-Steel Pole,Strainer,5,15,minor,lognorm,3.95,0.05
-Steel Pole,Strainer,5,15,collapse,lognorm,4.12,0.05
-Steel Pole,Strainer,15,30,minor,lognorm,3.05,0.05
-Steel Pole,Strainer,15,30,collapse,lognorm,4.22,0.05
-Steel Pole,Strainer,30,360,minor,lognorm,3.15,0.05
-Steel Pole,Strainer,30,360,collapse,lognorm,4.32,0.05""")
-
-        expected_metadata = OrderedDict([
-            ('__name__', 'main'),
+        expected_metadata = dict([
             ('by', ['Type', 'Function', 'DevAngle']),
             ('type', ['string', 'string', 'numeric']),
             ('limit_states', ['minor', 'collapse']),
             ('function', 'form'),
             ('file', './fragility.csv'),
-            ('lognorm', OrderedDict([('__name__', 'lognorm'),
-                                     ('scale', 'param1'),
-                                     ('arg', 'param2')]))])
+            ('lognorm', dict([('scale', 'param1'),
+                              ('arg', 'param2')]))])
 
-        expected_metadata['file'] = os.path.join(
-            os.path.dirname(os.path.realpath(
-                self.cfg.file_fragility_metadata)), expected_metadata['file'])
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        try:
+            _file.writelines(['[main]\n',
+                              'by: Type, Function, DevAngle\n',
+                              'type: string, string, numeric\n',
+                              'limit_states: minor, collapse\n',
+                              'function: form\n',
+                              'file: ./fragility.csv\n',
+                              '[lognorm]\n',
+                              'scale: param1\n',
+                              'arg: param2\n'])
+            _file.seek(0)
 
-        with open(self.cfg.file_fragility_metadata, 'r') as file1:
-            for line1, line2 in zip(file1, fragility_metadata):
-                self.assertEqual(line1, line2)
+            self.cfg._fragility_metadata = None
+            self.cfg.file_fragility_metadata = _file.name
 
-        with open(self.cfg.fragility_metadata['file'], 'r') as file1:
-            for line1, line2 in zip(file1, fragility):
-                self.assertEqual(line1, line2)
+            assertDeepAlmostEqual(self, expected_metadata,
+                                  self.cfg.fragility_metadata)
+        finally:
+            _file.close()
+            os.unlink(_file.name)
 
-        assertDeepAlmostEqual(self, expected_metadata,
-                              self.cfg.fragility_metadata)
+#         file_fragility = StringIO.StringIO("""\
+# Type,Function,DevAngle_lower,DevAngle_upper,limit_states,form,param1,param2
+# Lattice Tower,Suspension,0,360,minor,lognorm,1.02,0.02
+# Lattice Tower,Suspension,0,360,collapse,lognorm,1.05,0.03
+# Lattice Tower,Terminal,0,360,minor,lognorm,1.02,0.02
+# Lattice Tower,Terminal,0,360,collapse,lognorm,1.05,0.03
+# Lattice Tower,Strainer,0,5,minor,lognorm,1.143,0.032
+# Lattice Tower,Strainer,0,5,collapse,lognorm,1.18,0.04
+# Lattice Tower,Strainer,5,15,minor,lognorm,1.173,0.032
+# Lattice Tower,Strainer,5,15,collapse,lognorm,1.21,0.04
+# Lattice Tower,Strainer,15,30,minor,lognorm,1.208,0.032
+# Lattice Tower,Strainer,15,30,collapse,lognorm,1.245,0.04
+# Lattice Tower,Strainer,30,360,minor,lognorm,1.243,0.032
+# Lattice Tower,Strainer,30,360,collapse,lognorm,1.28,0.04
+# Steel Pole,Suspension,0,360,minor,lognorm,3.85,0.05
+# Steel Pole,Suspension,0,360,collapse,lognorm,4.02,0.05
+# Steel Pole,Terminal,0,360,minor,lognorm,3.85,0.05
+# Steel Pole,Terminal,0,360,collapse,lognorm,4.02,0.05
+# Steel Pole,Strainer,0,5,minor,lognorm,3.85,0.05
+# Steel Pole,Strainer,0,5,collapse,lognorm,4.02,0.05
+# Steel Pole,Strainer,5,15,minor,lognorm,3.95,0.05
+# Steel Pole,Strainer,5,15,collapse,lognorm,4.12,0.05
+# Steel Pole,Strainer,15,30,minor,lognorm,3.05,0.05
+# Steel Pole,Strainer,15,30,collapse,lognorm,4.22,0.05
+# Steel Pole,Strainer,30,360,minor,lognorm,3.15,0.05
+# Steel Pole,Strainer,30,360,collapse,lognorm,4.32,0.05""")
 
-        fragility.seek(0)
-        expected_fragility = pd.read_csv(fragility)
-        pd.util.testing.assert_frame_equal(
-            self.cfg.fragility, expected_fragility)
+
+        # with open(self.cfg.file_fragility_metadata, 'r') as file1:
+        #     for line1, line2 in zip(file1, fragility_metadata):
+        #         self.assertEqual(line1, line2)
+        #
+        # path_metadata = os.path.dirname(
+        #     os.path.realpath(self.cfg.file_fragility_metadata))
+        # _file = os.path.join(path_metadata, self.cfg.fragility_metadata['file'])
+        # with open(_file, 'r') as file1:
+        #     for line1, line2 in zip(file1, fragility):
+        #         self.assertEqual(line1, line2)
+
+
+        # self.cfg._fragility = None
+        # file_fragility.seek(0)
+        # expected_fragility = pd.read_csv(file_fragility)
+        # pd.util.testing.assert_frame_equal(
+        #     self.cfg.fragility, expected_fragility)
 
     def test_read_cond_collapse_prob(self):
 
@@ -186,26 +195,29 @@ list: Suspension, Terminal, Strainer
 [Suspension]
 by: Height
 type: numeric
-file: ./cond_collapse_prob_suspension_terminal.csv
+file: ./cond_collapse_prob_suspension.csv
 
 [Terminal]
 by: Height
 type: numeric
-file: ./cond_collapse_prob_suspension_terminal.csv
+file: ./cond_collapse_prob_terminal.csv
 
 [Strainer]
 by: design_level
 type: string
 file: ./cond_collapse_prob_strainer.csv""")
 
-        cond_collapse_prob_suspension_terminal = StringIO.StringIO("""\
+        cond_collapse_prob_suspension = StringIO.StringIO("""\
 Function, Height_lower, Height_upper, no_collapse, probability, start, end
 Suspension, 0, 40, 1, 0.075, 0, 1
 Suspension, 0, 40, 1, 0.075, -1, 0
 Suspension, 0, 40, 2, 0.35, -1, 1
 Suspension, 0, 40, 3, 0.025, -1, 2
 Suspension, 0, 40, 3, 0.025, -2, 1
-Suspension, 0, 40, 4, 0.10, -2, 2
+Suspension, 0, 40, 4, 0.10, -2, 2""")
+
+        cond_collapse_prob_terminal = StringIO.StringIO("""\
+Function, Height_lower, Height_upper, no_collapse, probability, start, end
 Terminal, 0, 40, 1, 0.075, 0, 1
 Terminal, 0, 40, 1, 0.075, -1, 0
 Terminal, 0, 40, 2, 0.35, -1, 1
@@ -228,57 +240,58 @@ Strainer, high, 8, 0.15, -4, 4
 Strainer, high, 10, 0.12, -5, 5
 Strainer, high, 12, 0.08, -6, 6""")
 
-        expected_metadata = OrderedDict([
-            ('__name__', 'main'),
+        expected_metadata = dict([
             ('by', 'Function'),
             ('list', ['Suspension', 'Terminal', 'Strainer']),
-            ('Suspension', OrderedDict([
-                ('__name__', 'Suspension'),
+            ('Suspension', dict([
                 ('by', 'Height'),
                 ('type', 'numeric'),
                 ('max_adj', 2),
-                ('file', './cond_collapse_prob_suspension_terminal.csv')])),
-            ('Terminal', OrderedDict([
-                ('__name__', 'Terminal'),
+                ('file', './cond_collapse_prob_suspension.csv')])),
+            ('Terminal', dict([
                 ('by', 'Height'),
                 ('type', 'numeric'),
                 ('max_adj', 2),
-                ('file', './cond_collapse_prob_suspension_terminal.csv')])),
-            ('Strainer', OrderedDict([
-                ('__name__', 'Strainer'),
+                ('file', './cond_collapse_prob_terminal.csv')])),
+            ('Strainer', dict([
                 ('by', 'design_level'),
                 ('type', 'string'),
                 ('max_adj', 6),
                 ('file', './cond_collapse_prob_strainer.csv')]))])
 
-        with open(self.cfg.file_cond_collapse_prob_metadata, 'r') as file1:
+        path_input = os.path.dirname(os.path.realpath(
+            self.cfg.file_fragility_metadata))
+
+        with open(os.path.join(path_input, self.cfg.file_cond_collapse_prob_metadata), 'r') as file1:
             for line1, line2 in zip(file1, cond_collapse_prob_metadata):
                 self.assertEqual(line1, line2)
 
-        with open(self.cfg.cond_collapse_prob_metadata['Strainer']['file'],
+        with open(os.path.join(path_input, self.cfg.cond_collapse_prob_metadata['Strainer']['file']),
                   'r') as file1:
             for line1, line2 in zip(file1, cond_collapse_prob_strainer):
                 self.assertEqual(line1, line2)
 
-        with open(self.cfg.cond_collapse_prob_metadata['Suspension']['file'],
+        with open(os.path.join(path_input, self.cfg.cond_collapse_prob_metadata['Suspension']['file']),
                   'r') as file1:
             for line1, line2 in zip(file1,
-                                    cond_collapse_prob_suspension_terminal):
+                                    cond_collapse_prob_suspension):
                 self.assertEqual(line1, line2)
 
-        path_input = os.path.dirname(os.path.realpath(
-            self.cfg.file_fragility_metadata))
+        with open(os.path.join(path_input, self.cfg.cond_collapse_prob_metadata['Terminal']['file']),
+                  'r') as file1:
+            for line1, line2 in zip(file1,
+                                    cond_collapse_prob_terminal):
+                self.assertEqual(line1, line2)
 
-        for item in expected_metadata['list']:
-            expected_metadata[item]['file'] = os.path.join(
-                path_input, expected_metadata[item]['file'])
+        # for item in expected_metadata['list']:
+        #     expected_metadata[item]['file'] =
 
         assertDeepAlmostEqual(self, expected_metadata,
                               self.cfg.cond_collapse_prob_metadata)
 
         expected_cond_pc = dict()
         for item in expected_metadata['list']:
-            df_tmp = pd.read_csv(expected_metadata[item]['file'],
+            df_tmp = pd.read_csv(os.path.join(path_input, expected_metadata[item]['file']),
                                  skipinitialspace=1)
             df_tmp['start'] = df_tmp['start'].astype(np.int64)
             df_tmp['end'] = df_tmp['end'].astype(np.int64)
@@ -292,8 +305,7 @@ Strainer, high, 12, 0.08, -6, 6""")
 
     def test_read_ASNZS_terrain_multiplier(self):
 
-        self.cfg.terrain_multiplier = StringIO.StringIO("""\
-height(m), category 1, category 2, category 3, category 4
+        self.cfg.file_terrain_multiplier = StringIO.StringIO("""height(m), category 1, category 2, category 3, category 4
 3,   0.99,  0.91,  0.83,  0.75
 5,   1.05,  0.91,  0.83,  0.75
 10,  1.12,  1.00,  0.83,  0.75
@@ -307,13 +319,15 @@ height(m), category 1, category 2, category 3, category 4
 150, 1.31,  1.27,  1.21,  1.11
 200, 1.32,  1.29,  1.24,  1.16""")
 
-        result = self.cfg.read_terrain_multiplier()
-        self.cfg.terrain_multiplier.seek(0)
-        expected = pd.read_csv(self.cfg.terrain_multiplier,
+        self.cfg._terrain_multiplier = None
+
+        expected = pd.read_csv(self.cfg.file_terrain_multiplier,
                                skipinitialspace=True)
         expected.columns = ['height', 'tc1', 'tc2', 'tc3', 'tc4']
+        expected = expected.to_dict('list')
+        self.cfg.file_terrain_multiplier.seek(0)
 
-        assertDeepAlmostEqual(self, expected.to_dict('list'), result)
+        assertDeepAlmostEqual(self, expected, self.cfg.terrain_multiplier)
 
     def test_read_drag_height_by_type(self):
         self.cfg.file_drag_height_by_type = StringIO.StringIO("""\
@@ -322,18 +336,18 @@ Suspension,15.4
 Strainer,12.2
 Terminal,12.2""")
 
-        result = self.cfg.read_drag_height_by_type()
-
-        self.cfg.file_drag_height_by_type.seek(0)
         expected = pd.read_csv(self.cfg.file_drag_height_by_type,
                                skipinitialspace=True, index_col=0)
         expected.columns = ['value']
+        self.cfg._drag_height_by_type = None
+        self.cfg.file_drag_height_by_type.seek(0)
 
-        assertDeepAlmostEqual(self, expected['value'].to_dict(), result)
+        assertDeepAlmostEqual(self, expected['value'].to_dict(),
+                              self.cfg.drag_height_by_type)
 
     def test_read_topographic_multiplier(self):
 
-        self.cfg.file_topo_multiplier = StringIO.StringIO("""\
+        self.cfg.file_topographic_multiplier = StringIO.StringIO("""\
 Station,Time,X1,X2,X3,X4,X5,X6,X7,Mh,Mhopp
 AC-099,2014-07-16 00:30,1.6, 1.2, 5.4, 4.5, 4.8,2.3,9.5,1.0,1.0
 AC-100,2014-07-16 00:30,1.9, 1.7, 5.0, 4.5, 4.8,2.3,9.5,1.0,1.0
@@ -348,16 +362,15 @@ CB-004,2014-07-16 00:30,1.2, 1.2, 5.4, 4.5, 4.8,2.3,9.5,1.0,1.0
 CB-005,2014-07-16 00:30,1.7, 1.0, 5.1, 4.5, 4.8,2.3,9.5,1.0,1.0
 CB-006,2014-07-16 00:30,1.3, 1.7, 5.5, 4.5, 4.8,2.3,9.5,1.0,1.0""")
 
-        result = self.cfg.read_topographic_multiplier()
-
-        self.cfg.file_topo_multiplier.seek(0)
-        expected = pd.read_csv(self.cfg.file_topo_multiplier,
+        expected = pd.read_csv(self.cfg.file_topographic_multiplier,
                                skipinitialspace=True)
         expected['topo'] = expected[['Mh', 'Mhopp']].max(axis=1)
+        self.cfg._topographic_multiplier = None
+        self.cfg.file_topographic_multiplier.seek(0)
 
         assertDeepAlmostEqual(self,
                               expected.set_index('Station').to_dict()['topo'],
-                              result)
+                              self.cfg.topographic_multiplier)
 
     def test_read_design_adjustment_factor_by_topography_mutliplier(self):
 
@@ -380,13 +393,13 @@ threshold: 1.05, 1.1, 1.2, 1.3, 1.45
                     5: 1.60,
                     'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45])}
 
-        with open(self.cfg.file_design_adjustment_factor_by_topo,
+        with open(self.cfg.file_design_adjustment_factor_by_topography,
                   'r') as file1:
             for line1, line2 in zip(file1, design_adj_factor):
                 self.assertEqual(line1, line2)
 
         assertDeepAlmostEqual(self, expected,
-                              self.cfg.design_adjustment_factor_by_topo)
+                              self.cfg.design_adjustment_factor_by_topography)
 
     def test_run(self):
 
@@ -397,50 +410,48 @@ threshold: 1.05, 1.1, 1.2, 1.3, 1.45
 
         assertDeepAlmostEqual(self, expected, self.cfg.seed)
 
-    def test_line_interaction(self):
-
-        cfg = TransmissionConfig(os.path.join(BASE_DIR,
-                                              'test_line_interaction.cfg'))
-
-        expected = {'Calaca - Amadeo': ['Calaca - Santa Rosa',
-                                        'Amadeox - Calacax'],
-                    'Calaca - Santa Rosa': ['Calaca - Amadeo'],
-                    'Amadeox - Calacax': ['Calaca - Amadeo']}
-
-        assertDeepAlmostEqual(self, expected, cfg.line_interaction)
-
-        expected = {'by': 'Height', 'type': 'numeric',
-                    'file': './prob_line_interaction.csv'}
-
-        assertDeepAlmostEqual(self, expected,
-                              cfg.prob_line_interaction_metadata)
-
-        file_ = StringIO.StringIO("""\
-Height_lower, Height_upper, no_collapse, probability
-0,40,1,0.2
-0,40,3,0.1
-0,40,5,0.01
-0,40,7,0.001
-40,1000,1,0.3
-40,1000,3,0.15
-40,1000,5,0.02
-40,1000,7,0.002""")
-
-        path_input = os.path.dirname(os.path.realpath(
-            cfg.file_line_interaction_metadata))
-
-        file_line_interaction = os.path.join(
-            path_input, cfg.prob_line_interaction_metadata['file'])
-
-        with open(file_line_interaction, 'r') as file1:
-            for line1, line2 in zip(file1, file_):
-                self.assertEqual(line1, line2)
-
-        file_.seek(0)
-        expected = pd.read_csv(file_, skipinitialspace=1)
-
-        pd.util.testing.assert_frame_equal(expected, cfg.prob_line_interaction)
-
+#     def test_line_interaction(self):
+#
+#         cfg = Config(os.path.join(BASE_DIR, 'test_line_interaction.cfg'))
+#
+#         expected = {'Calaca - Amadeo': ['Calaca - Santa Rosa',
+#                                         'Amadeox - Calacax'],
+#                     'Calaca - Santa Rosa': ['Calaca - Amadeo'],
+#                     'Amadeox - Calacax': ['Calaca - Amadeo']}
+#
+#         assertDeepAlmostEqual(self, expected, cfg.line_interaction)
+#
+#         expected = {'by': 'Height', 'type': 'numeric',
+#                     'file': './prob_line_interaction.csv'}
+#
+#         assertDeepAlmostEqual(self, expected,
+#                               cfg.prob_line_interaction_metadata)
+#
+#         file_ = StringIO.StringIO("""\
+# Height_lower, Height_upper, no_collapse, probability
+# 0,40,1,0.2
+# 0,40,3,0.1
+# 0,40,5,0.01
+# 0,40,7,0.001
+# 40,1000,1,0.3
+# 40,1000,3,0.15
+# 40,1000,5,0.02
+# 40,1000,7,0.002""")
+#
+#         path_input = os.path.dirname(os.path.realpath(
+#             cfg.file_line_interaction_metadata))
+#
+#         file_line_interaction = os.path.join(
+#             path_input, cfg.prob_line_interaction_metadata['file'])
+#
+#         with open(file_line_interaction, 'r') as file1:
+#             for line1, line2 in zip(file1, file_):
+#                 self.assertEqual(line1, line2)
+#
+#         file_.seek(0)
+#         expected = pd.read_csv(file_, skipinitialspace=1)
+#
+#         pd.util.testing.assert_frame_equal(expected, cfg.prob_line_interaction)
 
 if __name__ == '__main__':
     unittest.main()

@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 
-from wistl.config import TransmissionConfig
+from wistl.config import Config
 from wistl.sim_towers import sim_towers
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -18,7 +18,7 @@ class TestTransmission(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
         cls.cfg.save = False
         cls.cfg.figure = False
 

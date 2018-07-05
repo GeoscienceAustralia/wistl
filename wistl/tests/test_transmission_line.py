@@ -14,7 +14,7 @@ import numpy as np
 import copy
 import pandas as pd
 
-from wistl.config import TransmissionConfig
+from wistl.config import Config
 from wistl.transmission_line import TransmissionLine
 from test_config import assertDeepAlmostEqual
 from wistl.transmission_network import read_shape_file, populate_df_lines, \
@@ -27,7 +27,7 @@ class TestTransmissionLine(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
 
         cls.cfg.no_sims = 10000
         cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)

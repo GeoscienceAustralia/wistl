@@ -31,7 +31,7 @@ dependencies:
 - tk=8.5.18=0
 - wheel=0.26.0=py27_1
 - zlib=1.2.8=0
-- geopy=1.11.0
+- IOOS::geopy=1.10.0
 
 # added for ipython notebook
 - appnope=0.1.0=py27_0

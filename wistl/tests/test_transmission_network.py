@@ -2,7 +2,7 @@ __author__ = 'sudipta'
 import os
 import unittest
 from wistl.transmission_network import create_damaged_network
-from wistl.config import TransmissionConfig
+from wistl.config import Config
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -13,7 +13,7 @@ class TransmissionNetworkTest(unittest.TestCase):
     def setUpClass(cls):
         conf_path = os.path.join(BASE_DIR, 'test.cfg')
         assert os.path.exists(conf_path), 'config file path wrong'
-        cls.cfg = TransmissionConfig(conf_path)
+        cls.cfg = Config(conf_path)
         cls.damaged_networks = create_damaged_network(cls.cfg)
 
     def test_time_index(self):

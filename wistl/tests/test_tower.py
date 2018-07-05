@@ -13,7 +13,7 @@ import matplotlib
 matplotlib
 import matplotlib.pyplot as plt
 
-from wistl.config import TransmissionConfig
+from wistl.config import Config
 from wistl.transmission_network import TransmissionNetwork
 from wistl.tower import Tower
 from test_config import assertDeepAlmostEqual
@@ -26,9 +26,8 @@ class TestTower(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        cls.cfg = TransmissionConfig(os.path.join(BASE_DIR, 'test.cfg'))
-        cls.network = TransmissionNetwork(cls.cfg)
-        cls.network.event_tuple = ('test2', 2.5)
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
+        cls.network = TransmissionNetwork(cfg=cls.cfg, event_id='test2', scale=2.5)
 
         cls.tower = cls.network.lines['Calaca - Amadeo'].towers['AC-100']
         cls.ps_tower = cls.tower.ps_tower
