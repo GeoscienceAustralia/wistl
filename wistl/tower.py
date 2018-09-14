@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from __future__ import print_function
+from __future__ import print_function, division
 
 import numpy as np
 import pandas as pd
@@ -13,30 +13,30 @@ class Tower(object):
     class Tower
     Tower class represent an individual tower.
     """
-    registered = ['AxisAz',
-                  #'Barangay',
-                  #'Comment',
-                  #'ConstCost',
-                  #'ConstType',
-                  # 'DevAngle',
-                  'Function',
-                  #'HT_Source',
-                  # 'Height',
-                  # 'Latitude',
-                  # 'LineRoute',
-                  #'LocSource',
-                  'Longitude',
-                  #'Mun',
-                  #'NUMBER',
-                  'Name',
-                  #'Operator',
-                  #'Owner',
-                  #'POINT_X',
-                  #'POINT_Y',
-                  #'PSGC',
-                  #'Shapes',
-                  'Type',
-                  #'YrBuilt',
+    registered = ['axisaz',
+                  #'barangay',
+                  #'comment',
+                  #'constcost',
+                  #'consttype',
+                  # 'devangle',
+                  'function',
+                  #'ht_source',
+                  # 'height',
+                  # 'latitude',
+                  # 'lineroute',
+                  #'locsource',
+                  'longitude',
+                  #'mun',
+                  #'number',
+                  'name',
+                  #'operator',
+                  #'owner',
+                  #'point_x',
+                  #'point_y',
+                  #'psgc',
+                  #'shapes',
+                  'type',
+                  #'yrbuilt',
                   # 'actual_span',
                   'collapse_capacity',
                   'cond_pc',
@@ -45,7 +45,7 @@ class Tower(object):
                   'design_level',
                   'design_span',
                   'design_speed',
-                  'factor_10_to_z',
+                  'ratio_z_to_10',
                   'file_wind_base_name',
 
                   'cond_pc_adj',
@@ -67,7 +67,7 @@ class Tower(object):
         :param ps_tower: panda series containing tower details
         """
 
-        self.id = tower_id  # retrieved from shapefile
+        self.id = tower_id  # id within network
         self.logger = logger or logging.getLogger(__name__)
 
         self.no_sims = None
@@ -126,7 +126,7 @@ class Tower(object):
         self._wind = None
 
         # analytical method
-        self._damage_prob_isolation = None
+        self._damage_prob = None
         self._damage_prob_adjacent = None
 
         # simulation method: determine_damage_isolation_mc,
@@ -199,16 +199,15 @@ class Tower(object):
         return self._wind
 
     @property
-    def damage_prob_isolation(self):
+    def damage_prob(self):
         """
         compute probability of damage of tower in isolation
         """
-        if self._damage_prob_isolation is None:
-            self._damage_prob_isolation = pd.DataFrame(None, columns=self.damage_states)
+        if self._damage_prob is None:
+            self._damage_prob = pd.DataFrame(None, columns=self.damage_states)
             for ds, arg in self.frag_arg.items():
                 value = getattr(stats, self.frag_func).cdf(
-                    self.wind.ratio,
-                    arg, scale=self.frag_scale[ds])
+                    self.wind.ratio, arg, scale=self.frag_scale[ds])
                 self._damage_prob_isolation[ds] = pd.Series(value,
                                                             index=self.wind.index,
                                                             name=ds)
@@ -252,7 +251,7 @@ class Tower(object):
 
         adjustment = row.Speed * np.max(_cos, _sin)
 
-        return self.factor_10_to_z * np.where(tf, adjustment, row.Speed)
+        return self.ratio_z_to_10 * np.where(tf, adjustment, row.Speed)
 
 
     # def determine_damage_isolation_mc(self):

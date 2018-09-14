@@ -2,14 +2,16 @@
 from __future__ import print_function
 
 import unittest
-import pandas as pd
+# import pandas as pd
 import logging
 import os
-import StringIO
+# import StringIO
 import tempfile
 import numpy as np
 
-from wistl.config import Config, split_str
+from wistl.config import Config, split_str, calculate_distance_between_towers, \
+    unit_vector, find_id_nearest_pt, create_list_idx, assign_cond_pc_adj, \
+    assign_shapely_line, assign_shapely_point
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -71,14 +73,8 @@ class TestConfig(unittest.TestCase):
 
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger)
 
-    # def test_get_path(self):
-    #
-    #     file_ = __file__
-    #     path_ = '../tests/output'
-    #     path_only = '/'.join(__file__.split('/')[:-1])
-    #     expected = os.path.abspath(os.path.join(path_only, path_))
-    #     result = self.cfg.get_path(path_, file_)
-    #     self.assertEqual(result, expected)
+        # for testing purpose
+        cls.cfg.options['adjust_design_by_topography'] = True
 
     def test_split_str(self):
 
@@ -87,29 +83,23 @@ class TestConfig(unittest.TestCase):
         result = split_str(str_, ':')
         self.assertEqual(result, expected)
 
-    def test_read_design_value(self):
+    def test_design_value(self):
 
-        expected = {'Calaca - Amadeo': {'cat': 2,
-                                        'level': 'low',
-                                        'span': 400.0,
-                                        'speed': 75.0},
-                    'Calaca - Santa Rosa': {'cat': 2,
-                                            'level': 'low',
-                                            'span': 400.0,
-                                            'speed': 51.389}}
-        self.cfg._design_value_by_line = None
-
-        self.cfg.file_design_value = StringIO.StringIO("""\
-        lineroute, design wind speed, design wind span, terrain category, design level
-        Calaca - Amadeo, 75.0, 400.0, 2, low
-        Calaca - Santa Rosa, 51.389, 400.0, 2, low""")
+        expected = {'LineA': {'terrain_cat': 2,
+                              'design_level': 'low',
+                              'design_span': 400.0,
+                              'design_speed': 75.0},
+                    'LineB': {'terrain_cat': 2,
+                              'design_level': 'low',
+                              'design_span': 400.0,
+                              'design_speed': 51.389}}
 
         assertDeepAlmostEqual(self, expected, self.cfg.design_value_by_line)
 
-    def test_read_fragility(self):
+    def test_fragility_metadata(self):
 
         expected_metadata = dict([
-            ('by', ['Type', 'Function', 'DevAngle']),
+            ('by', ['type', 'function', 'devAngle']),
             ('type', ['string', 'string', 'numeric']),
             ('limit_states', ['minor', 'collapse']),
             ('function', 'form'),
@@ -120,7 +110,7 @@ class TestConfig(unittest.TestCase):
         _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
         try:
             _file.writelines(['[main]\n',
-                              'by: Type, Function, DevAngle\n',
+                              'by: type, function, devAngle\n',
                               'type: string, string, numeric\n',
                               'limit_states: minor, collapse\n',
                               'function: form\n',
@@ -139,251 +129,93 @@ class TestConfig(unittest.TestCase):
             _file.close()
             os.unlink(_file.name)
 
-#         file_fragility = StringIO.StringIO("""\
-# Type,Function,DevAngle_lower,DevAngle_upper,limit_states,form,param1,param2
-# Lattice Tower,Suspension,0,360,minor,lognorm,1.02,0.02
-# Lattice Tower,Suspension,0,360,collapse,lognorm,1.05,0.03
-# Lattice Tower,Terminal,0,360,minor,lognorm,1.02,0.02
-# Lattice Tower,Terminal,0,360,collapse,lognorm,1.05,0.03
-# Lattice Tower,Strainer,0,5,minor,lognorm,1.143,0.032
-# Lattice Tower,Strainer,0,5,collapse,lognorm,1.18,0.04
-# Lattice Tower,Strainer,5,15,minor,lognorm,1.173,0.032
-# Lattice Tower,Strainer,5,15,collapse,lognorm,1.21,0.04
-# Lattice Tower,Strainer,15,30,minor,lognorm,1.208,0.032
-# Lattice Tower,Strainer,15,30,collapse,lognorm,1.245,0.04
-# Lattice Tower,Strainer,30,360,minor,lognorm,1.243,0.032
-# Lattice Tower,Strainer,30,360,collapse,lognorm,1.28,0.04
-# Steel Pole,Suspension,0,360,minor,lognorm,3.85,0.05
-# Steel Pole,Suspension,0,360,collapse,lognorm,4.02,0.05
-# Steel Pole,Terminal,0,360,minor,lognorm,3.85,0.05
-# Steel Pole,Terminal,0,360,collapse,lognorm,4.02,0.05
-# Steel Pole,Strainer,0,5,minor,lognorm,3.85,0.05
-# Steel Pole,Strainer,0,5,collapse,lognorm,4.02,0.05
-# Steel Pole,Strainer,5,15,minor,lognorm,3.95,0.05
-# Steel Pole,Strainer,5,15,collapse,lognorm,4.12,0.05
-# Steel Pole,Strainer,15,30,minor,lognorm,3.05,0.05
-# Steel Pole,Strainer,15,30,collapse,lognorm,4.22,0.05
-# Steel Pole,Strainer,30,360,minor,lognorm,3.15,0.05
-# Steel Pole,Strainer,30,360,collapse,lognorm,4.32,0.05""")
+    def test_damage_states(self):
+        expected = ['minor', 'collapse']
+        self.assertEqual(expected, self.cfg.damage_states)
 
+    def test_no_damage_states(self):
+        expected = 2
+        self.assertEqual(expected, self.cfg.no_damage_states)
 
-        # with open(self.cfg.file_fragility_metadata, 'r') as file1:
-        #     for line1, line2 in zip(file1, fragility_metadata):
-        #         self.assertEqual(line1, line2)
-        #
-        # path_metadata = os.path.dirname(
-        #     os.path.realpath(self.cfg.file_fragility_metadata))
-        # _file = os.path.join(path_metadata, self.cfg.fragility_metadata['file'])
-        # with open(_file, 'r') as file1:
-        #     for line1, line2 in zip(file1, fragility):
-        #         self.assertEqual(line1, line2)
+    def test_cond_collapse_prob_metadata(self):
 
+        self.assertEqual(self.cfg.cond_collapse_prob_metadata['list'],
+                         ['Suspension', 'Terminal', 'Strainer'])
 
-        # self.cfg._fragility = None
-        # file_fragility.seek(0)
-        # expected_fragility = pd.read_csv(file_fragility)
-        # pd.util.testing.assert_frame_equal(
-        #     self.cfg.fragility, expected_fragility)
+        self.assertEqual(self.cfg.cond_collapse_prob_metadata['by'],
+                         'function')
 
-    def test_read_cond_collapse_prob(self):
+        expected = {'by': 'design_level',
+                    'type': 'string',
+                    'max_adj': 6,
+                    'file': './cond_collapse_prob_strainer.csv'}
+        self.assertEqual(self.cfg.cond_collapse_prob_metadata['Strainer'],
+                         expected)
 
-        cond_collapse_prob_metadata = StringIO.StringIO("""\
-[main]
-by: Function
-list: Suspension, Terminal, Strainer
+        expected = {'by': 'height',
+                    'type': 'numeric',
+                    'max_adj': 2,
+                    'file': './cond_collapse_prob_suspension.csv'}
+        self.assertEqual(self.cfg.cond_collapse_prob_metadata['Suspension'],
+                         expected)
 
-[Suspension]
-by: Height
-type: numeric
-file: ./cond_collapse_prob_suspension.csv
+    def test_cond_collapse_prob(self):
 
-[Terminal]
-by: Height
-type: numeric
-file: ./cond_collapse_prob_terminal.csv
+        expected = {'function': 'Suspension',
+                    'height_lower': 0,
+                    'height_upper': 40,
+                    'no_collapse': 4,
+                    'probability': 0.10000000000000001,
+                    'start': -2,
+                    'end': 2,
+                    'list': (-2, -1, 0, 1, 2)}
 
-[Strainer]
-by: design_level
-type: string
-file: ./cond_collapse_prob_strainer.csv""")
+        assertDeepAlmostEqual(self, expected,
+                              self.cfg.cond_collapse_prob['Suspension'].loc[5].to_dict())
 
-        cond_collapse_prob_suspension = StringIO.StringIO("""\
-Function, Height_lower, Height_upper, no_collapse, probability, start, end
-Suspension, 0, 40, 1, 0.075, 0, 1
-Suspension, 0, 40, 1, 0.075, -1, 0
-Suspension, 0, 40, 2, 0.35, -1, 1
-Suspension, 0, 40, 3, 0.025, -1, 2
-Suspension, 0, 40, 3, 0.025, -2, 1
-Suspension, 0, 40, 4, 0.10, -2, 2""")
+    def test_no_towers_by_line(self):
 
-        cond_collapse_prob_terminal = StringIO.StringIO("""\
-Function, Height_lower, Height_upper, no_collapse, probability, start, end
-Terminal, 0, 40, 1, 0.075, 0, 1
-Terminal, 0, 40, 1, 0.075, -1, 0
-Terminal, 0, 40, 2, 0.35, -1, 1
-Terminal, 0, 40, 3, 0.025, -1, 2
-Terminal, 0, 40, 3, 0.025, -2, 1
-Terminal, 0, 40, 4, 0.10, -2, 2""")
+        expected = {'LineA': 22, 'LineB': 22}
 
-        cond_collapse_prob_strainer = StringIO.StringIO("""\
-Function, design_level, no_collapse, probability, start, end
-Strainer, low, 2, 0.05, -1, 1
-Strainer, low, 4, 0.08, -2, 2
-Strainer, low, 6, 0.10, -3, 3
-Strainer, low, 8, 0.08, -4, 4
-Strainer, low, 10, 0.05, -5, 5
-Strainer, low, 12, 0.62, -6, 6
-Strainer, high, 2, 0.15, -1, 1
-Strainer, high, 4, 0.22, -2, 2
-Strainer, high, 6, 0.22, -3, 3
-Strainer, high, 8, 0.15, -4, 4
-Strainer, high, 10, 0.12, -5, 5
-Strainer, high, 12, 0.08, -6, 6""")
+        self.assertEqual(expected, self.cfg.no_towers_by_line)
 
-        expected_metadata = dict([
-            ('by', 'Function'),
-            ('list', ['Suspension', 'Terminal', 'Strainer']),
-            ('Suspension', dict([
-                ('by', 'Height'),
-                ('type', 'numeric'),
-                ('max_adj', 2),
-                ('file', './cond_collapse_prob_suspension.csv')])),
-            ('Terminal', dict([
-                ('by', 'Height'),
-                ('type', 'numeric'),
-                ('max_adj', 2),
-                ('file', './cond_collapse_prob_terminal.csv')])),
-            ('Strainer', dict([
-                ('by', 'design_level'),
-                ('type', 'string'),
-                ('max_adj', 6),
-                ('file', './cond_collapse_prob_strainer.csv')]))])
+    def test_terrain_multiplier(self):
 
-        path_input = os.path.dirname(os.path.realpath(
-            self.cfg.file_fragility_metadata))
+        expected = [0.98999999999999999,
+                    1.05,
+                    1.1200000000000001,
+                    1.1599999999999999,
+                    1.1899999999999999,
+                    1.22,
+                    1.24,
+                    1.25,
+                    1.27,
+                    1.29,
+                    1.3100000000000001,
+                    1.3200000000000001]
 
-        with open(os.path.join(path_input, self.cfg.file_cond_collapse_prob_metadata), 'r') as file1:
-            for line1, line2 in zip(file1, cond_collapse_prob_metadata):
-                self.assertEqual(line1, line2)
-
-        with open(os.path.join(path_input, self.cfg.cond_collapse_prob_metadata['Strainer']['file']),
-                  'r') as file1:
-            for line1, line2 in zip(file1, cond_collapse_prob_strainer):
-                self.assertEqual(line1, line2)
-
-        with open(os.path.join(path_input, self.cfg.cond_collapse_prob_metadata['Suspension']['file']),
-                  'r') as file1:
-            for line1, line2 in zip(file1,
-                                    cond_collapse_prob_suspension):
-                self.assertEqual(line1, line2)
-
-        with open(os.path.join(path_input, self.cfg.cond_collapse_prob_metadata['Terminal']['file']),
-                  'r') as file1:
-            for line1, line2 in zip(file1,
-                                    cond_collapse_prob_terminal):
-                self.assertEqual(line1, line2)
-
-        # for item in expected_metadata['list']:
-        #     expected_metadata[item]['file'] =
-
-        assertDeepAlmostEqual(self, expected_metadata,
-                              self.cfg.cond_collapse_prob_metadata)
-
-        expected_cond_pc = dict()
-        for item in expected_metadata['list']:
-            df_tmp = pd.read_csv(os.path.join(path_input, expected_metadata[item]['file']),
-                                 skipinitialspace=1)
-            df_tmp['start'] = df_tmp['start'].astype(np.int64)
-            df_tmp['end'] = df_tmp['end'].astype(np.int64)
-            df_tmp['list'] = df_tmp.apply(lambda x: tuple(
-                range(x['start'], x['end'] + 1)), axis=1)
-            expected_cond_pc[item] = df_tmp.loc[
-                df_tmp[expected_metadata['by']] == item]
-
-            pd.util.testing.assert_frame_equal(
-                self.cfg.cond_collapse_prob[item], expected_cond_pc[item])
-
-    def test_read_ASNZS_terrain_multiplier(self):
-
-        self.cfg.file_terrain_multiplier = StringIO.StringIO("""height(m), category 1, category 2, category 3, category 4
-3,   0.99,  0.91,  0.83,  0.75
-5,   1.05,  0.91,  0.83,  0.75
-10,  1.12,  1.00,  0.83,  0.75
-15,  1.16,  1.05,  0.89,  0.75
-20,  1.19,  1.08,  0.94,  0.75
-30,  1.22,  1.12,  1.00,  0.80
-40,  1.24,  1.16,  1.04,  0.85
-50,  1.25,  1.18,  1.07,  0.90
-75,  1.27,  1.22,  1.12,  0.98
-100, 1.29,  1.24,  1.16,  1.03
-150, 1.31,  1.27,  1.21,  1.11
-200, 1.32,  1.29,  1.24,  1.16""")
-
-        self.cfg._terrain_multiplier = None
-
-        expected = pd.read_csv(self.cfg.file_terrain_multiplier,
-                               skipinitialspace=True)
-        expected.columns = ['height', 'tc1', 'tc2', 'tc3', 'tc4']
-        expected = expected.to_dict('list')
-        self.cfg.file_terrain_multiplier.seek(0)
-
-        assertDeepAlmostEqual(self, expected, self.cfg.terrain_multiplier)
+        assertDeepAlmostEqual(self, expected,
+                              self.cfg.terrain_multiplier['tc1'])
 
     def test_read_drag_height_by_type(self):
-        self.cfg.file_drag_height_by_type = StringIO.StringIO("""\
-# typical drag height by tower type
-Suspension,15.4
-Strainer,12.2
-Terminal,12.2""")
 
-        expected = pd.read_csv(self.cfg.file_drag_height_by_type,
-                               skipinitialspace=True, index_col=0)
-        expected.columns = ['value']
-        self.cfg._drag_height_by_type = None
-        self.cfg.file_drag_height_by_type.seek(0)
+        expected = {'Strainer': 12.199999999999999,
+                    'Suspension': 15.4,
+                    'Terminal': 12.199999999999999}
 
-        assertDeepAlmostEqual(self, expected['value'].to_dict(),
+        assertDeepAlmostEqual(self, expected,
                               self.cfg.drag_height_by_type)
 
-    def test_read_topographic_multiplier(self):
+    def test_topographic_multiplier(self):
 
-        self.cfg.file_topographic_multiplier = StringIO.StringIO("""\
-Station,Time,X1,X2,X3,X4,X5,X6,X7,Mh,Mhopp
-AC-099,2014-07-16 00:30,1.6, 1.2, 5.4, 4.5, 4.8,2.3,9.5,1.0,1.0
-AC-100,2014-07-16 00:30,1.9, 1.7, 5.0, 4.5, 4.8,2.3,9.5,1.0,1.0
-AC-101,2014-07-16 00:30,1.1, 1.3, 5.2, 4.5, 4.8,2.3,9.5,1.0,1.0
-AC-102,2014-07-16 00:20,1.9, 1.9, 5.5, 4.1, 4.3,2.3,9.3,1.0,1.0
-AC-103,2014-07-16 00:20,1.2, 1.4, 5.6, 4.1, 4.3,2.3,9.3,1.0,1.0
-AC-104,2014-07-16 00:20,1.1, 1.4, 5.4, 4.1, 4.3,2.3,9.3,1.0,1.0
-CB-001,2014-07-16 00:20,1.0, 1.7, 5.4, 4.1, 4.3,2.3,9.3,1.0,1.0
-CB-002,2014-07-16 00:20,1.3, 1.3, 5.5, 4.1, 4.3,2.3,9.3,1.0,1.0
-CB-003,2014-07-16 00:20,1.3, 1.3, 5.4, 4.1, 4.3,2.3,9.3,1.0,1.0
-CB-004,2014-07-16 00:30,1.2, 1.2, 5.4, 4.5, 4.8,2.3,9.5,1.0,1.0
-CB-005,2014-07-16 00:30,1.7, 1.0, 5.1, 4.5, 4.8,2.3,9.5,1.0,1.0
-CB-006,2014-07-16 00:30,1.3, 1.7, 5.5, 4.5, 4.8,2.3,9.5,1.0,1.0""")
+        expected = {'T1': 1.0, 'T2': 0.8}
 
-        expected = pd.read_csv(self.cfg.file_topographic_multiplier,
-                               skipinitialspace=True)
-        expected['topo'] = expected[['Mh', 'Mhopp']].max(axis=1)
-        self.cfg._topographic_multiplier = None
-        self.cfg.file_topographic_multiplier.seek(0)
+        self.assertEqual(expected['T1'],
+                         self.cfg.topographic_multiplier['T1'])
+        self.assertEqual(expected['T2'],
+                         self.cfg.topographic_multiplier['T2'])
 
-        assertDeepAlmostEqual(self,
-                              expected.set_index('Station').to_dict()['topo'],
-                              self.cfg.topographic_multiplier)
-
-    def test_read_design_adjustment_factor_by_topography_mutliplier(self):
-
-        design_adj_factor = StringIO.StringIO("""\
-[main]
-threshold: 1.05, 1.1, 1.2, 1.3, 1.45
-# key = np.sum(x > threshold), value
-0:1.0
-1:1.1
-2:1.2
-3:1.3
-4:1.45
-5:1.6""")
+    def test_design_adjustment_factor_by_topography_mutliplier(self):
 
         expected = {0: 1.0,
                     1: 1.1,
@@ -393,20 +225,336 @@ threshold: 1.05, 1.1, 1.2, 1.3, 1.45
                     5: 1.60,
                     'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45])}
 
-        with open(self.cfg.file_design_adjustment_factor_by_topography,
-                  'r') as file1:
-            for line1, line2 in zip(file1, design_adj_factor):
-                self.assertEqual(line1, line2)
-
         assertDeepAlmostEqual(self, expected,
                               self.cfg.design_adjustment_factor_by_topography)
 
-    def test_run(self):
+    def test_towers(self):
+        # file_wind_base_name
+        self.assertEqual(self.cfg.towers.loc[0].file_wind_base_name,
+                         'ts.T14.csv')
 
-        expected = {'test1': {'Calaca - Amadeo': 11,
-                              'Calaca - Santa Rosa': 22},
-                    'test2': {'Calaca - Amadeo': 12,
-                              'Calaca - Santa Rosa': 23}}
+        # height_z
+        self.assertAlmostEqual(self.cfg.towers.loc[0].height_z, 15.4)
+        self.assertAlmostEqual(self.cfg.towers.loc[1].height_z, 12.2)
+
+    def test_lines(self):
+        # name_output
+        self.assertEqual(self.cfg.lines['LineA']['name_output'], 'LineA')
+
+        # no_towers
+        self.assertAlmostEqual(self.cfg.lines['LineB']['no_towers'], 22)
+
+    def test_process_config(self):
+
+        # max_adj
+        expected = {'Terminal': 2, 'Suspension': 2, 'Strainer': 6}
+        for key, value in expected.items():
+            self.assertEqual(value,
+                             self.cfg.cond_collapse_prob_metadata[key]['max_adj'])
+
+    def test_sort_by_location(self):
+
+        expected_names = {'LineA': ['T{}'.format(x) for x in range(1, 23)],
+                          'LineB': ['T{}'.format(x) for x in range(23, 45)]}
+
+        for line in ['LineA', 'LineB']:
+            self.assertEqual(self.cfg.lines[line]['names'],
+                             expected_names[line])
+
+        expected_ids = {'LineA': [23, 39, 3, 33, 4, 5, 7, 6, 31, 8, 38, 29, 34,
+                                  0, 42, 12, 2, 10, 40, 14, 22, 1],
+                        'LineB': [24, 35, 17, 9, 32, 19, 21, 16, 36, 28, 30, 20,
+                                  37, 13, 41, 11, 26, 43, 15, 27, 25, 18]}
+
+        for line in ['LineA', 'LineB']:
+            self.assertEqual(self.cfg.lines[line]['ids'], expected_ids[line])
+
+        expected_id2name = {
+            'LineA': {0: 'T14', 1: 'T22', 2: 'T17', 3: 'T3',
+                      4: 'T5', 5: 'T6', 6: 'T8', 7: 'T7',
+                      8: 'T10', 10: 'T18', 12: 'T16', 14: 'T20',
+                      22: 'T21', 23: 'T1', 29: 'T12', 31: 'T9',
+                      33: 'T4', 34: 'T13', 38: 'T11', 39: 'T2',
+                      40: 'T19', 42: 'T15'},
+            'LineB': {9: 'T26', 11: 'T38', 13: 'T36', 15: 'T41',
+                      16: 'T30', 17: 'T25', 18: 'T44', 19: 'T28',
+                      20: 'T34', 21: 'T29', 24: 'T23', 25: 'T43',
+                      26: 'T39', 27: 'T42', 28: 'T32', 30: 'T33',
+                      32: 'T27', 35: 'T24', 36: 'T31', 37: 'T35',
+                      41: 'T37', 43: 'T40'}}
+
+        for line in ['LineA', 'LineB']:
+            self.assertEqual(self.cfg.lines[line]['id2name'],
+                             expected_id2name[line])
+
+    def test_assign_collapse_capacity(self):
+
+        # u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1-actual_span/design_span)
+        # collapse_capacity = design_speed / sqrt(u_factor)
+        u_factor = 0.84758125
+        expected = 81.46487
+        for item in ['T1', 'T22']:
+            tower = self.cfg.towers.loc[self.cfg.towers['name'] == item].iloc[0]
+            results = self.cfg.assign_collapse_capacity(tower)
+            # self.assertAlmostEqual(tower.design_speed, 75.0)
+            self.assertAlmostEqual(results.collapse_capacity, expected,
+                                   places=4)
+
+        # u_factor = 1.0
+        expected = 75.0
+        for item in ['T2', 'T21']:
+            tower = self.cfg.towers.loc[self.cfg.towers['name'] == item].iloc[0]
+            results = self.cfg.assign_collapse_capacity(tower)
+            self.assertAlmostEqual(results.collapse_capacity, expected,
+                                   places=4)
+
+        expected = 55.8186
+        for item in ['T23', 'T44']:
+            tower = self.cfg.towers.loc[self.cfg.towers['name'] == item].iloc[0]
+            results = self.cfg.assign_collapse_capacity(tower)
+            # self.assertAlmostEqual(tower.design_speed, 75.0)
+            self.assertAlmostEqual(results.collapse_capacity, expected,
+                                   places=4)
+
+        # u_factor = 1.0
+        expected = 51.389
+        for item in ['T24', 'T43']:
+            tower = self.cfg.towers.loc[self.cfg.towers['name'] == item].iloc[
+                0]
+            results = self.cfg.assign_collapse_capacity(tower)
+            self.assertAlmostEqual(results.collapse_capacity, expected,
+                                   places=4)
+
+    def test_line_interaction(self):
+        # FIXME
+        pass
+
+    def test_assign_cond_collapse_prob(self):
+        # Tower 1: Terminal
+        row = self.cfg.towers.loc[23]
+        out = self.cfg.assign_cond_collapse_prob(row)
+
+        expected = {(0, 1): 0.075,
+                    (-1, 0): 0.075,
+                    (-1, 0, 1): 0.35,
+                    (-1, 0, 1, 2): 0.025,
+                    (-2, -1, 0, 1): 0.025,
+                    (-2, -1, 0, 1, 2): 0.10}
+        self.assertEqual(out.cond_pc, expected)
+        self.assertEqual(out.max_no_adj_towers, 2)
+
+        # Raise warning for undefined cond_pc
+        row = self.cfg.towers.loc[23].copy()
+        row.Height = 55.0   # beyond the height
+        _ = self.cfg.assign_cond_collapse_prob(row)
+
+        # Tower 26
+        row = self.cfg.towers.loc[9]
+        out = self.cfg.assign_cond_collapse_prob(row)
+        self.assertEqual(out.cond_pc, expected)
+        self.assertEqual(out.max_no_adj_towers, 2)
+
+    def test_ratio_z_to_10(self):
+        row = self.cfg.towers.loc[0]
+        assert row.terrain_cat == 2
+        result = self.cfg.ratio_z_to_10(row)
+        self.assertAlmostEqual(result, 1.0524)
+
+    def test_assign_design_values(self):
+
+        self.assertEqual(self.cfg.options['adjust_design_by_topography'],
+                         True)
+
+        # Tower 14
+        row = self.cfg.towers.loc[0]
+        line = row['lineroute']
+        self.assertEqual(line, 'LineA')
+        out = self.cfg.assign_design_values(row)
+
+        self.assertEqual(out.design_span,
+                         self.cfg.design_value_by_line[line]['design_span'])
+        self.assertEqual(out.design_level,
+                         self.cfg.design_value_by_line[line]['design_level'])
+        self.assertEqual(out.terrain_cat,
+                         self.cfg.design_value_by_line[line]['terrain_cat'])
+        self.assertEqual(out.design_speed,
+                         self.cfg.design_value_by_line[line]['design_speed'])
+
+        # Tower 26
+        row = self.cfg.towers.loc[9]
+        line = row['lineroute']
+        self.assertEqual(line, 'LineB')
+        out = self.cfg.assign_design_values(row)
+
+        self.assertEqual(out.design_span,
+                         self.cfg.design_value_by_line[line]['design_span'])
+        self.assertEqual(out.design_level,
+                         self.cfg.design_value_by_line[line]['design_level'])
+        self.assertEqual(out.terrain_cat,
+                         self.cfg.design_value_by_line[line]['terrain_cat'])
+        self.assertEqual(out.design_speed,
+                         self.cfg.design_value_by_line[line]['design_speed'])
+
+    def test_assign_fragility_parameters(self):
+
+        row = self.cfg.towers.loc[0]
+        result = self.cfg.assign_fragility_parameters(row)
+
+        self.assertEqual(result.frag_func, 'lognorm')
+        assertDeepAlmostEqual(self,
+                              result.frag_arg,
+                              {'collapse': 0.03, 'minor': 0.02}, places=4)
+        assertDeepAlmostEqual(self,
+                              result.frag_scale,
+                              {'collapse': 1.05, 'minor': 1.02})
+
+    def test_assign_id_adj_towers(self):
+
+        # T14
+        row = self.cfg.towers.loc[0]
+        result = self.cfg.assign_id_adj_towers(row)
+        self.assertEqual(result.id_adj, [11, 12, 13, 14, 15])
+        self.assertEqual(result.id_line, 13)
+
+        # T26
+        row = self.cfg.towers.loc[9]
+        result = self.cfg.assign_id_adj_towers(row)
+        self.assertEqual(result.id_adj, [1, 2, 3, 4, 5])
+        self.assertEqual(result.id_line, 3)
+
+    def test_assign_cond_pc_adj(self):
+
+        # T14
+        row = assign_cond_pc_adj(self.cfg.towers.loc[0])
+        expected = {'cond_pc_adj': {1: 0.575, -1: 0.575, 2: 0.125, -2: 0.125},
+                    'cond_pc_adj_mc_rel_idx': [(-1, 0, 1, 2), (-2, -1, 0, 1),
+                                               (0, 1), (-1, 0),
+                                               (-2, -1, 0, 1, 2), (-1, 0, 1)],
+                    'cond_pc_adj_mc_cum_prob':
+                        np.array([0.025, 0.05, 0.125, 0.2, 0.3, 0.65])}
+
+        assertDeepAlmostEqual(self, row.cond_pc_adj, expected['cond_pc_adj'],
+                              places=4)
+        self.assertEqual(row.cond_pc_adj_mc_rel_idx,
+                         expected['cond_pc_adj_mc_rel_idx'])
+        np.testing.assert_allclose(row.cond_pc_adj_mc_cum_prob,
+                                   expected['cond_pc_adj_mc_cum_prob'])
+
+        # T1: terminal tower
+        row = assign_cond_pc_adj(self.cfg.towers.loc[23])
+        expected = {'cond_pc_adj': {1: 0.575, 2: 0.125},
+                    'cond_pc_adj_mc_rel_idx': [(0, 1, 2), (0, 1)],
+                    'cond_pc_adj_mc_cum_prob': np.array([0.125, 0.575])}
+
+        assertDeepAlmostEqual(self, row.cond_pc_adj, expected['cond_pc_adj'],
+                              places=4)
+        self.assertEqual(row.cond_pc_adj_mc_rel_idx,
+                         expected['cond_pc_adj_mc_rel_idx'])
+        np.testing.assert_allclose(row.cond_pc_adj_mc_cum_prob,
+                                   expected['cond_pc_adj_mc_cum_prob'])
+
+        # T22: terminal tower
+        row = assign_cond_pc_adj(self.cfg.towers.loc[1])
+        expected = {'cond_pc_adj': {-1: 0.575, -2: 0.125},
+                    'cond_pc_adj_mc_rel_idx': [(-2, -1, 0), (-1, 0)],
+                    'cond_pc_adj_mc_cum_prob': np.array([0.125, 0.575])}
+
+        assertDeepAlmostEqual(self, row.cond_pc_adj, expected['cond_pc_adj'],
+                              places=4)
+        self.assertEqual(row.cond_pc_adj_mc_rel_idx,
+                         expected['cond_pc_adj_mc_rel_idx'])
+        np.testing.assert_allclose(row.cond_pc_adj_mc_cum_prob,
+                                   expected['cond_pc_adj_mc_cum_prob'])
+
+    def test_create_list_idx(self):
+
+        result = create_list_idx(idx=3, no_towers=2, max_no_towers=7,
+                                 flag_direction=1)
+        self.assertEqual(result, [4, 5])
+
+        result = create_list_idx(idx=3, no_towers=2, max_no_towers=7,
+                                 flag_direction=-1)
+        self.assertEqual(result, [2, 1])
+
+        result = create_list_idx(idx=6, no_towers=2, max_no_towers=7,
+                                 flag_direction=1)
+        self.assertEqual(result, [-1, -1])
+
+        result = create_list_idx(idx=6, no_towers=2, max_no_towers=7,
+                                 flag_direction=-1)
+        self.assertEqual(result, [5, 4])
+
+    def test_assign_shapely_point(self):
+
+        # T1: terminal tower
+        row = assign_shapely_point(self.cfg.towers.loc[23].shapes)
+        expected = {'coord': [149.0, 0.0],
+                    'coord_lat_lon': [0.0, 149.0]}
+
+        np.testing.assert_allclose(row.coord,
+                                   expected['coord'])
+        np.testing.assert_allclose(row.coord_lat_lon,
+                                   expected['coord_lat_lon'])
+
+    def test_assign_shapely_line(self):
+
+        # LineA
+        row = assign_shapely_line(self.cfg.lines['LineA']['shapes'])
+        expected = {'coord': [[x, 0.0] for x in
+                              np.arange(149.0, 149.109, 0.005)],
+                    'coord_lat_lon': [[0.0, x] for x in
+                                      np.arange(149.0, 149.109, 0.005)]}
+
+        np.testing.assert_allclose(row.coord,
+                                   expected['coord'])
+        np.testing.assert_allclose(row.coord_lat_lon,
+                                   expected['coord_lat_lon'])
+
+    def test_calculate_distance_between_towers(self):
+
+        coord_lat_lon = [[0.0, 0.0], [0.005, 0.0], [0.01, 0.0]]
+
+        distance = 556.1312
+
+        expected = [0.5 * distance, distance, 0.5*distance]
+
+        results = calculate_distance_between_towers(coord_lat_lon)
+
+        assert np.allclose(results, expected)
+
+    def test_set_line_interaction(self):
+        # FIXME
+        pass
+
+    def test_get_cond_prob_line_interaction(self):
+        # FIXME
+        pass
+
+    def test_find_id_nearest_pt(self):
+
+        pt_coord = [0, 0]
+        line_coord = [[1.6, 0], [1.5, 0], [0.0, 0], [0.4, 0]]
+
+        result = find_id_nearest_pt(pt_coord, line_coord)
+
+        self.assertEqual(result, 2)
+
+    def test_unit_vector(self):
+
+        result = unit_vector((0, 1))
+        expected = np.array([0, 1])
+        np.allclose(expected, result)
+
+        result = unit_vector((3, 4))
+        expected = np.array([0.6, 0.8])
+        np.allclose(expected, result)
+
+    def test_random_seed(self):
+
+        expected = {'test1': {'LineA': 11,
+                              'LineB': 22},
+                    'test2': {'LineA': 12,
+                              'LineB': 23}}
 
         assertDeepAlmostEqual(self, expected, self.cfg.seed)
 

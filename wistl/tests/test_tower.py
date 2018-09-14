@@ -5,13 +5,14 @@ __author__ = 'Hyeuk Ryu'
 
 import unittest
 import StringIO
+import logging
 import pandas as pd
 import os
 import numpy as np
 import copy
-import matplotlib
-matplotlib
-import matplotlib.pyplot as plt
+#import matplotlib
+#matplotlib
+#import matplotlib.pyplot as plt
 
 from wistl.config import Config
 from wistl.transmission_network import TransmissionNetwork
@@ -26,12 +27,19 @@ class TestTower(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
-        cls.network = TransmissionNetwork(cfg=cls.cfg, event_id='test2', scale=2.5)
+        logging.basicConfig(level=logging.INFO)
 
-        cls.tower = cls.network.lines['Calaca - Amadeo'].towers['AC-100']
-        cls.ps_tower = cls.tower.ps_tower
-        cls.tower.event_tuple = (cls.tower.file_wind, 3.0)
+        cls.logger = logging.getLogger(__name__)
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
+
+
+        # cls.tower = Tower(tower_id=0, logger=logge**cls.cfg.towers.loc[0])
+        # cls.network = TransmissionNetwork(cfg=cls.cfg, event_id='test2', scale=2.5)
+        #
+        # cls.tower = cls.network.lines['Calaca - Amadeo'].towers['AC-100']
+        # cls.ps_tower = cls.tower.ps_tower
+        # cls.tower.event_tuple = (cls.tower.file_wind, 3.0)
 
         # set wind file, which also sets wind and time_index
         # cls.tower.file_wind = file_wind
@@ -40,55 +48,49 @@ class TestTower(unittest.TestCase):
         # cls.tower.compute_damage_prob_isolation()
         #cls.tower.compute_pc_adj()
 
-    def test_get_cond_collapse_prob(self):
+    # def test_get_cond_collapse_prob(self):
+    #
+    #     list_function = ['Suspension'] * 2 + ['Terminal'] * 2
+    #     list_value = [20.0, 50.0] * 2
+    #
+    #     for func_, value_ in zip(list_function, list_value):
+    #
+    #         # ps_tower = copy.deepcopy(self.ps_tower)
+    #         #cfg = copy.deepcopy(self.cfg)
+    #         cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
+    #
+    #         ps_tower = cfg.towers.loc[0].copy()
+    #         ps_tower['Function'] = func_
+    #         ps_tower['Height'] = value_
+    #         tower = Tower(cfg, **ps_tower)
+    #
+    #         if tower.cond_pc:
+    #             tmp = cfg.cond_collapse_prob[func_]
+    #             expected = tmp.set_index('list').to_dict()['probability']
+    #             assertDeepAlmostEqual(self, tower.cond_pc, expected)
+    #
+    #     list_function = ['Strainer'] * 2
+    #     list_value = ['low', 'high']
+    #
+    #     for func_, value_ in zip(list_function, list_value):
+    #
+    #         cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
+    #         # cfg = copy.deepcopy(self.cfg)
+    #
+    #         ps_tower = cfg.towers.loc[0].copy()
+    #
+    #         ps_tower['Function'] = func_
+    #
+    #         cfg._design_value_by_line[ps_tower['LineRoute']]['level'] = value_
+    #         cfg.process_config()
+    #
+    #         tower = Tower(cfg, **ps_tower)
+    #
+    #         if tower.cond_pc:
+    #             tmp = cfg.cond_collapse_prob[func_]
+    #             expected = tmp.loc[tmp['design_level'] == value_, :].set_index('list').to_dict()['probability']
+    #             assertDeepAlmostEqual(self, tower.cond_pc, expected)
 
-        list_function = ['Suspension'] * 2 + ['Terminal'] * 2
-        list_value = [20.0, 50.0] * 2
-
-        for func_, value_ in zip(list_function, list_value):
-
-            ps_tower = copy.deepcopy(self.ps_tower)
-            cfg = copy.deepcopy(self.cfg)
-
-            ps_tower['Function'] = func_
-            ps_tower['Height'] = value_
-            tower = Tower(cfg, ps_tower)
-
-            if tower.cond_pc:
-                tmp = cfg.cond_collapse_prob[func_]
-                expected = tmp.set_index('list').to_dict()['probability']
-                assertDeepAlmostEqual(self, tower.cond_pc, expected)
-
-        list_function = ['Strainer'] * 2
-        list_value = ['low', 'high']
-
-        for func_, value_ in zip(list_function, list_value):
-
-            ps_tower = copy.deepcopy(self.ps_tower)
-            ps_tower['Function'] = func_
-            cfg = copy.deepcopy(self.cfg)
-
-            cfg.design_value[self.ps_tower['LineRoute']]['level'] = value_
-            tower = Tower(cfg, ps_tower)
-
-            if tower.cond_pc:
-                tmp = cfg.cond_collapse_prob[func_]
-                expected = tmp.loc[tmp['design_level'] == value_, :].set_index('list').to_dict()['probability']
-                assertDeepAlmostEqual(self, tower.cond_pc, expected)
-
-    def test_assign_design_speed(self):
-
-        expected = 75.0 * 1.2
-        cfg = copy.deepcopy(self.cfg)
-        cfg.adjust_design_by_topo = True
-        cfg.topo_multiplier[self.ps_tower['Name']] = 1.15
-        tower = Tower(cfg, self.ps_tower)
-        self.assertEqual(tower.design_speed, expected)
-
-        expected = 75.0
-        cfg.adjust_design_by_topo = False
-        tower = Tower(self.cfg, self.ps_tower)
-        self.assertEqual(tower.design_speed, expected)
 
     def test_compute_collapse_capacity(self):
 

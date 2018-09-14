@@ -1,0 +1,18 @@
+[main]
+by: function
+list: Suspension, Terminal, Strainer
+
+[Suspension]
+by: height
+type: numeric
+file: ./cond_collapse_prob_suspension.csv
+
+[Terminal]
+by: height
+type: numeric
+file: ./cond_collapse_prob_terminal.csv
+
+[Strainer]
+by: design_level
+type: string
+file: ./cond_collapse_prob_strainer.csv

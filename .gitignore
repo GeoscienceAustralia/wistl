@@ -61,11 +61,11 @@ docs/_build/
 target/
 
 # prokect specific files
-output_current_glenda/
-input/
+#output_current_glenda/
+#input/
 wind_scenario/
-tests/output/
-gis_data/
+#tests/output/
+#gis_data/
 *.pdf
 
 # pycharm

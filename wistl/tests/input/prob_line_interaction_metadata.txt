@@ -1,0 +1,4 @@
+[main]
+by: Height
+type: numeric
+file: ./prob_line_interaction.csv

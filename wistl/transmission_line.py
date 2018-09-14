@@ -101,8 +101,8 @@ class TransmissionLine(object):
 
             value.update({'path_event': self.path_event})
 
-            tower = Tower(tower_id=key, **value)
-            self._towers[value['id_line']] = tower
+            tower = Tower(tower_id=key, **value)  # key within the network
+            self._towers[value['id_line']] = tower  # id within the line
 
     @property
     def time_index(self):
@@ -168,7 +168,7 @@ class TransmissionLine(object):
 
         # prob of non-collapse damage
         cds_list = copy.deepcopy(self.damage_states)
-        cds_list.remove('collapse')  # remove the last item 'collapse'
+        cds_list.remove()  # remove the last item 'collapse'
 
         for ds in cds_list:
             temp = np.zeros_like(pc_collapse)
