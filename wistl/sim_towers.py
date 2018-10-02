@@ -6,16 +6,16 @@ WISTL: Wind Impact Simulation on Transmission Lines
 """
 
 import time
-#import parmap
+import parmap
 from optparse import OptionParser
 import os
 import logging.config
 
 from wistl.config import Config
-from wistl.transmission_network import (
+from wistl.network import (
     create_transmission_network_under_wind_event,
     compute_damage_probability_line_interaction_per_network)
-from wistl.transmission_line import compute_damage_probability_per_line
+from wistl.line import compute_damage_probability_per_line
 from wistl.version import VERSION_DESC
 
 
@@ -32,55 +32,54 @@ def run_simulation(cfg):
 
     logger = logging.getLogger(__name__)
 
-    # if cfg.options['run_parallel']:
+    if cfg.options['run_parallel']:
 
-        # logger.info('parallel MC run on.......')
-        #
-        # # create transmission network with wind event
-        # networks = parmap.map(
-        #     create_transmission_network_under_wind_event,
-        #     cfg.event_id_scale, cfg)
-        #
-        # lines = []
-        # for network in networks:
-        #     for _, line in network.lines.itms():
-        #         lines.append(line)
-        #
-        # # compute damage probability for each pair of line and wind event
-        # lines = parmap.map(compute_damage_probability_per_line, lines, cfg)
-        #
-        # nested_dic = {}
-        # for line in lines:
-        #     nested_dic.setdefault(line.event_id, {})[line.name] = line
-        #
-        # # if cfg.line_interaction:
-        # #     damaged_networks = parmap.map(
-        # #         compute_damage_probability_line_interaction_per_network,
-        # #         [network for network in nested_dic.itervalues()])
-        # # else:
-        # damage_by_event = [network for network in nested_dic.itervalues()]
+        logger.info('parallel MC run on.......')
 
-    # else:
+        # create transmission network with wind event
+        networks = parmap.map(
+            create_transmission_network_under_wind_event, cfg.events, cfg)
 
-    logger.info('serial MC run on.......')
+        lines = []
+        for network in networks:
+            for _, line in network.lines.itms():
+                lines.append(line)
 
-    # create transmission network with wind event
-    for event_id in cfg.event_id:
+        # compute damage probability for each pair of line and wind event
+        lines = parmap.map(compute_damage_probability_per_line, lines, cfg)
 
-        network = create_transmission_network_under_wind_event(
-            event_id, cfg)
-
-        for _, line in network.lines.items():
-            compute_damage_probability_per_line(line=line, cfg=cfg)
-
-        network = {line.name: line for _, line in network.lines.items()}
+        nested_dic = {}
+        for line in lines:
+            nested_dic.setdefault(line.event_id, {})[line.name] = line
 
         # if cfg.line_interaction:
-        #     network_dic = \
-        #         compute_damage_probability_line_interaction_per_network(
-        #             network_dic)
+        #     damaged_networks = parmap.map(
+        #         compute_damage_probability_line_interaction_per_network,
+        #         [network for network in nested_dic.itervalues()])
+        # else:
+        damage_by_event = [network for _, network in nested_dic.items()]
 
-        damage_by_event[event_id] = network
+    else:
+
+        logger.info('serial MC run on.......')
+
+        # create transmission network with wind event
+        for event in cfg.events:
+
+            network = create_transmission_network_under_wind_event(
+                event, cfg)
+
+            for _, line in network.lines.items():
+                compute_damage_probability_per_line(line=line, cfg=cfg)
+
+            network = {line.name: line for _, line in network.lines.items()}
+
+            # if cfg.line_interaction:
+            #     network_dic = \
+            #         compute_damage_probability_line_interaction_per_network(
+            #             network_dic)
+
+            damage_by_event[event] = network
 
     logger.info('MC simulation took {} seconds'.format(time.time() - tic))
 

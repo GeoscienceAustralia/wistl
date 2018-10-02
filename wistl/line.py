@@ -1,12 +1,9 @@
-from __future__ import print_function
+from __future__ import print_function, division
 
-import os
-import copy
+#import os
+#import copy
 import warnings
-import itertools
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+#import itertools
 import pandas as pd
 import numpy as np
 import logging
@@ -19,7 +16,7 @@ from wistl.tower import Tower
 warnings.filterwarnings("ignore", lineno=100, module='tables')
 
 
-class TransmissionLine(object):
+class Line(object):
     """ class for a collection of towers """
 
     registered = ['coord',
@@ -30,10 +27,12 @@ class TransmissionLine(object):
                   'name_output',
                   'names',
                   'no_towers',
-                  'flag_save',
                   'no_sims',
                   'damage_states',
-                  'event_id',
+                  'non_collapse',
+                  'event_name',
+                  'scale',
+                  'rnd_state',
                   'path_event']
 
     def __init__(self, name=None, logger=None, **kwargs):
@@ -49,31 +48,33 @@ class TransmissionLine(object):
         self.name_output = None
         self.names = None
         self.no_towers = None
-        self.flag_save = None
         self.no_sims = None
         self.damage_states = None
+        self.non_collapse = None
         self.path_event = None
-        self.event_id = None
+        self.event_name = None
+        self.scale = None
+        self.rnd_state = None
 
         for key, value in kwargs.items():
             if key in self.registered:
                 setattr(self, key, value)
 
-        self._towers = None
+        self.towers = None
 
         # analytical method
-        self._damage_prob_analytical = None
+        self.damage_prob = None
 
         # simulation method
-        self.damage_prob_simulation = {}
-        self.damage_index_simulation = {}
-        self.prob_no_damage_simulation = None
-        self.est_no_damage_simulation = None
+        self.damage_prob_mc = None
+        # self.damage_index_simulation = {}
+        self.est_no_damage = None
+        self.prob_no_damage = None
 
         # non cascading collapse
-        self.damage_prob_simulation_non_cascading = {}
-        self.prob_no_damage_simulation_non_cascading = None
-        self.est_no_damage_simulation_non_cascading = None
+        # self.damage_prob_non_cascading = None
+        # self.est_no_damage_non_cascading = None
+        # self.prob_no_damage_simulation_non_cascading = None
 
         # parallel line interaction
         # if self.cfg.line_interaction:
@@ -81,60 +82,52 @@ class TransmissionLine(object):
         #         target_line in self.cfg.line_interaction[self.name]}
         # else:
         #     self.damage_index_line_interaction = None
-        self.damage_prob_line_interaction = {}
-        self.prob_no_damage_line_interaction = None
-        self.est_no_damage_line_interaction = None
+        # self.damage_prob_line_interaction = {}
+        # self.prob_no_damage_line_interaction = None
+        # self.est_no_damage_line_interaction = None
 
         self._time_index = None
+        self._no_time = None
 
-    @property
-    def towers(self):
-        return self._towers
+        self._set_towers(kwargs['dic_towers'])
 
-    @towers.setter
-    def towers(self, dic):
+    def __repr__(self):
+        return 'Line(name={}, no_towers={}, event_name={}, scale={:.2f})'.format(
+            self.name, self.no_towers, self.event_name, self.scale)
+
+    def _set_towers(self, dic):
+
         assert isinstance(dic, dict)
 
-        self._towers = {}
+        self.towers = {}
 
         for key, value in dic.items():
 
-            value.update({'path_event': self.path_event})
+            value.update({'no_sims': self.no_sims,
+                          'damage_states': self.damage_states,
+                          'event_name': self.event_name,
+                          'scale': self.scale,
+                          'rnd_state': self.rnd_state,
+                          'path_event': self.path_event})
 
-            tower = Tower(tower_id=key, **value)  # key within the network
-            self._towers[value['id_line']] = tower  # id within the line
+            self.towers[value['lid']] = Tower(nid=key, **value)
 
     @property
     def time_index(self):
         if self._time_index is None:
-            self._time_index = self.towers[0].wind.index
+            try:
+                self._time_index = self.towers[0].wind.index
+            except AttributeError:
+                self.logger.error('Can not retrieve time_index of tower {}'.format(self.towers[0].name))
         return self._time_index
 
-    # def plot_tower_line(self):
-    #
-    #     coord_towers = []
-    #     for i in range(self.no_towers):
-    #         coord_towers.append(self.df_towers.loc[i, 'coord'])
-    #     coord_towers = np.array(coord_towers)
-    #
-    #     plt.figure()
-    #     plt.plot(self.coord[:, 0],
-    #              self.coord[:, 1], 'ro',
-    #              coord_towers[:, 0],
-    #              coord_towers[:, 1], 'b-')
-    #     plt.title(self.name)
-    #
-    #     png_file = os.path.join(self.cfg.path_output,
-    #                             'line_{}.png'.format(self.name))
-    #
-    #     if not os.path.exists(self.cfg.path_output):
-    #         os.makedirs(self.cfg.path_output)
-    #
-    #     plt.savefig(png_file)
-    #     print('{} is created'.format(png_file))
-    #     plt.close()
+    @property
+    def no_time(self):
+        if self._no_time is None:
+            self._no_time = len(self.time_index)
+        return self._no_time
 
-    def compute_damage_prob_analytical(self):
+    def compute_damage_prob(self):
         """
         calculate damage probability of towers analytically
         Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
@@ -143,129 +136,117 @@ class TransmissionLine(object):
         pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
         """
 
-        self._damage_prob_analytical = {}
+        self.damage_prob = {}
 
         pc_adj_agg = np.zeros((self.no_towers,
                                self.no_towers,
-                               self.time_index.size))
+                               self.no_time))
 
         # prob of collapse
         for _, tower in self.towers.items():
 
-            for key, value in tower.damage_prob_adjacent.items():
-                pc_adj_agg[tower.id_line, key, :] = value
+            for lid, prob in tower.collapse_prob_adj.items():
+                pc_adj_agg[tower.lid, lid, :] = prob
 
-            pc_adj_agg[tower.id_line, tower.id_line, :] = \
-                tower.damage_prob_isolation['collapse'].values
+            pc_adj_agg[tower.lid, tower.lid, :] = \
+                tower.damage_prob['collapse'].values
 
         # pc_collapse.shape == (no_tower, no_time)
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
 
-        self._damage_prob_analytical['collapse'] = pd.DataFrame(
+        self.damage_prob['collapse'] = pd.DataFrame(
             pc_collapse.T,
             columns=self.names,
             index=self.time_index)
 
-        # prob of non-collapse damage
-        cds_list = copy.deepcopy(self.damage_states)
-        cds_list.remove()  # remove the last item 'collapse'
-
-        for ds in cds_list:
+        # non_collapse state
+        for ds in self.non_collapse:
             temp = np.zeros_like(pc_collapse)
             for _, tower in self.towers.items():
-                value = tower.damage_prob_isolation[ds].values \
-                        - tower.damage_prob_isolation['collapse'].values \
-                        + pc_collapse[tower.id_line, :]
-                temp[tower.id_line, :] = np.where(value > 1.0, [1.0], value)
+                # P(DS>ds) - P(collapse directly) + P(collapse induced)
+                value = tower.damage_prob[ds].values \
+                        - tower.damage_prob['collapse'].values \
+                        + pc_collapse[tower.lid, :]
+                temp[tower.lid, :] = np.where(value > 1.0, [1.0], value)
 
-            self._damage_prob_analytical[ds] = pd.DataFrame(
+            self.damage_prob[ds] = pd.DataFrame(
                 temp.T,
                 columns=self.names,
                 index=self.time_index)
 
-    """
-    def compute_damage_probability_simulation(self, seed):
+    def compute_damage_prob_mc(self):
 
         # perfect correlation within a single line
-        rnd_state = np.random.RandomState(seed)
-        rv = rnd_state.uniform(size=(self.cfg.no_sims, len(self.time_index)))
+        self.damage_prob_mc = {}
+
+        tf_sim = {ds: None for ds in self.damage_states}
 
         tf_ds = np.zeros((self.no_towers,
-                          self.cfg.no_sims,
-                          len(self.time_index)), dtype=bool)
+                          self.no_sims,
+                          self.no_time), dtype=bool)
 
         # collapse by adjacent towers
-        for tower in self.towers.itervalues():
-
-            # tower.compute_mc_adj(rv, seed)
-            tower.determine_damage_isolation_mc(rv)
-            tower.determine_damage_adjacent_mc(seed)
-
-            for id_adj, grouped in tower.damage_adjacent_mc.groupby('id_adj'):
-                for i in id_adj:
-                    tf_ds[i, grouped['id_sim'].values, grouped['id_time'].values] = True
-
-        cds_list = self.cfg.damage_states[:]  # to avoid effect
-        cds_list.reverse()  # [collapse, minor]
-
-        tf_sim = {}
+        for _, tower in self.towers.items():
+            for id_adj, grouped in tower.collapse_prob_adj_mc.groupby('id_adj'):
+                for lid in id_adj:
+                    tf_ds[lid,
+                          grouped['id_sim'].values,
+                          grouped['id_time'].values] = True
 
         # append damage state by direct wind
-        for ds in cds_list:
-            for tower in self.towers.itervalues():
+        for ds in self.damage_states[::-1]:  # collapse first
 
-                tf_ds[tower.id,
-                      tower.damage_isolation_mc[ds]['id_sim'].values,
-                      tower.damage_isolation_mc[ds]['id_time'].values] = True
+            for _, tower in self.towers.items():
 
-            id_tower, id_sim, id_time = np.where(tf_ds)
+                tf_ds[tower.lid,
+                      tower.damage_prob_mc[ds]['id_sim'].values,
+                      tower.damage_prob_mc[ds]['id_time'].values] = True
 
-            self.damage_index_simulation[ds] = pd.DataFrame(
-                np.vstack((id_tower, id_sim, id_time)).T,
-                columns=['id_tower', 'id_sim', 'id_time'])
+            # id_tower, id_sim, id_time = np.where(tf_collapse)
 
-            self.damage_prob_simulation[ds] = pd.DataFrame(
-                np.sum(tf_ds, axis=1).T / float(self.cfg.no_sims),
+            # self.damage_index_simulation[ds] = pd.DataFrame(
+            #     np.vstack((id_tower, id_sim, id_time)).T,
+            #     columns=['id_tower', 'id_sim', 'id_time'])
+
+            self.damage_prob_mc[ds] = pd.DataFrame(
+                tf_ds.sum(axis=1).T / self.no_sims,
                 columns=self.names,
                 index=self.time_index)
 
-            tf_sim[ds] = np.copy(tf_ds)  #
+            tf_sim[ds] = tf_ds.copy()
 
         # save tf_sim[ds]
-        self.est_no_damage_simulation, self.prob_no_damage_simulation = \
-            self.compute_damage_stats(tf_sim)
+        self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
+    # def compute_damage_probability_simulation_non_cascading(self):
+    #
+    #     tf_sim_non_cascading = {}
+    #
+    #     for ds in self.cfg.damage_states:
+    #
+    #         tf_ds = np.zeros((self.no_towers,
+    #                           self.cfg.no_sims,
+    #                           len(self.time_index)), dtype=bool)
+    #
+    #         for i_row, name in enumerate(self.names):
+    #
+    #             id_sim = self.towers[name].damage_isolation_mc[ds]['id_sim'].values
+    #             id_time = self.towers[name].damage_isolation_mc[ds]['id_time'].values
+    #
+    #             tf_ds[i_row, id_sim, id_time] = True
+    #
+    #         self.damage_prob_simulation_non_cascading[ds] = pd.DataFrame(
+    #             np.sum(tf_ds, axis=1).T / float(self.cfg.no_sims),
+    #             columns=self.names,
+    #             index=self.time_index)
+    #
+    #         tf_sim_non_cascading[ds] = np.copy(tf_ds)
+    #
+    #     self.est_no_damage_simulation_non_cascading, \
+    #         self.prob_no_damage_simulation_non_cascading = \
+    #         self.compute_damage_stats(tf_sim_non_cascading)
 
-    def compute_damage_probability_simulation_non_cascading(self):
-
-        tf_sim_non_cascading = {}
-
-        for ds in self.cfg.damage_states:
-
-            tf_ds = np.zeros((self.no_towers,
-                              self.cfg.no_sims,
-                              len(self.time_index)), dtype=bool)
-
-            for i_row, name in enumerate(self.names):
-
-                id_sim = self.towers[name].damage_isolation_mc[ds]['id_sim'].values
-                id_time = self.towers[name].damage_isolation_mc[ds]['id_time'].values
-
-                tf_ds[i_row, id_sim, id_time] = True
-
-            self.damage_prob_simulation_non_cascading[ds] = pd.DataFrame(
-                np.sum(tf_ds, axis=1).T / float(self.cfg.no_sims),
-                columns=self.names,
-                index=self.time_index)
-
-            tf_sim_non_cascading[ds] = np.copy(tf_ds)
-
-        self.est_no_damage_simulation_non_cascading, \
-            self.prob_no_damage_simulation_non_cascading = \
-            self.compute_damage_stats(tf_sim_non_cascading)
-    """
-    '''
-    def compute_damage_stats(self, tf_sim):
+    def compute_stats(self, tf_sim):
         """
         compute mean and std of no. of ds
         tf_collapse_sim.shape = (no_towers, no_sim, no_time)
@@ -273,46 +254,44 @@ class TransmissionLine(object):
         :return:
         """
 
-        est_damage_tower = {}
-        prob_damage_tower = {}
+        est_no_tower = {}
+        prob_no_tower = {}
 
-        no_time = len(self.time_index)
-        no_towers = self.no_towers
-        no_sims = self.cfg.no_sims
+        # (no_towers, 1)
+        x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
+        x2_tower = x_tower ** 2.0
 
-        for ds in tf_sim:
+        for ds, tf_ds in tf_sim.items():
 
-            assert tf_sim[ds].shape == (no_towers, no_sims, no_time)
+            # assert tf_sim[ds].shape == (self.no_towers, self.no_sims, self.no_time)
 
             # mean and standard deviation
-            x_ = np.array(range(no_towers + 1))[:, np.newaxis]  # (no_towers, 1)
-            x2_ = x_ ** 2.0
-
             # no_ds_across_towers.shape == (no_sims, no_time)
-            no_ds_across_towers = np.sum(tf_sim[ds], axis=0)
-            no_freq = np.zeros(shape=(no_time, no_towers + 1))
+            no_ds_across_towers = tf_ds.sum(axis=0)
+            freq = np.zeros(shape=(self.no_time, self.no_towers + 1))
 
-            for i in range(no_time):
+            for i in range(self.no_time):
                 val = itemfreq(no_ds_across_towers[:, i])  # (value, freq)
-                no_freq[i, [int(x) for x in val[:, 0]]] = val[:, 1]
+                freq[i, [int(x) for x in val[:, 0]]] = val[:, 1]
 
-            prob = no_freq / float(no_sims)  # (no_time, no_towers)
+            prob = freq / self.no_sims  # (no_time, no_towers)
 
-            exp_no_tower = np.dot(prob, x_)
-            std_no_tower = np.sqrt(np.dot(prob, x2_) - exp_no_tower ** 2)
+            exp_no_tower = np.dot(prob, x_tower)
+            std_no_tower = np.sqrt(np.dot(prob, x2_tower) - exp_no_tower ** 2)
 
-            est_damage_tower[ds] = pd.DataFrame(
+            est_no_tower[ds] = pd.DataFrame(
                 np.hstack((exp_no_tower, std_no_tower)),
                 columns=['mean', 'std'],
                 index=self.time_index)
 
-            prob_damage_tower[ds] = pd.DataFrame(
+            prob_no_tower[ds] = pd.DataFrame(
                 prob,
-                columns=[str(x) for x in range(no_towers + 1)],
+                columns=[str(x) for x in range(self.no_towers + 1)],
                 index=self.time_index)
 
-        return est_damage_tower, prob_damage_tower
+        return est_no_tower, prob_no_tower
 
+'''
     def determine_damage_by_interaction_at_line_level(self, seed=None):
         """
         compute damage probability due to parallel line interaction using MC
@@ -405,58 +384,15 @@ class TransmissionLine(object):
                     print(msg)
 '''
 
-def unit_vector_by_bearing(angle_deg):
-    """
-    return unit vector given bearing
-    :param angle_deg: 0-360
-    :return: unit vector given bearing in degree
-    """
-    angle_rad = np.deg2rad(angle_deg)
-    return np.array([ -1.0 * np.sin(angle_rad), -1.0 * np.cos(angle_rad)])
-
-
-def angle_between_unit_vectors(v1, v2):
-    """
-    compute angle between two unit vectors
-    :param v1: vector 1
-    :param v2: vector 2
-    :return: the angle in degree between vectors 'v1' and 'v2'
-
-            >>> angle_between_unit_vectors((1, 0), (0, 1))
-            90.0
-            >>> angle_between_unit_vectors((1, 0), (1, 0))
-            0.0
-            >>> angle_between_unit_vectors((1, 0), (-1, 0))
-            180.0
-
-    """
-    #     v1_u = unit_vector(v1)
-    #     v2_u = unit_vector(v2)
-    return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
-
-
 def compute_damage_probability_per_line(line, cfg):
     """
     mc simulation over transmission line
     :param line: instance of transmission line
-           cfg:
+           cfg: instance of config
     :return: None but update attributes of
     """
 
-    # logger = logging.getLogger(__name__)
-
-    # event_id = line.event_id
-    # line_name = line.name
-    #
-    # if line.cfg.random_seed:
-    #     try:
-    #         seed = line.cfg.seed[event_id][line_name]
-    #     except KeyError:
-    #         msg = '{}:{} is undefined. Check the config file'.format(
-    #             event_id, line_name)
-    #         raise KeyError(msg)
-    # else:
-    #     seed = None
+    logger = logging.getLogger(__name__)
 
     # compute damage probability analytically
     if cfg.options['run_analytical']:

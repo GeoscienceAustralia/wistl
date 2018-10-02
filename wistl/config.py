@@ -39,7 +39,6 @@ class Config(object):
 
         self.options = {}
 
-        self.seed = None
         self.no_sims = None
         self.strainer = []
         self.selected_lines = []
@@ -63,7 +62,7 @@ class Config(object):
         self.file_design_adjustment_factor_by_topography = None
         self.file_line_interaction_metadata = None
 
-        self.event_id = []  # list of tuples of event_name and scale
+        self.events = []  # list of tuples of event_name and scale
         self.wind_file_head = None
         self.wind_file_tail = None
         self.event_id_format = None
@@ -82,11 +81,12 @@ class Config(object):
         self._fragility = None   # pandas.DataFrame
         self._damage_states = None
         self._no_damage_states = None
+        self._non_collapse = None
 
         self._cond_collapse_prob_metadata = None
-        self._cond_collapse_prob = None
+        self._cond_collapse_prob = None  # dict of pd.DataFrame
 
-        self._towers = None  # pandas.DataFrame
+        self._towers_by_line = None
         self._lines = None
         self._no_towers_by_line = None
 
@@ -262,6 +262,13 @@ class Config(object):
         return self._no_damage_states
 
     @property
+    def non_collapse(self):
+        if self._non_collapse is None:
+            self._non_collapse = self.damage_states[:]
+            self._non_collapse.remove('collapse')
+        return self._non_collapse
+
+    @property
     def cond_collapse_prob(self):
 
         if self._cond_collapse_prob is None:
@@ -366,9 +373,9 @@ class Config(object):
         return self._no_towers_by_line
 
     @property
-    def towers(self):
+    def towers_by_line(self):
 
-        if self._towers is None:
+        if self._towers_by_line is None:
 
             df = read_shape_file(self.file_shape_tower)
 
@@ -394,9 +401,11 @@ class Config(object):
 
             df['ratio_z_to_10'] = df.apply(self.ratio_z_to_10, axis=1)
 
-            self._towers = df
+            self._towers_by_line = {}
+            for name, grp in df.groupby('lineroute'):
+                self._towers_by_line[name] = grp.to_dict('index')
 
-        return self._towers
+        return self._towers_by_line
 
     @property
     def lines(self):
@@ -438,9 +447,6 @@ class Config(object):
                 msg = '{} not set in {}'.format(item, self.file_cfg)
                 self.logger.critical(msg)
 
-        # random seed
-        self.read_random_seed(conf)
-
         # run_parameters
         key = 'run_parameters'
         self.no_sims = conf.getint(key, 'no_simulations')
@@ -448,8 +454,8 @@ class Config(object):
             self.strainer.append(x.strip())
         for x in conf.get(key, 'selected_lines').split(','):
             self.selected_lines.append(x.strip())
-        self.rel_tol = conf.getfloat(key, 'relative_tolerance')
-        self.abs_tol = conf.getfloat(key, 'absolute_tolerance')
+        # self.rel_tol = conf.getfloat(key, 'relative_tolerance')
+        # self.abs_tol = conf.getfloat(key, 'absolute_tolerance')
 
         # directories
         key = 'directories'
@@ -466,12 +472,7 @@ class Config(object):
                                                   conf.get(key, item))))
 
         # wind_scenario
-        for event_name in conf.options('wind_scenario'):
-            for x in conf.get('wind_scenario', event_name).split(','):
-                try:
-                    self.event_id.append((event_name, float(x)))
-                except ValueError:
-                    pass
+        self.read_wind_scenario(conf)
 
         # format
         file_format = conf.get('format', 'wind_scenario', 1)
@@ -492,6 +493,32 @@ class Config(object):
         # line_interaction
         self.read_line_interaction(conf)
 
+    def read_wind_scenario(self, conf):
+
+        seed = []
+        if self.options['use_random_seed']:
+            for event_name in conf.options('random_seed'):
+                for x in conf.get('random_seed', event_name).split(','):
+                    try:
+                        seed.append(int(x))
+                    except ValueError:
+                        seed.append(0)
+
+            for i, event_name in enumerate(conf.options('wind_scenario')):
+                for x in conf.get('wind_scenario', event_name).split(','):
+                    try:
+                        self.events.append((event_name, float(x), seed[i]))
+                    except ValueError:
+                        self.logger.error('Invalid wind_scenario input')
+
+        else:
+            for i, event_name in enumerate(conf.options('wind_scenario')):
+                for x in conf.get('wind_scenario', event_name).split(','):
+                    try:
+                        self.events.append((event_name, float(x), i))
+                    except ValueError:
+                        self.logger.error('Invalid wind_scenario input')
+
     def process_config(self):
 
         # max_adj
@@ -504,47 +531,46 @@ class Config(object):
             line.update(self.sort_by_location(line=line, line_name=line_name))
 
         # actual_span, collapse_capacity
-        self._towers = self.towers.merge(
-            self.towers.apply(self.assign_collapse_capacity, axis=1),
-            left_index=True, right_index=True)
+        for line_name, grp in self.towers_by_line.items():
 
-        # cond_pc, max_no_adj_towers
-        self._towers = self.towers.merge(
-            self.towers.apply(self.assign_cond_collapse_prob, axis=1),
-            left_index=True, right_index=True)
+            for tower_id, tower in grp.items():
 
-        # id_local, id_adj
-        self._towers = self.towers.merge(
-            self.towers.apply(self.assign_id_adj_towers, axis=1),
-            left_index=True, right_index=True)
+                # actual_span, collapse_capacity
+                tower.update(self.assign_collapse_capacity(tower=tower))
 
-        # cond_pc_adj, cond_pc_adj_mc_rel_idx, cond_pc_adj_mc_cum_prob
-        self._towers = self.towers.merge(
-            self.towers.apply(assign_cond_pc_adj, axis=1),
-            left_index=True, right_index=True)
+                # cond_pc, max_no_adj_towers
+                tower.update(self.assign_cond_collapse_prob(tower=tower))
+
+                # lid, id_adj
+                tower.update(self.assign_id_adj_towers(tower=tower))
+
+                # cond_pc_adj, cond_pc_adj_mc_idx, cond_pc_adj_mc_prob
+                tower.update(assign_cond_pc_adj(tower=tower))
 
     def sort_by_location(self, line_name, line):
 
-        selected_towers = self.towers.loc[self.towers.lineroute == line_name]
-
-        id_by_line = selected_towers.index.tolist()
-        name_by_line = selected_towers['name'].tolist()
-
+        id_by_line = []
+        name_by_line = []
         idx_sorted = []
-        for _, tower in selected_towers.iterrows():
-            temp = np.linalg.norm(line['coord'] - tower.coord, axis=1)
+
+        for tower_id, tower in self.towers_by_line[line_name].items():
+
+            id_by_line.append(tower_id)
+            name_by_line.append(tower['name'])
+
+            temp = np.linalg.norm(line['coord'] - tower['coord'], axis=1)
             id_closest = np.argmin(temp)
             ok = abs(temp[id_closest]) < 1.0e-4
             if not ok:
                 msg = 'Can not locate {tower:} in {line:}'.format(
-                    tower=tower.Name, line=line_name)
+                    tower=tower['name'], line=line_name)
                 self.logger.error(msg)
             idx_sorted.append(id_closest)
 
-        # FIXME
-        return {'id2name': selected_towers['name'].to_dict(),
+        return {'id2name': {k: v for k, v in zip(id_by_line, name_by_line)},
                 'ids': [x for _, x in sorted(zip(idx_sorted, id_by_line))],
-                'names': [x for _, x in sorted(zip(idx_sorted, name_by_line))]}
+                'names': [x for _, x in sorted(zip(idx_sorted, name_by_line))],
+                'name2id': {k: v for k, v in zip(name_by_line, id_by_line)}}
 
     def assign_collapse_capacity(self, tower):
         """ calculate adjusted collapse wind speed for a tower
@@ -556,39 +582,18 @@ class Config(object):
         :rtype: float
         """
 
-        selected_line = self.lines[tower.lineroute]
+        selected_line = self.lines[tower['lineroute']]
         idx = selected_line['names'].index(tower['name'])
         actual_span = selected_line['actual_span'][idx]
 
         # calculate utilization factor
         # 1 in case sw/sd > 1
-        u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1 - actual_span / tower.design_span)
+        u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1 - actual_span /
+                                                 tower['design_span'])
         u_factor = min(1.0, u_factor)
 
-        return pd.Series({'actual_span': actual_span,
-                          'collapse_capacity': tower.design_speed / np.sqrt(u_factor)})
-
-    def read_random_seed(self, conf):
-        """
-        read random seed info
-        :param conf:
-        :return:
-        """
-
-        if self.options['use_random_seed']:
-
-            self.seed = {}
-
-            rnd_events = conf.get('random_seed', 'events').split(',')
-            rnd_lines = conf.get('random_seed', 'lines').split(',')
-
-            for rnd_event in rnd_events:
-                (event_key, event_val) = split_str(rnd_event, ':')
-
-                for rnd_line in rnd_lines:
-                    (line_key, line_val) = split_str(rnd_line, ':')
-                    self.seed.setdefault(event_key, {})[line_key] = \
-                        event_val + line_val
+        return {'actual_span': actual_span,
+                'collapse_capacity': tower['design_speed'] / np.sqrt(u_factor)}
 
     def read_line_interaction(self, conf):
 
@@ -608,37 +613,40 @@ class Config(object):
                 msg = 'No line interaction info provided for {}'.format(selected_lines)
                 self.logger.error(msg)
 
-    def assign_cond_collapse_prob(self, row):
+    def assign_cond_collapse_prob(self, tower):
         """ get dict of conditional collapse probabilities
         :return: cond_pc, max_no_adj_towers
         """
-        kind = row[self.cond_collapse_prob_metadata['by']]
+        kind = tower[self.cond_collapse_prob_metadata['by']]
         df_prob = self.cond_collapse_prob[kind]
         att = self.cond_collapse_prob_metadata[kind]['by']
         att_type = self.cond_collapse_prob_metadata[kind]['type']
 
         tf = None
         if att_type == 'string':
-            tf = df_prob[att] == row[att]
+            tf = df_prob[att] == tower[att]
         elif att_type == 'numeric':
-            tf = (df_prob[att + '_lower'] <= row[att]) & (df_prob[att + '_upper'] > row[att])
+            tf = (df_prob[att + '_lower'] <= tower[att]) & (
+                df_prob[att + '_upper'] > tower[att])
+        else:
+            self.logger.critical('Invalid type {} for cond_collapse_prob'.format(att_type))
 
         if tf.values.sum() == 0:
-            msg = 'can not assign cond_pc for tower {}'.format(row.Name)
+            msg = 'can not assign cond_pc for tower {}'.format(tower['name'])
             self.logger.critical(msg)
 
-        return pd.Series({'cond_pc': dict(zip(df_prob.loc[tf, 'list'],
-                                              df_prob.loc[tf, 'probability'])),
-                          'max_no_adj_towers': self.cond_collapse_prob_metadata[kind]['max_adj']})
+        return {'cond_pc': dict(zip(df_prob.loc[tf, 'list'],
+                                    df_prob.loc[tf, 'probability'])),
+                'max_no_adj_towers': self.cond_collapse_prob_metadata[kind]['max_adj']}
 
-    def ratio_z_to_10(self, row):
+    def ratio_z_to_10(self, tower):
         """
         compute Mz,cat(h=z) / Mz,cat(h=10)/
-        row: pandas series of tower
+        tower: pandas series of tower
         """
-        tc_str = 'tc' + str(row.terrain_cat)  # Terrain
+        tc_str = 'tc' + str(tower['terrain_cat'])  # Terrain
         try:
-            mzcat_z = np.interp(row.height_z,
+            mzcat_z = np.interp(tower['height_z'],
                                 self.terrain_multiplier['height'],
                                 self.terrain_multiplier[tc_str])
         except KeyError:
@@ -652,7 +660,7 @@ class Config(object):
     def assign_design_values(self, row):
         """
         create pandas series of design level related values
-        row: pandas series of line
+        row: pandas series of tower
         :return: pandas series of design_span, design_level, design_speed, and
                  terrain cat
         """
@@ -676,10 +684,10 @@ class Config(object):
                               'design_speed': design_speed,
                               'terrain_cat': design_value['terrain_cat']})
 
-    def assign_fragility_parameters(self, row):
+    def assign_fragility_parameters(self, tower):
         """
         assign fragility parameters by Type, Function, Dev Angle
-        :param row: pandas series of tower
+        :param tower: pandas series of tower
         :return: pandas series of frag_func, frag_scale, frag_arg
         """
 
@@ -687,10 +695,10 @@ class Config(object):
         for att, att_type in zip(self.fragility_metadata['by'],
                                  self.fragility_metadata['type']):
             if att_type == 'string':
-                tf_array *= self.fragility[att] == row[att]
+                tf_array *= self.fragility[att] == tower[att]
             elif att_type == 'numeric':
-                tf_array *= (self.fragility[att + '_lower'] <= row[att]) & \
-                            (self.fragility[att + '_upper'] > row[att])
+                tf_array *= (self.fragility[att + '_lower'] <= tower[att]) & \
+                            (self.fragility[att + '_upper'] > tower[att])
 
         params = pd.Series({'frag_scale': {}, 'frag_arg': {},
                             'frag_func': None})
@@ -699,7 +707,7 @@ class Config(object):
                 idx = self.fragility[
                     tf_array & (self.fragility['limit_states'] == ds)].index[0]
             except IndexError:
-                msg = 'No matching fragility params for {}'.format(row.Name)
+                msg = 'No matching fragility params for {}'.format(tower['name'])
                 self.logger.error(msg)
             else:
                 fn_form = self.fragility.loc[idx, self.fragility_metadata['function']]
@@ -711,33 +719,34 @@ class Config(object):
 
         return params
 
-    def assign_id_adj_towers(self, row):
+    def assign_id_adj_towers(self, tower):
         """
         assign id of adjacent towers which can be affected by collapse
-        :param row: pandas series of tower
+        :param tower: pandas series of tower
         :return: idl: local id, idg: global id, id_adj: adjacent ids
         """
 
-        names = self.lines[row.lineroute]['names']
-        tower_id = names.index(row['name'])  # tower id in the line
-        max_no_towers = self.no_towers_by_line[row['lineroute']]
+        names = self.lines[tower['lineroute']]['names']
+        lid = names.index(tower['name'])  # tower id in the line
+        max_no_towers = self.no_towers_by_line[tower['lineroute']]
 
-        list_left = create_list_idx(tower_id, row.max_no_adj_towers,
+        list_left = create_list_idx(lid, tower['max_no_adj_towers'],
                                     max_no_towers, -1)
-        list_right = create_list_idx(tower_id, row.max_no_adj_towers,
+        list_right = create_list_idx(lid, tower['max_no_adj_towers'],
                                      max_no_towers, 1)
-        id_adj = list_left[::-1] + [tower_id] + list_right
+        id_adj = list_left[::-1] + [lid] + list_right
 
         # assign -1 to strainer tower
-        for i, tid in enumerate(id_adj):
-            if tid >= 0:
-                flag_strainer = self.towers.loc[
-                    self.towers.name == names[tid], 'function'].isin(
-                    self.strainer).iloc[0]
+        for i, idx in enumerate(id_adj):
+            if idx >= 0:
+                global_id = self.lines[tower['lineroute']]['name2id'][names[idx]]
+                _tower = self.towers_by_line[tower['lineroute']][global_id]
+                flag_strainer = _tower['function'] in self.strainer
+
                 if flag_strainer:
                     id_adj[i] = -1
 
-        return pd.Series({'id_adj': id_adj, 'id_line': tower_id})
+        return {'id_adj': id_adj, 'lid': lid}
 
 
 def assign_cond_pc_adj(tower):
@@ -750,50 +759,47 @@ def assign_cond_pc_adj(tower):
     """
 
     # list of relative index of -1 (center is zero)
-    idx_m1 = np.array([i for i in range(len(tower.id_adj))
-                       if tower.id_adj[i] == -1]) - tower.max_no_adj_towers
+    idx_m1 = np.array([i for i in range(len(tower['id_adj']))
+                       if tower['id_adj'][i] == -1]) - tower['max_no_adj_towers']
 
     # range of index to be ignored
     try:
         max_neg = np.max(idx_m1[idx_m1 < 0]) + 1
     except ValueError:
-        max_neg = -1 * tower.max_no_adj_towers
+        max_neg = -1 * tower['max_no_adj_towers']
 
     try:
         min_pos = np.min(idx_m1[idx_m1 > 0])
     except ValueError:
-        min_pos = tower.max_no_adj_towers + 1
+        min_pos = tower['max_no_adj_towers'] + 1
 
     bound = set(range(max_neg, min_pos))
 
     # option 1: include all patterns
     cond_prob = defaultdict(float)
-    for item in tower.cond_pc.keys():
-        w = tuple(sorted(set(item).intersection(bound)))
-        cond_prob[w] += tower.cond_pc[item]
+    for key, value in tower['cond_pc'].items():
+        rel_idx = sorted(set(key).intersection(bound))
+        abs_idx = tuple(tower['id_adj'][j + tower['max_no_adj_towers']]
+                        for j in rel_idx if j != 0)
+        cond_prob[abs_idx] += value
 
-    if (0,) in cond_prob:
-        cond_prob.pop((0,))
+    if () in cond_prob:
+        cond_prob.pop(())
 
     # sort by cond. prob
-    rel_idx = sorted(cond_prob, key=cond_prob.get)
-    prob = map(lambda v: cond_prob[v], rel_idx)
-
-    # cumulative prob. for each of collapse pattern
+    abs_idx = sorted(cond_prob, key=cond_prob.get)
+    prob = map(lambda v: cond_prob[v], abs_idx)
     cum_prob = np.cumsum(np.array(prob))
 
     # sum of cond. prob by each tower
     cond_pc_adj = defaultdict(float)
-    for key in cond_prob:
-        for item in key:
-            cond_pc_adj[item] += cond_prob[key]
+    for key, value in zip(abs_idx, prob):
+        for idx in key:
+            cond_pc_adj[idx] += value
 
-    if 0 in cond_pc_adj:
-        cond_pc_adj.pop(0)
-
-    return pd.Series({'cond_pc_adj': cond_pc_adj,
-                      'cond_pc_adj_mc_rel_idx': rel_idx,
-                      'cond_pc_adj_mc_cum_prob': cum_prob})
+    return {'cond_pc_adj': cond_pc_adj,
+            'cond_pc_adj_mc_idx': abs_idx,
+            'cond_pc_adj_mc_prob': cum_prob}
 
 
 def create_list_idx(idx, no_towers, max_no_towers, flag_direction):
@@ -1004,3 +1010,32 @@ def unit_vector(vector):
 
     """
     return vector / np.linalg.norm(vector)
+
+def unit_vector_by_bearing(angle_deg):
+    """
+    return unit vector given bearing
+    :param angle_deg: 0-360
+    :return: unit vector given bearing in degree
+    """
+    angle_rad = np.deg2rad(angle_deg)
+    return np.array([-1.0 * np.sin(angle_rad), -1.0 * np.cos(angle_rad)])
+
+
+def angle_between_unit_vectors(v1, v2):
+    """
+    compute angle between two unit vectors
+    :param v1: vector 1
+    :param v2: vector 2
+    :return: the angle in degree between vectors 'v1' and 'v2'
+
+            >>> angle_between_unit_vectors((1, 0), (0, 1))
+            90.0
+            >>> angle_between_unit_vectors((1, 0), (1, 0))
+            0.0
+            >>> angle_between_unit_vectors((1, 0), (-1, 0))
+            180.0
+
+    """
+    #     v1_u = unit_vector(v1)
+    #     v2_u = unit_vector(v2)
+    return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))

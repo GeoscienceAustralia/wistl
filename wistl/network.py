@@ -8,41 +8,42 @@ import logging
 import pandas as pd
 import numpy as np
 
-from wistl.transmission_line import TransmissionLine
+from wistl.line import Line
 
 
-def create_transmission_network_under_wind_event(event_id, cfg):
+def create_transmission_network_under_wind_event(event, cfg):
     """ create dict of transmission network
     :param event_id: tuple of event_name and scale
     :param cfg: instance of config class
     :return: an instance of TransmissionNetwork
     """
-    event_name, scale = event_id
-    network = TransmissionNetwork(cfg=cfg, event_name=event_name, scale=scale)
+    network = Network(cfg=cfg, event=event)
 
     return network
 
 
-class TransmissionNetwork(object):
+class Network(object):
     """ class for a collection of transmission lines"""
 
-    def __init__(self, cfg=None, event_name=None, scale=None, logger=None):
+    def __init__(self, cfg=None, event=None, logger=None):
 
         self.cfg = cfg
-        self.event_name = event_name
-        self.scale = scale
+        self.event_name = event[0]
+        self.scale = event[1]
+        self.rnd_state = np.random.RandomState(seed=event[2])
         self.logger = logger or logging.getLogger(__name__)
 
         # attributes
-        self._event_id = None
         self._path_event = None
         self._path_output = None
         self._lines = None
+        self._no_lines = None
 
         # self.set_line_interaction()
 
-            # if cfg.figure:
-            #     self.plot_line_interaction()
+    def __repr__(self):
+        return 'Network(event_name={}, scale={:.2f}, no_lines={})'.format(
+            self.event_name, self.scale, self.no_lines)
 
     @property
     def lines(self):
@@ -50,21 +51,28 @@ class TransmissionNetwork(object):
 
             self._lines = {}
 
-            for line_name, towers in self.cfg.towers.groupby('LineRoute'):
+            for name in self.cfg.lines:
 
-                dic_line = self.cfg.lines[line_name].copy()
+                dic = self.cfg.lines[name].copy()
 
-                dic_line.update({'no_sims': self.cfg.no_sims,
-                                 'damage_states': self.cfg.damage_states,
-                                 'event_id': self.event_id,
-                                 'path_event': self.path_event})
+                dic.update({'no_sims': self.cfg.no_sims,
+                            'damage_states': self.cfg.damage_states,
+                            'non_collapse': self.cfg.non_collapse,
+                            'event_name': self.event_name,
+                            'scale': self.scale,
+                            'rnd_state': self.rnd_state,
+                            'path_event': self.path_event,
+                            'dic_towers': self.cfg.towers_by_line[name]})
 
-                line = TransmissionLine(name=line_name, **dic_line)
-                line.towers = towers.to_dict('index')
-
-                self._lines[line_name] = line
+                self._lines[name] = Line(name=name, **dic)
 
         return self._lines
+
+    @property
+    def no_lines(self):
+        if self._no_lines is None:
+            self._no_lines = len(self.lines)
+        return self._no_lines
 
     @property
     def path_event(self):
@@ -74,67 +82,18 @@ class TransmissionNetwork(object):
         return self._path_event
 
     @property
-    def event_id(self):
-        if self._event_id is None:
-            self._event_id = self.cfg.event_id_format.format(
-                event_name=self.event_name, scale=self.scale)
-        return self._event_id
-
-    @property
     def path_output(self):
         if self._path_output is None:
-            self._path_output = os.path.join(self.cfg.path_output, self.event_id)
+
+            event_scale = self.cfg.event_id_format.format(
+                event_name=self.event_name, scale=self.scale)
+            self._path_output = os.path.join(self.cfg.path_output, event_scale)
 
             if not os.path.exists(self._path_output) and self.cfg.options['save_output']:
                 os.makedirs(self._path_output)
                 self.logger.info('{} is created'.format(self._path_output))
 
         return self._path_output
-
-    # def plot_line_interaction(self):
-    #
-    #     for line_name, line in self.lines.items():
-    #
-    #         plt.figure()
-    #         plt.plot(line.coord[:, 0],
-    #                  line.coord[:, 1], '-', label=line_name)
-    #
-    #         for target_line in self.cfg.line_interaction[line_name]:
-    #
-    #             plt.plot(self.lines[target_line].coord[:, 0],
-    #                      self.lines[target_line].coord[:, 1],
-    #                      '--', label=target_line)
-    #
-    #             for tower in line.towers.itervalues():
-    #                 try:
-    #                     id_pt = tower.id_on_target_line[target_line]['id']
-    #                 except KeyError:
-    #                     plt.plot(tower.coord[0], tower.coord[1], 'ko')
-    #                 else:
-    #                     target_tower_name = self.lines[
-    #                         target_line].name_by_line[id_pt]
-    #                     target_tower = self.lines[target_line].towers[
-    #                         target_tower_name]
-    #
-    #                     plt.plot([tower.coord[0], target_tower.coord[0]],
-    #                              [tower.coord[1], target_tower.coord[1]],
-    #                              'ro-',
-    #                              label='{}->{}'.format(tower.name,
-    #                                                    target_tower_name))
-    #
-    #         plt.title(line_name)
-    #         plt.legend(loc=0)
-    #         plt.xlabel('Longitude')
-    #         plt.ylabel('Latitude')
-    #         png_file = os.path.join(self.cfg.path_output,
-    #                                 'line_interaction_{}.png'.format(line_name))
-    #
-    #         if not os.path.exists(self.cfg.path_output):
-    #             os.makedirs(self.cfg.path_output)
-    #
-    #         plt.savefig(png_file)
-    #         print('{} is created'.format(png_file))
-    #         plt.close()
 
 
 def compute_damage_probability_line_interaction_per_network(network, cfg):
