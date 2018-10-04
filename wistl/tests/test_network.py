@@ -1,7 +1,7 @@
 __author__ = 'sudipta'
 import os
 import unittest
-from wistl.transmission_network import create_damaged_network
+from wistl.network import create_network_for_event
 from wistl.config import Config
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -14,7 +14,7 @@ class TransmissionNetworkTest(unittest.TestCase):
         conf_path = os.path.join(BASE_DIR, 'test.cfg')
         assert os.path.exists(conf_path), 'config file path wrong'
         cls.cfg = Config(conf_path)
-        cls.damaged_networks = create_damaged_network(cls.cfg)
+        cls.networks = create_network_for_event(cfg=cls.cfg, event=)
 
     def test_time_index(self):
         keys = self.damaged_networks.keys()  # get the keys

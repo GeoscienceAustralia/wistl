@@ -1,19 +1,14 @@
 from __future__ import print_function, division
 
-#import os
-#import copy
-import warnings
-#import itertools
+import os
 import pandas as pd
 import numpy as np
+import h5py
 import logging
-
 from scipy.stats import itemfreq
 
 from wistl.tower import Tower
-
-# ignore NaturalNameWarning
-warnings.filterwarnings("ignore", lineno=100, module='tables')
+from wistl.constants import ATOL, RTOL
 
 
 class Line(object):
@@ -32,6 +27,7 @@ class Line(object):
                   'non_collapse',
                   'event_name',
                   'scale',
+                  'event_id',
                   'rnd_state',
                   'path_event']
 
@@ -44,6 +40,7 @@ class Line(object):
         self.coord_lat_lon = None
         self.id2name = None
         self.ids = None
+        self.event_id = None
         self.line_string = None
         self.name_output = None
         self.names = None
@@ -94,6 +91,17 @@ class Line(object):
     def __repr__(self):
         return 'Line(name={}, no_towers={}, event_name={}, scale={:.2f})'.format(
             self.name, self.no_towers, self.event_name, self.scale)
+
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        if 'logger' in d:
+            d['logger'] = d['logger'].name
+        return d
+
+    def __setstate__(self, d):
+        if 'logger' in d:
+            d['logger'] = logging.getLogger(d['logger'])
+        self.__dict__.update(d)
 
     def _set_towers(self, dic):
 
@@ -218,6 +226,48 @@ class Line(object):
         # save tf_sim[ds]
         self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
+    # Moved from damage_line.py
+    def write_hdf5(self, output_file):
+
+        items = ['damage_prob', 'est_no_damage', 'prob_no_damage',
+                 'damage_prob_mc']
+
+        columns_by_item = {'damage_prob': self.names,
+                           'damage_prob_mc': self.names,
+                           'est_no_damage': ['mean', 'std'],
+                           'prob_no_damage': range(self.no_towers + 1)}
+
+        with h5py.File(output_file, 'w') as hf:
+
+            for item in items:
+
+                group = hf.create_group(item)
+
+                for ds in self.damage_states:
+
+                    value = getattr(self, item)[ds]
+                    data = group.create_dataset(ds, data=value)
+
+                    # metadata
+                    data.attrs['nrow'], data.attrs['ncol'] = value.shape
+                    data.attrs['time_start'] = str(self.time_index[0])
+                    data.attrs['time_freq'] = str(self.time_index[1]-self.time_index[0])
+                    data.attrs['time_period'] = self.time_index.shape[0]
+
+                    if columns_by_item[item]:
+                        data.attrs['columns'] = columns_by_item[item]
+
+        #
+        #
+        # h5file = os.path.join(self.path_output,
+        #                       self.event_id,
+        #                       '{}_{}.h5'.format(file_str, self.name_output))
+        # hdf = pd.HDFStore(h5file)
+        #
+        # for ds in self.conf.damage_states:
+        #     hdf.put(ds, val[ds], format='table', data_columns=True)
+        # hdf.close()
+
     # def compute_damage_probability_simulation_non_cascading(self):
     #
     #     tf_sim_non_cascading = {}
@@ -290,6 +340,56 @@ class Line(object):
                 index=self.time_index)
 
         return est_no_tower, prob_no_tower
+
+
+def compute_damage_per_line(line, cfg):
+    """
+    mc simulation over transmission line
+    :param line: instance of transmission line
+           cfg: instance of config
+    :return: None but update attributes of
+    """
+
+    logger = logging.getLogger(__name__)
+
+    logger.info('computing damage of {} for {}'.format(line.name,
+                                                       line.event_id))
+
+    # compute damage probability analytically
+    line.compute_damage_prob()
+
+    # perfect correlation within a single line
+    line.compute_damage_prob_mc()
+
+    # compare simulation against analytical
+    msg = '{}: {:d} difference out of {:d}'
+    for ds in cfg.damage_states:
+
+        idx = np.where(~np.isclose(line.damage_prob_mc[ds],
+                                   line.damage_prob[ds],
+                                   atol=ATOL,
+                                   rtol=RTOL))
+        logger.debug(
+            msg.format(ds, len(idx[0]), line.no_towers*line.no_time))
+
+    # save
+    if cfg.options['save_output']:
+        output_file = os.path.join(cfg.path_output,
+                                   '{}_{}.h5'.format(line.event_id, line.name))
+        line.write_hdf5(output_file=output_file)
+        logger.info('{} is saved'.format(output_file))
+
+    # if not line.cfg.skip_non_cascading_collapse:
+    #     line.compute_damage_probability_simulation_non_cascading()
+    #
+    # try:
+    #     line.cfg.line_interaction[line_name]
+    # except (TypeError, KeyError):
+    #     pass
+    # else:
+    #     line.determine_damage_by_interaction_at_line_level(seed)
+
+    return line
 
 '''
     def determine_damage_by_interaction_at_line_level(self, seed=None):
@@ -384,34 +484,6 @@ class Line(object):
                     print(msg)
 '''
 
-def compute_damage_probability_per_line(line, cfg):
-    """
-    mc simulation over transmission line
-    :param line: instance of transmission line
-           cfg: instance of config
-    :return: None but update attributes of
-    """
-
-    logger = logging.getLogger(__name__)
-
-    # compute damage probability analytically
-    if cfg.options['run_analytical']:
-        line.compute_damage_prob_analytical()
-
-    # # perfect correlation within a single line
-    # line.compute_damage_probability_simulation(seed)
-    #
-    # if not line.cfg.skip_non_cascading_collapse:
-    #     line.compute_damage_probability_simulation_non_cascading()
-    #
-    # try:
-    #     line.cfg.line_interaction[line_name]
-    # except (TypeError, KeyError):
-    #     pass
-    # else:
-    #     line.determine_damage_by_interaction_at_line_level(seed)
-
-    return line
 
 
 

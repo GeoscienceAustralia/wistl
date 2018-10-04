@@ -2,16 +2,13 @@ from __future__ import print_function, division
 
 import os
 import logging
-# import matplotlib
-# matplotlib.use('Agg')
-# import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
 from wistl.line import Line
 
 
-def create_transmission_network_under_wind_event(event, cfg):
+def create_network_for_event(event, cfg):
     """ create dict of transmission network
     :param event_id: tuple of event_name and scale
     :param cfg: instance of config class
@@ -19,7 +16,7 @@ def create_transmission_network_under_wind_event(event, cfg):
     """
     network = Network(cfg=cfg, event=event)
 
-    return network
+    return [x for _, x in network.lines.items()]
 
 
 class Network(object):
@@ -45,6 +42,17 @@ class Network(object):
         return 'Network(event_name={}, scale={:.2f}, no_lines={})'.format(
             self.event_name, self.scale, self.no_lines)
 
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        if 'logger' in d:
+            d['logger'] = d['logger'].name
+        return d
+
+    def __setstate__(self, d):
+        if 'logger' in d:
+            d['logger'] = logging.getLogger(d['logger'])
+        self.__dict__.update(d)
+
     @property
     def lines(self):
         if self._lines is None:
@@ -60,6 +68,8 @@ class Network(object):
                             'non_collapse': self.cfg.non_collapse,
                             'event_name': self.event_name,
                             'scale': self.scale,
+                            'event_id': self.cfg.event_id_format.format(
+                                event_name=self.event_name, scale=self.scale),
                             'rnd_state': self.rnd_state,
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
@@ -84,7 +94,6 @@ class Network(object):
     @property
     def path_output(self):
         if self._path_output is None:
-
             event_scale = self.cfg.event_id_format.format(
                 event_name=self.event_name, scale=self.scale)
             self._path_output = os.path.join(self.cfg.path_output, event_scale)
@@ -179,15 +188,5 @@ def compute_damage_probability_line_interaction_per_network(network, cfg):
         (line.est_no_damage_line_interaction,
             line.prob_no_damage_line_interaction) = \
             line.compute_damage_stats(tf_sim)
-
-        if cfg.options['save_output']:
-            line.write_hdf5(file_str='damage_prob_line_interaction',
-                            value=line.damage_prob_line_interaction)
-
-            line.write_hdf5(file_str='est_no_damage_line_interaction',
-                            value=line.est_no_damage_line_interaction)
-
-            line.write_hdf5(file_str='prob_no_damage_line_interaction',
-                            value=line.prob_no_damage_line_interaction)
 
     return network

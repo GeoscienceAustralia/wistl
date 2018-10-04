@@ -98,6 +98,17 @@ class Config(object):
             self.read_config()
             self.process_config()
 
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        if 'logger' in d:
+            d['logger'] = d['logger'].name
+        return d
+
+    def __setstate__(self, d):
+        if 'logger' in d:
+            d['logger'] = logging.getLogger(d['logger'])
+        self.__dict__.update(d)
+
     @property
     def drag_height_by_type(self):
         """read typical drag height by tower type
@@ -246,6 +257,7 @@ class Config(object):
                 self._fragility = pd.read_csv(_file, skipinitialspace=True)
             except IOError:
                 self.logger.critical('{} not found'.format(_file))
+                pass
 
         return self._fragility
 
@@ -457,12 +469,18 @@ class Config(object):
         # self.rel_tol = conf.getfloat(key, 'relative_tolerance')
         # self.abs_tol = conf.getfloat(key, 'absolute_tolerance')
 
-        # directories
+        # directories: gis_data, wind_scenario_base, input, output
         key = 'directories'
         for item in self.directory_keys:
             setattr(self, 'path_{}'.format(item),
                     os.path.realpath(os.path.join(self.path_cfg_file,
                                                   conf.get(key, item))))
+            if not os.path.exists(getattr(self, 'path_{}'.format(item))):
+                self.logger.error('Invalid path for {}'.format(item))
+
+        if not os.path.exists(self.path_output):
+            os.makedirs(self.path_output)
+            self.logger.info('{} is created'.format(self.path_output))
 
         # gis_data
         key = 'gis_data'
@@ -488,7 +506,8 @@ class Config(object):
                         os.path.realpath(os.path.join(self.path_input,
                                                       conf.get(key, item))))
             except ConfigParser.NoOptionError:
-                self.logger.warning('{} is not set'.format(item))
+                msg = '{} is not set'.format(item)
+                self.logger.warning(msg)
 
         # line_interaction
         self.read_line_interaction(conf)
@@ -509,7 +528,8 @@ class Config(object):
                     try:
                         self.events.append((event_name, float(x), seed[i]))
                     except ValueError:
-                        self.logger.error('Invalid wind_scenario input')
+                        msg = 'Invalid wind_scenario input'
+                        self.logger.error(msg)
 
         else:
             for i, event_name in enumerate(conf.options('wind_scenario')):
@@ -517,7 +537,8 @@ class Config(object):
                     try:
                         self.events.append((event_name, float(x), i))
                     except ValueError:
-                        self.logger.error('Invalid wind_scenario input')
+                        msg = 'Invalid wind_scenario input'
+                        self.logger.error(msg)
 
     def process_config(self):
 
@@ -606,7 +627,8 @@ class Config(object):
                 try:
                     selected_lines.remove(line)
                 except ValueError:
-                    self.logger.error('{} is excluded in the simulation'.format(line))
+                    msg = '{} is excluded in the simulation'.format(line)
+                    self.logger.error(msg)
 
             # check completeness
             if selected_lines:
@@ -629,7 +651,8 @@ class Config(object):
             tf = (df_prob[att + '_lower'] <= tower[att]) & (
                 df_prob[att + '_upper'] > tower[att])
         else:
-            self.logger.critical('Invalid type {} for cond_collapse_prob'.format(att_type))
+            msg = 'Invalid type {} for cond_collapse_prob'.format(att_type)
+            self.logger.critical(msg)
 
         if tf.values.sum() == 0:
             msg = 'can not assign cond_pc for tower {}'.format(tower['name'])

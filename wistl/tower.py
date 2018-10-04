@@ -7,8 +7,6 @@ import os
 import logging
 import scipy.stats as stats
 
-from wistl.constants import ATOL, RTOL
-
 
 class Tower(object):
     """
@@ -171,6 +169,18 @@ class Tower(object):
     def __repr__(self):
         return 'Tower(name={}, function={}, lid={}, nid={})'.format(
             self.name, self.function, self.lid, self.nid)
+
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        if 'logger' in d:
+            d['logger'] = d['logger'].name
+        return d
+
+    def __setstate__(self, d):
+        if 'logger' in d:
+            d['logger'] = logging.getLogger(d['logger'])
+        self.__dict__.update(d)
+
 
     @property
     def no_time(self):
