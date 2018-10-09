@@ -114,8 +114,8 @@ class TestLine(unittest.TestCase):
 
         self.line.compute_damage_prob_mc()
 
-        tower = self.line.towers[10]
-        self.assertEqual(tower.name, 'T33')
+        # tower = self.line.towers[10]
+        # self.assertEqual(tower.name, 'T33')
 
         # T33 (in the middle)
         # o----o----x----o----o
@@ -176,7 +176,11 @@ class TestLine(unittest.TestCase):
         tf_ds[:line.no_towers, 0:5, 0] = 1
         tf_ds[:line.no_towers, 0, 1] = 1
 
-        tf_sim = {'minor': tf_ds, 'collapse': tf_ds}
+        tf_ds_minor = np.zeros_like(tf_ds)
+        tf_ds_minor[:line.no_towers, 0:8, 0] = 1
+        tf_ds_minor[:line.no_towers, 0:5, 1] = 1
+
+        tf_sim = {'minor': tf_ds_minor, 'collapse': tf_ds}
 
         est_no_tower, prob_no_tower = line.compute_stats(tf_sim)
 
@@ -189,6 +193,16 @@ class TestLine(unittest.TestCase):
         self.assertAlmostEqual(est_no_tower['collapse']['mean'][1], 2.2)
         # np.sqrt(22*22*0.1-2.2**2)
         self.assertAlmostEqual(est_no_tower['collapse']['std'][1], 6.6)
+
+        # 22 * 0.3 + 0 * 0.7
+        self.assertAlmostEqual(est_no_tower['minor']['mean'][0], 6.6)
+        # np.sqrt(22*22*0.3-6.6**2)
+        self.assertAlmostEqual(est_no_tower['minor']['std'][0], 10.082, places=3)
+
+        # 22 * 0.4
+        self.assertAlmostEqual(est_no_tower['minor']['mean'][1], 8.8)
+        # np.sqrt(22*22*0.4-8.8**2)
+        self.assertAlmostEqual(est_no_tower['minor']['std'][1], 10.778, places=2)
 
     # def test_sort_by_location(self):
     #

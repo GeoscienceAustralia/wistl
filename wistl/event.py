@@ -8,29 +8,30 @@ import numpy as np
 from wistl.line import Line
 
 
-def create_network_for_event(event, cfg):
+def create_event(event, cfg):
     """ create dict of transmission network
-    :param event_id: tuple of event_name and scale
+    :param event: tuple of event_name, scale, and seed
     :param cfg: instance of config class
-    :return: an instance of TransmissionNetwork
+    :return: list of instance of Line class
     """
-    network = Network(cfg=cfg, event=event)
+    event = Event(cfg=cfg, event=event)
 
-    return [x for _, x in network.lines.items()]
+    return [x for _, x in event.lines.items()]
 
 
-class Network(object):
-    """ class for a collection of transmission lines"""
+class Event(object):
+    """ class for an event"""
 
     def __init__(self, cfg=None, event=None, logger=None):
 
         self.cfg = cfg
-        self.event_name = event[0]
+        self.name = event[0]
         self.scale = event[1]
-        self.rnd_state = np.random.RandomState(seed=event[2])
+        self.seed = event[2]
         self.logger = logger or logging.getLogger(__name__)
 
         # attributes
+        self._id = None
         self._path_event = None
         self._path_output = None
         self._lines = None
@@ -39,8 +40,8 @@ class Network(object):
         # self.set_line_interaction()
 
     def __repr__(self):
-        return 'Network(event_name={}, scale={:.2f}, no_lines={})'.format(
-            self.event_name, self.scale, self.no_lines)
+        return 'Event(name={}, scale={:.2f}, no_lines={})'.format(
+            self.name, self.scale, self.no_lines)
 
     def __getstate__(self):
         d = self.__dict__.copy()
@@ -54,23 +55,29 @@ class Network(object):
         self.__dict__.update(d)
 
     @property
+    def id(self):
+        if self._id is None:
+            self._id = self.cfg.event_id_format.format(
+                event_name=self.name, scale=self.scale)
+        return self._id
+
+    @property
     def lines(self):
         if self._lines is None:
 
             self._lines = {}
 
-            for name in self.cfg.lines:
+            for i, name in enumerate(self.cfg.lines):
 
                 dic = self.cfg.lines[name].copy()
 
                 dic.update({'no_sims': self.cfg.no_sims,
                             'damage_states': self.cfg.damage_states,
                             'non_collapse': self.cfg.non_collapse,
-                            'event_name': self.event_name,
+                            'event_name': self.name,
                             'scale': self.scale,
-                            'event_id': self.cfg.event_id_format.format(
-                                event_name=self.event_name, scale=self.scale),
-                            'rnd_state': self.rnd_state,
+                            'event_id': self.id,
+                            'rnd_state': np.random.RandomState(seed=self.seed + i),
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
 
@@ -88,14 +95,14 @@ class Network(object):
     def path_event(self):
         if self._path_event is None:
             self._path_event = os.path.join(self.cfg.path_wind_scenario_base,
-                                            self.event_name)
+                                            self.name)
         return self._path_event
 
     @property
     def path_output(self):
         if self._path_output is None:
             event_scale = self.cfg.event_id_format.format(
-                event_name=self.event_name, scale=self.scale)
+                event_name=self.name, scale=self.scale)
             self._path_output = os.path.join(self.cfg.path_output, event_scale)
 
             if not os.path.exists(self._path_output) and self.cfg.options['save_output']:

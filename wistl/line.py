@@ -64,14 +64,13 @@ class Line(object):
 
         # simulation method
         self.damage_prob_mc = None
-        # self.damage_index_simulation = {}
         self.est_no_damage = None
         self.prob_no_damage = None
 
         # non cascading collapse
-        # self.damage_prob_non_cascading = None
-        # self.est_no_damage_non_cascading = None
-        # self.prob_no_damage_simulation_non_cascading = None
+        self.damage_prob_mc_no_cascading = None
+        self.est_no_damage_no_cascading = None
+        self.prob_no_damage_no_cascading = None
 
         # parallel line interaction
         # if self.cfg.line_interaction:
@@ -210,12 +209,7 @@ class Line(object):
                       tower.damage_prob_mc[ds]['id_sim'].values,
                       tower.damage_prob_mc[ds]['id_time'].values] = True
 
-            # id_tower, id_sim, id_time = np.where(tf_collapse)
-
-            # self.damage_index_simulation[ds] = pd.DataFrame(
-            #     np.vstack((id_tower, id_sim, id_time)).T,
-            #     columns=['id_tower', 'id_sim', 'id_time'])
-
+            # PE(DS)
             self.damage_prob_mc[ds] = pd.DataFrame(
                 tf_ds.sum(axis=1).T / self.no_sims,
                 columns=self.names,
@@ -223,78 +217,36 @@ class Line(object):
 
             tf_sim[ds] = tf_ds.copy()
 
-        # save tf_sim[ds]
         self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
-    # Moved from damage_line.py
-    def write_hdf5(self, output_file):
+    def compute_damage_prob_mc_no_cascading(self):
 
-        items = ['damage_prob', 'est_no_damage', 'prob_no_damage',
-                 'damage_prob_mc']
+        self.damage_prob_mc_no_cascading = {}
 
-        columns_by_item = {'damage_prob': self.names,
-                           'damage_prob_mc': self.names,
-                           'est_no_damage': ['mean', 'std'],
-                           'prob_no_damage': range(self.no_towers + 1)}
+        tf_sim = {ds: None for ds in self.damage_states}
 
-        with h5py.File(output_file, 'w') as hf:
+        tf_ds = np.zeros((self.no_towers,
+                          self.no_sims,
+                          self.no_time), dtype=bool)
 
-            for item in items:
+        for ds in self.damage_states[::-1]:  # collapse first
 
-                group = hf.create_group(item)
+            for _, tower in self.towers.items():
 
-                for ds in self.damage_states:
+                tf_ds[tower.lid,
+                      tower.damage_prob_mc[ds]['id_sim'].values,
+                      tower.damage_prob_mc[ds]['id_time'].values] = True
 
-                    value = getattr(self, item)[ds]
-                    data = group.create_dataset(ds, data=value)
+            # PE(DS)
+            self.damage_prob_mc_no_cascading[ds] = pd.DataFrame(
+                tf_ds.sum(axis=1).T / self.no_sims,
+                columns=self.names,
+                index=self.time_index)
 
-                    # metadata
-                    data.attrs['nrow'], data.attrs['ncol'] = value.shape
-                    data.attrs['time_start'] = str(self.time_index[0])
-                    data.attrs['time_freq'] = str(self.time_index[1]-self.time_index[0])
-                    data.attrs['time_period'] = self.time_index.shape[0]
+            tf_sim[ds] = tf_ds.copy()
 
-                    if columns_by_item[item]:
-                        data.attrs['columns'] = columns_by_item[item]
-
-        #
-        #
-        # h5file = os.path.join(self.path_output,
-        #                       self.event_id,
-        #                       '{}_{}.h5'.format(file_str, self.name_output))
-        # hdf = pd.HDFStore(h5file)
-        #
-        # for ds in self.conf.damage_states:
-        #     hdf.put(ds, val[ds], format='table', data_columns=True)
-        # hdf.close()
-
-    # def compute_damage_probability_simulation_non_cascading(self):
-    #
-    #     tf_sim_non_cascading = {}
-    #
-    #     for ds in self.cfg.damage_states:
-    #
-    #         tf_ds = np.zeros((self.no_towers,
-    #                           self.cfg.no_sims,
-    #                           len(self.time_index)), dtype=bool)
-    #
-    #         for i_row, name in enumerate(self.names):
-    #
-    #             id_sim = self.towers[name].damage_isolation_mc[ds]['id_sim'].values
-    #             id_time = self.towers[name].damage_isolation_mc[ds]['id_time'].values
-    #
-    #             tf_ds[i_row, id_sim, id_time] = True
-    #
-    #         self.damage_prob_simulation_non_cascading[ds] = pd.DataFrame(
-    #             np.sum(tf_ds, axis=1).T / float(self.cfg.no_sims),
-    #             columns=self.names,
-    #             index=self.time_index)
-    #
-    #         tf_sim_non_cascading[ds] = np.copy(tf_ds)
-    #
-    #     self.est_no_damage_simulation_non_cascading, \
-    #         self.prob_no_damage_simulation_non_cascading = \
-    #         self.compute_damage_stats(tf_sim_non_cascading)
+        self.est_no_damage_no_cascading, self.prob_no_damage_no_cascading = \
+            self.compute_stats(tf_sim)
 
     def compute_stats(self, tf_sim):
         """
@@ -311,9 +263,14 @@ class Line(object):
         x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
         x2_tower = x_tower ** 2.0
 
-        for ds, tf_ds in tf_sim.items():
+        tf_ds = np.zeros((self.no_towers,
+                          self.no_sims,
+                          self.no_time), dtype=bool)
 
-            # assert tf_sim[ds].shape == (self.no_towers, self.no_sims, self.no_time)
+        # from collapse and minor
+        for ds in self.damage_states[::-1]:
+
+            tf_ds = tf_sim[ds] - tf_ds
 
             # mean and standard deviation
             # no_ds_across_towers.shape == (no_sims, no_time)
@@ -341,6 +298,41 @@ class Line(object):
 
         return est_no_tower, prob_no_tower
 
+    def write_hdf5(self, output_file):
+
+        items = ['damage_prob', 'damage_prob_mc', 'damage_prob_mc_no_cascading',
+                 'est_no_damage', 'est_no_damage_no_cascading',
+                 'prob_no_damage', 'prob_no_damage_no_cascading']
+
+        columns_by_item = {'damage_prob': self.names,
+                           'damage_prob_mc': self.names,
+                           'damage_prob_mc_no_cascading': self.names,
+                           'est_no_damage': ['mean', 'std'],
+                           'est_no_damage_no_cascading': ['mean', 'std'],
+                           'prob_no_damage': range(self.no_towers + 1),
+                           'prob_no_damage_no_cascading': range(self.no_towers + 1)
+                           }
+
+        with h5py.File(output_file, 'w') as hf:
+
+            for item in items:
+
+                group = hf.create_group(item)
+
+                for ds in self.damage_states:
+
+                    value = getattr(self, item)[ds]
+                    data = group.create_dataset(ds, data=value)
+
+                    # metadata
+                    data.attrs['nrow'], data.attrs['ncol'] = value.shape
+                    data.attrs['time_start'] = str(self.time_index[0])
+                    data.attrs['time_freq'] = str(self.time_index[1]-self.time_index[0])
+                    data.attrs['time_period'] = self.time_index.shape[0]
+
+                    if columns_by_item[item]:
+                        data.attrs['columns'] = columns_by_item[item]
+
 
 def compute_damage_per_line(line, cfg):
     """
@@ -361,6 +353,9 @@ def compute_damage_per_line(line, cfg):
     # perfect correlation within a single line
     line.compute_damage_prob_mc()
 
+    if not cfg.options['skip_no_cascading_collapse']:
+        line.compute_damage_prob_mc_no_cascading()
+
     # compare simulation against analytical
     msg = '{}: {:d} difference out of {:d}'
     for ds in cfg.damage_states:
@@ -379,8 +374,6 @@ def compute_damage_per_line(line, cfg):
         line.write_hdf5(output_file=output_file)
         logger.info('{} is saved'.format(output_file))
 
-    # if not line.cfg.skip_non_cascading_collapse:
-    #     line.compute_damage_probability_simulation_non_cascading()
     #
     # try:
     #     line.cfg.line_interaction[line_name]

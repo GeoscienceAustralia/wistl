@@ -21,7 +21,7 @@ class Config(object):
     """
     option_keys = ['run_parallel', 'save_output', 'save_figure',
                    'use_random_seed', 'run_analytical', 'run_simulation',
-                   'skip_non_cascading_collapse', 'adjust_design_by_topography',
+                   'skip_no_cascading_collapse', 'adjust_design_by_topography',
                    'apply_line_interaction']
 
     directory_keys = ['gis_data', 'wind_scenario_base', 'input', 'output']

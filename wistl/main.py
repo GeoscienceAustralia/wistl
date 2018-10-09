@@ -13,7 +13,7 @@ from optparse import OptionParser
 
 from wistl.config import Config
 from wistl.version import VERSION_DESC
-from wistl.network import create_network_for_event
+from wistl.event import create_event
 from wistl.line import compute_damage_per_line
 
 
@@ -32,9 +32,9 @@ def run_simulation(cfg):
         logger.info('parallel MC run on.......')
 
         # create transmission network with wind event
-        networks = parmap.map(create_network_for_event, cfg.events, cfg)
+        events = parmap.map(create_event, cfg.events, cfg)
 
-        lines = [line for sublist in networks for line in sublist]
+        lines = [line for sublist in events for line in sublist]
 
         # compute damage probability for each pair of line and wind event
         _ = parmap.map(compute_damage_per_line, lines, cfg)
@@ -53,7 +53,7 @@ def run_simulation(cfg):
         # create transmission network with wind event
         for event in cfg.events:
 
-            network = create_network_for_event(event, cfg)
+            network = create_event(event, cfg)
 
             for line in network:
 

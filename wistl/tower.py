@@ -297,20 +297,10 @@ class Tower(object):
             # 1. determine damage state of tower due to wind
             rv = self.rnd_state.uniform(size=(self.no_sims, self.no_time))
 
-            # val = np.array([rv < self.damage_prob[ds].values
-            #                 for ds in self.damage_states])  # (nds, no_sims, no_time)
-            # ds_wind = np.sum(val, axis=0)
-
             # ds_wind.shape == (no_sims, no_time)
             # PD not PE = 0(non), 1, 2 (collapse)
             ds_wind = np.array([rv[:, :, np.newaxis] <
                                 self.damage_prob.values])[0].sum(axis=2)
-
-            # mc_wind = {ds: {'id_sim': None, 'id_time': None}
-            #            for ds in self.cfg.damage_states}
-            # for ids, ds in enumerate(self.cfg.damage_states, 1):
-            #     mc_wind[ds]['id_sim'], mc_wind[ds]['id_time'] = \
-            #         np.where(ds_wind == ids)
 
             for ids, ds in enumerate(self.damage_states, 1):
 
@@ -345,43 +335,26 @@ class Tower(object):
 
         if self._collapse_prob_adj_mc is None and self.cond_pc_adj_mc_idx:
 
-            # msg = 'P({}|{}) at {}: simulation {:.3f} vs. analytical {:.3f}'
-
-            df = self.damage_prob_mc['collapse'].copy()
+            self._collapse_prob_adj_mc = self.damage_prob_mc[
+                'collapse'].copy()
 
             # generate regardless of time index
-            rv = self.rnd_state.uniform(size=len(df['id_sim']))
+            rv = self.rnd_state.uniform(
+                size=len(self._collapse_prob_adj_mc['id_sim']))
 
-            # list_idx_cond = map(lambda x: sum(x >= self.cond_pc_adj_mc_prob), rv)
-            df['id_adj'] = (rv[:, np.newaxis] >=
-                            self.cond_pc_adj_mc_prob).sum(axis=1)
+            self._collapse_prob_adj_mc['id_adj'] = (
+                rv[:, np.newaxis] >= self.cond_pc_adj_mc_prob).sum(axis=1)
 
             # remove case with no adjacent tower collapse
-            df.loc[df['id_adj'] == len(self.cond_pc_adj_mc_prob), 'id_adj'] = None
-            df = df.loc[df['id_adj'].notnull()]
+            self._collapse_prob_adj_mc.loc[
+                self._collapse_prob_adj_mc['id_adj'] == len(self.cond_pc_adj_mc_prob),
+                'id_adj'] = None
+            self._collapse_prob_adj_mc = self._collapse_prob_adj_mc.loc[
+                self._collapse_prob_adj_mc['id_adj'].notnull()]
 
             # replace index with tower id
-            df['id_adj'] = df['id_adj'].apply(lambda x:
-                                              self.cond_pc_adj_mc_idx[int(x)])
-
-            self._collapse_prob_adj_mc = df
-
-            # check simulation results
-            # id_adj_removed = [x for x in self.id_adj if x >= 0]
-            # id_adj_removed.remove(self.lid)
-            #
-            # for id_time, grouped in df.groupby('id_time'):
-            #
-            #     for lid in id_adj_removed:
-            #
-            #         prob = grouped['id_adj'].apply(lambda x: lid in x).sum() / self.no_sims
-            #
-            #         if not np.isclose(prob, self.collapse_prob_adj[lid][id_time],
-            #                           atol=ATOL, rtol=RTOL):
-            #
-            #             self.logger.debug(msg.format(lid, self.name, id_time,
-            #                                          prob,
-            #                                          self.collapse_prob_adj[lid][id_time]))
+            self._collapse_prob_adj_mc['id_adj'] = self._collapse_prob_adj_mc['id_adj'].apply(
+                lambda x: self.cond_pc_adj_mc_idx[int(x)])
 
         return self._collapse_prob_adj_mc
 

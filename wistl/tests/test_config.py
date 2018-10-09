@@ -132,11 +132,18 @@ class TestConfig(LogTestCase):
 
     def test_damage_states(self):
         expected = ['minor', 'collapse']
+        self.cfg._damage_states = None
         self.assertEqual(expected, self.cfg.damage_states)
 
     def test_no_damage_states(self):
         expected = 2
-        self.assertEqual(expected, self.cfg.no_damage_states)
+        self.cfg._no_damage_states = None
+        self.assertEqual(self.cfg.no_damage_states, expected)
+
+    def test_non_collapse(self):
+        expected = ['minor']
+        self.cfg._non_collapse = None
+        self.assertEqual(self.cfg.non_collapse, expected)
 
     def test_cond_collapse_prob_metadata(self):
 
@@ -636,15 +643,6 @@ class TestConfig(LogTestCase):
         result = unit_vector((3, 4))
         expected = np.array([0.6, 0.8])
         np.allclose(expected, result)
-
-    # def test_random_seed(self):
-    #
-    #     expected = {'test1': {'LineA': 11,
-    #                           'LineB': 22},
-    #                 'test2': {'LineA': 12,
-    #                           'LineB': 23}}
-    #
-    #     assertDeepAlmostEqual(self, expected, self.cfg.seed)
 
 #     def test_line_interaction(self):
 #
