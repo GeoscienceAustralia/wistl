@@ -480,6 +480,36 @@ class TestConfig(LogTestCase):
         self.assertEqual(out.design_speed,
                          self.cfg.design_value_by_line[line]['design_speed'])
 
+        # Tower 34
+        row = self.cfg.towers_by_line['LineB'][20]
+        self.assertEqual(row['name'], 'T34')
+        out = self.cfg.assign_design_values(row)
+
+        self.assertEqual(out.design_span,
+                         self.cfg.design_value_by_line[line]['design_span'])
+        self.assertEqual(out.design_level,
+                         self.cfg.design_value_by_line[line]['design_level'])
+        self.assertEqual(out.terrain_cat,
+                         self.cfg.design_value_by_line[line]['terrain_cat'])
+        # design speed adjusted by topography
+        self.assertEqual(out.design_speed,
+                         1.6 * self.cfg.design_value_by_line[line]['design_speed'])
+
+        # Tower 42
+        row = self.cfg.towers_by_line['LineB'][27]
+        self.assertEqual(row['name'], 'T42')
+        out = self.cfg.assign_design_values(row)
+
+        self.assertEqual(out.design_span,
+                         self.cfg.design_value_by_line[line]['design_span'])
+        self.assertEqual(out.design_level,
+                         self.cfg.design_value_by_line[line]['design_level'])
+        self.assertEqual(out.terrain_cat,
+                         self.cfg.design_value_by_line[line]['terrain_cat'])
+        # design speed adjusted by topography
+        self.assertEqual(out.design_speed,
+                         1.3 * self.cfg.design_value_by_line[line]['design_speed'])
+
     def test_assign_fragility_parameters(self):
 
         # Tower 14

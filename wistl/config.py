@@ -476,11 +476,11 @@ class Config(object):
                     os.path.realpath(os.path.join(self.path_cfg_file,
                                                   conf.get(key, item))))
             if not os.path.exists(getattr(self, 'path_{}'.format(item))):
-                self.logger.error('Invalid path for {}'.format(item))
-
-        if not os.path.exists(self.path_output):
-            os.makedirs(self.path_output)
-            self.logger.info('{} is created'.format(self.path_output))
+                if item == 'output':
+                    os.makedirs(self.path_output)
+                    self.logger.info('{} is created'.format(self.path_output))
+                else:
+                    self.logger.error('Invalid path for {}'.format(item))
 
         # gis_data
         key = 'gis_data'

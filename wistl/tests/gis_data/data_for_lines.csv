@@ -1,3 +1,4 @@
 LineName,Type,Owner,Operator,LineRoute,Capacity,TypeConduc,NumCircuit,Current,YrBuilt
 LineA,HV Transmission Line,A,B,LineA,230,Unknown,2,Unknown,1980
 LineB,HV Transmission Line,C,D,LineB,230,Unknown,2,Unknown,1980
+LineC,HV Transmission Line,E,F,LineC,230,Unknown,2,Unknown,1980

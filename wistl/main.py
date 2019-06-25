@@ -51,13 +51,18 @@ def run_simulation(cfg):
         logger.info('serial MC run on.......')
 
         # create transmission network with wind event
+
+        lines = []
+
         for event in cfg.events:
 
             network = create_event(event, cfg)
 
             for line in network:
 
-                _ = compute_damage_per_line(line=line, cfg=cfg)
+                line = compute_damage_per_line(line=line, cfg=cfg)
+
+                lines.append(line)
 
             # if cfg.line_interaction:
             #     network_dic = \
@@ -66,6 +71,7 @@ def run_simulation(cfg):
 
     logger.info('MC simulation took {} seconds'.format(time.time() - tic))
 
+    return lines
 
 def set_logger(path_cfg, logging_level=None):
     """debug, info, warning, error, critical"""

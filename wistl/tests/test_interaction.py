@@ -8,11 +8,11 @@ import pandas as pd
 import os
 
 from wistl.config import Config
-from wistl.sim_towers import sim_towers
+from wistl.main import run_simulation
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-
+"""
 class TestTransmission(unittest.TestCase):
 
     @classmethod
@@ -21,7 +21,7 @@ class TestTransmission(unittest.TestCase):
                                                   'test_line_interaction.cfg'))
         cls.cfg.save = False
         cls.cfg.figure = False
-        cls.damaged_networks = sim_towers(cls.cfg)
+        cls.damaged_networks = run_simulation(cls.cfg)
 
     @classmethod
     def h5file_full(cls, damage_line, str_head):
@@ -64,7 +64,7 @@ class TestTransmission(unittest.TestCase):
             df_value = pd.read_hdf(h5file_prob, ds)
             pd.util.testing.assert_frame_equal(
                 df_value, damage_line.prob_no_damage_line_interaction[ds])
-
+"""
 
 if __name__ == '__main__':
     unittest.main()
