@@ -7,7 +7,7 @@ WISTL: Wind Impact Simulation on Transmission Lines
 
 import os
 import time
-import parmap
+# import parmap
 import logging.config
 from optparse import OptionParser
 
@@ -29,6 +29,7 @@ def run_simulation(cfg):
 
     if cfg.options['run_parallel']:
 
+        """    
         logger.info('parallel MC run on.......')
 
         # create transmission network with wind event
@@ -42,10 +43,11 @@ def run_simulation(cfg):
         # if cfg.line_interaction:
         #     damaged_networks = parmap.map(
         #         compute_damage_probability_line_interaction_per_network,
-        #         [network for network in nested_dic.itervalues()])
+        #         [network for _, network in nested_dic.items()])
         # else:
         #  = [network for _, network in nested_dic.items()]
-
+        """
+        print('Not implemented yet')
     else:
 
         logger.info('serial MC run on.......')

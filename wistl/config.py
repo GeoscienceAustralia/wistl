@@ -4,9 +4,10 @@ from __future__ import print_function, division
 import os
 import sys
 import logging
+import math
 import numpy as np
 import pandas as pd
-import ConfigParser
+import configparser
 import shapefile
 from collections import defaultdict
 from shapely import geometry
@@ -144,8 +145,7 @@ class Config(object):
                 msg = '{} not found'.format(self.file_topographic_multiplier)
                 self.logger.error(msg)
             else:
-                data['topo'] = data[['Mh', 'Mhopp']].max(axis=1)
-                self._topographic_multiplier = data.to_dict()['topo']
+                self._topographic_multiplier = data.max(axis=1).to_dict()
 
         return self._topographic_multiplier
 
@@ -160,7 +160,7 @@ class Config(object):
 
             if os.path.exists(self.file_design_adjustment_factor_by_topography):
 
-                dic = ConfigParser.ConfigParser()
+                dic = configparser.ConfigParser()
                 dic.read(self.file_design_adjustment_factor_by_topography)
 
                 data = {}
@@ -224,7 +224,7 @@ class Config(object):
         """
         if self._fragility_metadata is None:
 
-            metadata = ConfigParser.ConfigParser()
+            metadata = configparser.ConfigParser()
             ok = metadata.read(self.file_fragility_metadata)
 
             if ok:
@@ -285,7 +285,7 @@ class Config(object):
 
         if self._cond_collapse_prob is None:
 
-            metadata = ConfigParser.ConfigParser()
+            metadata = configparser.ConfigParser()
             ok = metadata.read(self.file_cond_collapse_prob_metadata)
 
             if ok:
@@ -320,7 +320,7 @@ class Config(object):
                 msg = '{} not found'.format(self.file_cond_collapse_prob_metadata)
                 self.logger.critical(msg)
             else:
-                metadata = ConfigParser.ConfigParser()
+                metadata = configparser.ConfigParser()
                 metadata.read(self.file_cond_collapse_prob_metadata)
 
                 self._cond_collapse_prob_metadata = {}
@@ -348,7 +348,7 @@ class Config(object):
                 msg = '{} not found'.format(self.file_line_interaction_metadata)
                 self.logger.critical(msg)
             else:
-                metadata = ConfigParser.ConfigParser()
+                metadata = configparser.ConfigParser()
                 metadata.read(self.file_line_interaction_metadata)
 
                 self._prob_line_interaction_metadata = {}
@@ -407,7 +407,7 @@ class Config(object):
                           left_index=True, right_index=True)
 
             df['file_wind_base_name'] = df['name'].apply(
-                lambda x: self.wind_file_head + x + self.wind_file_tail)
+                lambda x: self.wind_file_format.format(tower_name=x))
 
             df['height_z'] = df['function'].apply(lambda x: self.drag_height_by_type[x])
 
@@ -447,7 +447,7 @@ class Config(object):
 
     def read_config(self):
 
-        conf = ConfigParser.ConfigParser()
+        conf = configparser.ConfigParser()
         conf.optionxform = str
         conf.read(self.file_cfg)
 
@@ -455,7 +455,7 @@ class Config(object):
         for item in self.option_keys:
             try:
                 self.options[item] = conf.getboolean('options', item)
-            except ConfigParser.NoOptionError:
+            except configparser.NoOptionError:
                 msg = '{} not set in {}'.format(item, self.file_cfg)
                 self.logger.critical(msg)
 
@@ -493,9 +493,9 @@ class Config(object):
         self.read_wind_scenario(conf)
 
         # format
-        file_format = conf.get('format', 'wind_scenario', 1)
-        self.wind_file_head = file_format.split('%')[0]
-        self.wind_file_tail = file_format.split(')')[-1]
+        self.wind_file_format = conf.get('format', 'wind_scenario') 
+        # self.wind_file_head = file_format.split('%')[0]
+        # self.wind_file_tail = file_format.split(')')[-1]
         self.event_id_format = conf.get('format', 'event_id')
 
         # input
@@ -505,7 +505,7 @@ class Config(object):
                 setattr(self, 'file_{}'.format(item),
                         os.path.realpath(os.path.join(self.path_input,
                                                       conf.get(key, item))))
-            except ConfigParser.NoOptionError:
+            except configparser.NoOptionError:
                 msg = '{} is not set'.format(item)
                 self.logger.warning(msg)
 
@@ -609,12 +609,12 @@ class Config(object):
 
         # calculate utilization factor
         # 1 in case sw/sd > 1
-        u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1 - actual_span /
-                                                 tower['design_span'])
+        u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1.0 - actual_span / tower['design_span'])
         u_factor = min(1.0, u_factor)
 
         return {'actual_span': actual_span,
-                'collapse_capacity': tower['design_speed'] / np.sqrt(u_factor)}
+                'u_factor': u_factor,
+                'collapse_capacity': tower['design_speed'] / math.sqrt(u_factor)}
 
     def read_line_interaction(self, conf):
 
@@ -718,9 +718,9 @@ class Config(object):
         for att, att_type in zip(self.fragility_metadata['by'],
                                  self.fragility_metadata['type']):
             if att_type == 'string':
-                tf_array *= self.fragility[att] == tower[att]
+                tf_array &= self.fragility[att] == tower[att]
             elif att_type == 'numeric':
-                tf_array *= (self.fragility[att + '_lower'] <= tower[att]) & \
+                tf_array &= (self.fragility[att + '_lower'] <= tower[att]) & \
                             (self.fragility[att + '_upper'] > tower[att])
 
         params = pd.Series({'frag_scale': {}, 'frag_arg': {},
@@ -811,7 +811,7 @@ def assign_cond_pc_adj(tower):
 
     # sort by cond. prob
     abs_idx = sorted(cond_prob, key=cond_prob.get)
-    prob = map(lambda v: cond_prob[v], abs_idx)
+    prob = list(map(lambda v: cond_prob[v], abs_idx))
     cum_prob = np.cumsum(np.array(prob))
 
     # sum of cond. prob by each tower
@@ -944,7 +944,7 @@ def set_line_interaction(self):
 
     for line_name, line in self.lines.items():
 
-        for tower in line.towers.itervalues():
+        for _, tower in line.towers.items():
             id_on_target_line = dict()
 
             for target_line in self.cfg.line_interaction[line_name]:
@@ -1062,3 +1062,9 @@ def angle_between_unit_vectors(v1, v2):
     #     v1_u = unit_vector(v1)
     #     v2_u = unit_vector(v2)
     return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
+
+
+if __name__ == '__main__':
+    import os
+    BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+    cfg = Config(os.path.join(BASE_DIR, 'tests/test.cfg'))

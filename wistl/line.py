@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import h5py
 import logging
-from scipy.stats import itemfreq
 
 from wistl.tower import Tower
 from wistl.constants import ATOL, RTOL
@@ -270,7 +269,7 @@ class Line(object):
         # from collapse and minor
         for ds in self.damage_states[::-1]:
 
-            tf_ds = tf_sim[ds] - tf_ds
+            tf_ds = np.logical_xor(tf_sim[ds], tf_ds)
 
             # mean and standard deviation
             # no_ds_across_towers.shape == (no_sims, no_time)
@@ -278,8 +277,8 @@ class Line(object):
             freq = np.zeros(shape=(self.no_time, self.no_towers + 1))
 
             for i in range(self.no_time):
-                val = itemfreq(no_ds_across_towers[:, i])  # (value, freq)
-                freq[i, [int(x) for x in val[:, 0]]] = val[:, 1]
+                _value, _freq = np.unique(no_ds_across_towers[:, i], return_counts=True)  # (value, freq)
+                freq[i, [int(x) for x in _value]] = _freq
 
             prob = freq / self.no_sims  # (no_time, no_towers)
 
@@ -331,7 +330,7 @@ class Line(object):
                     data.attrs['time_period'] = self.time_index.shape[0]
 
                     if columns_by_item[item]:
-                        data.attrs['columns'] = columns_by_item[item]
+                        data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
 
 
 def compute_damage_per_line(line, cfg):
@@ -411,7 +410,7 @@ def compute_damage_per_line(line, cfg):
 
         #print('target in: {}'.format(self.damage_index_line_interaction[target_line].dtypes))
 
-        for tower in self.towers.itervalues():
+        for _, tower in self.towers.items():
 
             # determine damage state by line interaction
             # damage_interaction_mc['id_sim', 'id_time', 'no_collapse']
@@ -424,7 +423,7 @@ def compute_damage_per_line(line, cfg):
                     tower.wind['Bearing'][id_time])
 
                 angle = {}
-                for line_name, value in tower.id_on_target_line.iteritems():
+                for line_name, value in tower.id_on_target_line.items():
                     angle[line_name] = angle_between_unit_vectors(
                         wind_vector, value['vector'])
 

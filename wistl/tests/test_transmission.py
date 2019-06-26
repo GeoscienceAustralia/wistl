@@ -58,7 +58,7 @@ class TestTransmission(unittest.TestCase):
             #         self.check_file_consistency_simulation(line)
             # else:
             #     for network in self.damaged_networks:
-            #         for line in network.lines.itervalues():
+            #         for _, line in network.lines.items():
             #             self.check_file_consistency_simulation(line)
 
     def test_transmission_simulation_non_cascading(self):
@@ -73,7 +73,7 @@ class TestTransmission(unittest.TestCase):
             #         self.check_file_consistency_simulation_non_cascading(line)
             # else:
             #     for network in self.damaged_networks:
-            #         for line in network.lines.itervalues():
+            #         for _, line in network.lines.items():
             #
             #             self.check_file_consistency_simulation_non_cascading(line)
     """
@@ -81,17 +81,17 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_analytical_vs_simulation_only_isolation(self):
 
         for line in self.lines:
-            for tower in line.towers.itervalues():
+            for _, tower in line.towers.items():
                 self.compare_analytical_vs_simulation_for_collapse(tower)
 
         # if self.cfg.parallel:
         #     for line in self.damaged_lines:
-        #         for tower in line.towers.itervalues():
+        #         for _, tower in line.towers.items():
         #             self.compare_analytical_vs_simulation_for_collapse(tower)
         # else:
         #     for network in self.damaged_networks:
-        #         for line in network.lines.itervalues():
-        #             for tower in line.towers.itervalues():
+        #         for _, line in network.lines.items():
+        #             for _, tower in line.towers.items():
         #                 self.compare_analytical_vs_simulation_for_collapse(tower)
 
     """

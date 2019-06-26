@@ -12,7 +12,7 @@ import numpy as np
 from wistl.config import Config
 from wistl.constants import RTOL, ATOL
 from wistl.tower import Tower
-from test_config import assertDeepAlmostEqual
+from wistl.tests.test_config import assertDeepAlmostEqual
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 

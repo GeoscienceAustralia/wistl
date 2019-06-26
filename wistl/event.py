@@ -129,7 +129,7 @@ def compute_damage_probability_line_interaction_per_network(network, cfg):
                                  cfg.no_sims,
                                  len(line.time_index)), dtype=bool)
 
-        for trigger_line, target_lines in cfg.line_interaction.iteritems():
+        for trigger_line, target_lines in cfg.line_interaction.items():
 
             if line_name in target_lines:
 

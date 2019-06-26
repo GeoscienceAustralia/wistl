@@ -27,7 +27,7 @@ class EventTest(unittest.TestCase):
 
     # def test_damaged_network_type(self):
     #     from wistl.transmission_network import TransmissionNetwork
-    #     for d in self.damaged_networks.itervalues():
+    #     for _, d in self.damaged_networks.items():
     #         self.assertTrue(isinstance(d, TransmissionNetwork))
 
 if __name__ == '__main__':
