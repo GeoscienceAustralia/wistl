@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import print_function, division
 
 __author__ = 'Hyeuk Ryu'
 
@@ -232,7 +231,7 @@ class TestTower(unittest.TestCase):
                         prob
                         ))
 
-"""
+    """
     def test_determine_damage_state_by_simulation(self):
 
         seed = 11
@@ -320,4 +319,4 @@ class TestTower(unittest.TestCase):
 """
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)

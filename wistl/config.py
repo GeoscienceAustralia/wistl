@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import print_function, division
 
 import os
 import sys
@@ -11,7 +10,7 @@ import configparser
 import shapefile
 from collections import defaultdict
 from shapely import geometry
-from geopy.distance import great_circle
+from geopy.distance import geodesic
 
 from wistl.constants import K_FACTOR, NO_CIRCUIT
 
@@ -930,7 +929,7 @@ def calculate_distance_between_towers(coord_lat_lon):
     coord_lat_lon = np.stack(coord_lat_lon)
     dist_forward = np.zeros(len(coord_lat_lon) - 1)
     for i, (pt0, pt1) in enumerate(zip(coord_lat_lon[0:-1], coord_lat_lon[1:])):
-        dist_forward[i] = great_circle(pt0, pt1).meters
+        dist_forward[i] = geodesic(pt0, pt1).meters
 
     actual_span = 0.5 * (dist_forward[0:-1] + dist_forward[1:])
     actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
@@ -960,7 +959,7 @@ def set_line_interaction(self):
                 closest_pt_lat_lon = closest_pt_coord[::-1]
 
                 # compute distance
-                dist_from_line = great_circle(
+                dist_from_line = geodesic(
                     tower.coord_lat_lon, closest_pt_lat_lon).meters
 
                 if dist_from_line < tower.height:
@@ -1034,6 +1033,7 @@ def unit_vector(vector):
     """
     return vector / np.linalg.norm(vector)
 
+
 def unit_vector_by_bearing(angle_deg):
     """
     return unit vector given bearing
@@ -1065,6 +1065,5 @@ def angle_between_unit_vectors(v1, v2):
 
 
 if __name__ == '__main__':
-    import os
     BASE_DIR = os.path.dirname(os.path.realpath(__file__))
     cfg = Config(os.path.join(BASE_DIR, 'tests/test.cfg'))

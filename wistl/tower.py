@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import print_function, division
 
 import numpy as np
 import pandas as pd
@@ -38,7 +37,7 @@ class Tower(object):
                   #'shapes',
                   'type',
                   #'yrbuilt',
-                  # 'actual_span',
+                  'actual_span',
                   'collapse_capacity',
                   # 'cond_pc',
                   'cond_pc_adj',

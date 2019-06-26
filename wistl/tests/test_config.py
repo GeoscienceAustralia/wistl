@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 
 import unittest
-# import pandas as pd
 import logging
 import os
 import tempfile
 import numpy as np
-import math
 
 from wistl.config import Config, split_str, calculate_distance_between_towers, \
     unit_vector, find_id_nearest_pt, create_list_idx, assign_cond_pc_adj, \
     assign_shapely_line, assign_shapely_point
+
+from geopy.distance import geodesic
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -307,47 +307,45 @@ class TestConfig(unittest.TestCase):
         # u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1-actual_span/design_span)
         # collapse_capacity = design_speed / sqrt(u_factor)
         # K_FACTOR = {1: 0.33, 2: 0.5}  # hard-coded
-        u_factor = 0.84758125
-        expected = 81.4649
+
+        u_factor = 0.84787
+        expected = 81.4509
         line_name = 'LineA'
-
-        # return {'actual_span': actual_span,
-        #         'u_factor': u_factor,
-        #         'collapse_capacity': tower['design_speed'] / math.sqrt(u_factor)}
-
-        for tower_name in ['T1']:
+        for tower_name in ['T1', 'T22']:
             tower_id = self.cfg.lines[line_name]['name2id'][tower_name]
             tower = self.cfg.towers_by_line[line_name][tower_id]
             results = self.cfg.assign_collapse_capacity(tower)
-            # self.assertAlmostEqual(tower['u_factor'], u_factor, places=4)
-            self.assertAlmostEqual(tower['design_span'], 400.0)
-            self.assertAlmostEqual(results['actual_span'], 277.9877093104612)
-            self.assertAlmostEqual(tower['design_speed'], 75.0)
-            self.assertAlmostEqual(results['u_factor'], u_factor)
-            try:
-                self.assertAlmostEqual(results['collapse_capacity'], expected,
-                                           places=3)
-            except AssertionError:
-                print('{}:{}:{}'.format(results['collapse_capacity'], tower['collapse_capacity'], expected))
+            self.assertAlmostEqual(results['actual_span'], 278.2987, places=3)
+            self.assertAlmostEqual(tower['design_span'], 400.0, places=3)
+            self.assertAlmostEqual(results['u_factor'], u_factor, places=3)
+            self.assertAlmostEqual(tower['design_speed'], 75.0, places=3)
+            self.assertAlmostEqual(results['collapse_capacity'], expected, places=3)
 
-        """
-        # u_factor = 1.0
+        u_factor = 1.0
         expected = 75.0
         line_name = 'LineA'
         for tower_name in ['T2', 'T21']:
             tower_id = self.cfg.lines[line_name]['name2id'][tower_name]
             tower = self.cfg.towers_by_line[line_name][tower_id]
             results = self.cfg.assign_collapse_capacity(tower)
+            self.assertAlmostEqual(results['actual_span'], 556.59745, places=3)
+            self.assertAlmostEqual(tower['design_span'], 400.0, places=3)
+            self.assertAlmostEqual(results['u_factor'], u_factor, places=3)
+            self.assertAlmostEqual(tower['design_speed'], 75.0, places=3)
             self.assertAlmostEqual(results['collapse_capacity'], expected,
                                    places=4)
 
-        expected = 55.8186
+        expected = 55.80905
+        u_factor = 0.84787
         line_name = 'LineB'
         for tower_name in ['T23', 'T44']:
             tower_id = self.cfg.lines[line_name]['name2id'][tower_name]
             tower = self.cfg.towers_by_line[line_name][tower_id]
             results = self.cfg.assign_collapse_capacity(tower)
-            # self.assertAlmostEqual(tower.design_speed, 75.0)
+            self.assertAlmostEqual(results['actual_span'], 278.2987, places=3)
+            self.assertAlmostEqual(tower['design_span'], 400.0, places=3)
+            self.assertAlmostEqual(results['u_factor'], u_factor, places=3)
+            self.assertAlmostEqual(tower['design_speed'], 51.3889, places=3)
             self.assertAlmostEqual(results['collapse_capacity'], expected,
                                    places=4)
 
@@ -360,7 +358,6 @@ class TestConfig(unittest.TestCase):
             results = self.cfg.assign_collapse_capacity(tower)
             self.assertAlmostEqual(results['collapse_capacity'], expected,
                                    places=4)
-        """
 
     def test_line_interaction(self):
         # FIXME
@@ -552,7 +549,6 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(result['id_adj'], [1, 2, 3, 4, 5])
         self.assertEqual(result['lid'], 3)
 
-    """
     def test_assign_cond_pc_adj(self):
 
         # T14
@@ -607,7 +603,6 @@ class TestConfig(unittest.TestCase):
                          expected['cond_pc_adj_mc_idx'])
         np.testing.assert_allclose(row['cond_pc_adj_mc_prob'],
                                    expected['cond_pc_adj_mc_prob'])
-    """
 
     def test_create_list_idx(self):
 
@@ -654,19 +649,36 @@ class TestConfig(unittest.TestCase):
         np.testing.assert_allclose(row.coord_lat_lon,
                                    expected['coord_lat_lon'])
 
-    """
+    def test_distance(self):
+
+        # lat, long
+        pt1 = (52.2296756, 21.0122287)
+        pt2 = (52.406374, 16.9251681)
+
+        expected = 279352.901604
+        result = geodesic(pt1, pt2).meters
+        self.assertAlmostEqual(expected, result, places=4)
+
     def test_calculate_distance_between_towers(self):
 
         coord_lat_lon = [[0.0, 0.0], [0.005, 0.0], [0.01, 0.0]]
 
-        distance = 556.1312
+        distance = 552.87138
+
+        dist1 = geodesic(coord_lat_lon[0], coord_lat_lon[1]).meters
+        dist2 = geodesic(coord_lat_lon[1], coord_lat_lon[2]).meters
+
+        self.assertAlmostEqual(dist1, distance, places=4)
+        self.assertAlmostEqual(dist2, distance, places=4)
 
         expected = [0.5 * distance, distance, 0.5 * distance]
 
         results = calculate_distance_between_towers(coord_lat_lon)
 
-        assert np.allclose(results, expected)
-    """
+        try:
+            assert np.allclose(results, expected)
+        except AssertionError:
+            print('{} is expected but {}'.format(expected, results))
 
     def test_set_line_interaction(self):
         # FIXME
@@ -739,10 +751,8 @@ class TestConfig(unittest.TestCase):
 #         pd.util.testing.assert_frame_equal(expected, cfg.prob_line_interaction)
 
 if __name__ == '__main__':
-    suite = unittest.TestSuite()
-    suite.addTest(TestConfig("test_assign_collapse_capacity"))
-    runner = unittest.TextTestRunner()
-    runner.run(suite)
-    # suite = unittest.TestLoader().loadTestsFromTestCase(TestConfig)
-    # unittest.TextTestRunner(verbosity=2).run(suite)
-    #unittest.main(verbosity=2)
+    # suite = unittest.TestSuite()
+    # suite.addTest(TestConfig("test_assign_collapse_capacity"))
+    # runner = unittest.TextTestRunner()
+    # runner.run(suite)
+    unittest.main(verbosity=2)

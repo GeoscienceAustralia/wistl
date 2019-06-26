@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import print_function
 
 """
 WISTL: Wind Impact Simulation on Transmission Lines
@@ -164,6 +163,7 @@ def main():
         run_simulation(conf)
     else:
         parser.print_help()
+
 
 if __name__ == '__main__':
     main()

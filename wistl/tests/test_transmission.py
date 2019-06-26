@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-from __future__ import print_function
 
 __author__ = 'Hyeuk Ryu'
 
 import unittest
+import logging
 import pandas as pd
 import numpy as np
 import os
@@ -18,7 +18,12 @@ class TestTransmission(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
+
+        logging.basicConfig(level=logging.WARNING)
+        logger = logging.getLogger(__name__)
+        file_cfg = os.path.join(BASE_DIR, 'test.cfg')
+
+        cls.cfg = Config(file_cfg=file_cfg, logger=logger)
         cls.cfg.save = False
         cls.cfg.figure = False
 
@@ -158,10 +163,9 @@ class TestTransmission(unittest.TestCase):
     def compare_analytical_vs_simulation_for_collapse(self, tower):
 
         for key, grouped in tower.damage_prob_mc['collapse'].groupby('id_time'):
-            np.testing.assert_almost_equal(
-                len(grouped)/float(self.cfg.no_sims),
-                tower.damage_prob.ix[key, 'collapse'],
-                decimal=1)
+            result = tower.damage_prob.ix[key, 'collapse']
+            expected = len(grouped)/float(self.cfg.no_sims)
+            np.testing.assert_almost_equal(result, expected, decimal=1)
 
 # class TestTransmissionConfig(unittest.TestCase):
 
@@ -174,5 +178,6 @@ class TestTransmission(unittest.TestCase):
 #         self.assertEqual(cfg.save, 0)
 #         self.assertEqual(cfg.nsims, 20)
 
+
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)

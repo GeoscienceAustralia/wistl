@@ -1,5 +1,6 @@
 __author__ = 'sudipta'
 import os
+import logging
 import unittest
 from wistl.event import create_event
 from wistl.config import Config
@@ -11,9 +12,13 @@ class EventTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        conf_path = os.path.join(BASE_DIR, 'test.cfg')
-        assert os.path.exists(conf_path), 'config file path wrong'
-        cls.cfg = Config(conf_path)
+
+        logging.basicConfig(level=logging.WARNING)
+        logger = logging.getLogger(__name__)
+        file_cfg = os.path.join(BASE_DIR, 'test.cfg')
+
+        assert os.path.exists(file_cfg), 'config file does not exist'
+        cls.cfg = Config(file_cfg, logger)
         cls.event = create_event(cfg=cls.cfg,
                                  event=cls.cfg.events[0])
 
@@ -30,5 +35,6 @@ class EventTest(unittest.TestCase):
     #     for _, d in self.damaged_networks.items():
     #         self.assertTrue(isinstance(d, TransmissionNetwork))
 
+
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
