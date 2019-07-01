@@ -6,13 +6,12 @@ WISTL: Wind Impact Simulation on Transmission Lines
 
 import os
 import time
-# import parmap
 import logging.config
 from optparse import OptionParser
 
 from wistl.config import Config
 from wistl.version import VERSION_DESC
-from wistl.event import create_event
+from wistl.scenario import create_scenario
 from wistl.line import compute_damage_per_line
 
 
@@ -53,17 +52,13 @@ def run_simulation(cfg):
 
         # create transmission network with wind event
 
-        lines = []
-
         for event in cfg.events:
 
-            network = create_event(event, cfg)
+            scenario = create_scenario(event, cfg)
 
-            for line in network:
+            for line in scenario:
 
-                line = compute_damage_per_line(line=line, cfg=cfg)
-
-                lines.append(line)
+                _ = compute_damage_per_line(line=line, cfg=cfg)
 
             # if cfg.line_interaction:
             #     network_dic = \
@@ -72,7 +67,7 @@ def run_simulation(cfg):
 
     logger.info('MC simulation took {} seconds'.format(time.time() - tic))
 
-    return lines
+    return scenario
 
 def set_logger(path_cfg, logging_level=None):
     """debug, info, warning, error, critical"""

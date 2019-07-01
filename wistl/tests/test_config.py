@@ -8,7 +8,8 @@ import numpy as np
 
 from wistl.config import Config, split_str, calculate_distance_between_towers, \
     unit_vector, find_id_nearest_pt, create_list_idx, assign_cond_pc_adj, \
-    assign_shapely_line, assign_shapely_point
+    assign_shapely_line, assign_shapely_point, unit_vector_by_bearing, \
+    angle_between_unit_vectors
 
 from geopy.distance import geodesic
 
@@ -541,13 +542,21 @@ class TestConfig(unittest.TestCase):
         row = self.cfg.towers_by_line['LineA'][0]
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'], [11, 12, 13, 14, 15])
-        self.assertEqual(result['lid'], 13)
+        self.assertEqual(result['idl'], 13)
 
         # T26
         row = self.cfg.towers_by_line['LineB'][9]
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'], [1, 2, 3, 4, 5])
-        self.assertEqual(result['lid'], 3)
+        self.assertEqual(result['idl'], 3)
+
+        # T39
+        row = self.cfg.towers_by_line['LineB'][26]
+        result = self.cfg.assign_id_adj_towers(row)
+        self.assertEqual(result['id_adj'],
+                         [10, 11, 12, 13, 14, 15, -1, 17, 18, 19, 20, 21, -1])
+        self.assertEqual(result['idl'], 16)
+
 
     def test_assign_cond_pc_adj(self):
 
@@ -555,54 +564,54 @@ class TestConfig(unittest.TestCase):
         tower = self.cfg.towers_by_line['LineA'][0]
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {14: 0.575, 12: 0.575, 15: 0.125, 11: 0.125},
-                    # 'cond_pc_adj_mc_idx': [(-1, 0, 1, 2), (-2, -1, 0, 1),
+                    # 'cond_pc_adj_sim_idx': [(-1, 0, 1, 2), (-2, -1, 0, 1),
                     #                            (0, 1), (-1, 0),
                     #                            (-2, -1, 0, 1, 2), (-1, 0, 1)],
-                    'cond_pc_adj_mc_idx': [(12, 14, 15), (11, 12, 14),
+                    'cond_pc_adj_sim_idx': [(12, 14, 15), (11, 12, 14),
                                                (12,), (14,),
                                                (11, 12, 14, 15), (12, 14)],
-                    'cond_pc_adj_mc_prob':
+                    'cond_pc_adj_sim_prob':
                         np.array([0.025, 0.05, 0.125, 0.2, 0.3, 0.65])}
 
         assertDeepAlmostEqual(self, row['cond_pc_adj'], expected['cond_pc_adj'],
                               places=4)
-        self.assertEqual(set(row['cond_pc_adj_mc_idx']),
-                         set(expected['cond_pc_adj_mc_idx']))
+        self.assertEqual(set(row['cond_pc_adj_sim_idx']),
+                         set(expected['cond_pc_adj_sim_idx']))
         try:
-            np.testing.assert_allclose(row['cond_pc_adj_mc_prob'],
-                                       expected['cond_pc_adj_mc_prob'])
+            np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
+                                       expected['cond_pc_adj_sim_prob'])
         except AssertionError:
-            print('{}'.format(row['cond_pc_adj_mc_prob']))
+            print('{}'.format(row['cond_pc_adj_sim_prob']))
 
         # T1: terminal tower
         tower = self.cfg.towers_by_line['LineA'][23]
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {1: 0.575, 2: 0.125},
-                    # 'cond_pc_adj_mc_idx': [(0, 1, 2), (0, 1)],
-                    'cond_pc_adj_mc_idx': [(1, 2), (1,)],
-                    'cond_pc_adj_mc_prob': np.array([0.125, 0.575])}
+                    # 'cond_pc_adj_sim_idx': [(0, 1, 2), (0, 1)],
+                    'cond_pc_adj_sim_idx': [(1, 2), (1,)],
+                    'cond_pc_adj_sim_prob': np.array([0.125, 0.575])}
 
         assertDeepAlmostEqual(self, row['cond_pc_adj'], expected['cond_pc_adj'],
                               places=4)
-        self.assertEqual(row['cond_pc_adj_mc_idx'],
-                         expected['cond_pc_adj_mc_idx'])
-        np.testing.assert_allclose(row['cond_pc_adj_mc_prob'],
-                                   expected['cond_pc_adj_mc_prob'])
+        self.assertEqual(row['cond_pc_adj_sim_idx'],
+                         expected['cond_pc_adj_sim_idx'])
+        np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
+                                   expected['cond_pc_adj_sim_prob'])
 
         # T22: terminal tower
         tower = self.cfg.towers_by_line['LineA'][1]
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {20: 0.575, 19: 0.125},
-                    # 'cond_pc_adj_mc_idx': [(-2, -1, 0), (-1, 0)],
-                    'cond_pc_adj_mc_idx': [(19, 20,), (20,)],
-                    'cond_pc_adj_mc_prob': np.array([0.125, 0.575])}
+                    # 'cond_pc_adj_sim_idx': [(-2, -1, 0), (-1, 0)],
+                    'cond_pc_adj_sim_idx': [(19, 20,), (20,)],
+                    'cond_pc_adj_sim_prob': np.array([0.125, 0.575])}
 
         assertDeepAlmostEqual(self, row['cond_pc_adj'], expected['cond_pc_adj'],
                               places=4)
-        self.assertEqual(row['cond_pc_adj_mc_idx'],
-                         expected['cond_pc_adj_mc_idx'])
-        np.testing.assert_allclose(row['cond_pc_adj_mc_prob'],
-                                   expected['cond_pc_adj_mc_prob'])
+        self.assertEqual(row['cond_pc_adj_sim_idx'],
+                         expected['cond_pc_adj_sim_idx'])
+        np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
+                                   expected['cond_pc_adj_sim_prob'])
 
     def test_create_list_idx(self):
 
@@ -705,6 +714,34 @@ class TestConfig(unittest.TestCase):
 
         result = unit_vector((3, 4))
         expected = np.array([0.6, 0.8])
+        np.allclose(expected, result)
+
+    def test_unit_vector_by_bearing(self):
+
+        result = unit_vector_by_bearing(0)
+        expected = np.array([1, 0])
+        np.allclose(expected, result)
+
+        result = unit_vector_by_bearing(45.0)
+        expected = np.array([0.7071, 0.7071])
+        np.allclose(expected, result)
+
+    def test_angle_between_unit_vector(self):
+
+        result = angle_between_unit_vectors((1, 0), (0, 1))
+        expected = 90.0
+        np.allclose(expected, result)
+
+        result = angle_between_unit_vectors((1, 0), (1, 0))
+        expected = 0.0
+        np.allclose(expected, result)
+
+        result = angle_between_unit_vectors((1, 0), (-1, 0))
+        expected = 180.0
+        np.allclose(expected, result)
+
+        result = angle_between_unit_vectors((0.7071, 0.7071), (0, 1))
+        expected = 45.0
         np.allclose(expected, result)
 
 #     def test_line_interaction(self):

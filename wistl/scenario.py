@@ -7,19 +7,19 @@ import numpy as np
 from wistl.line import Line
 
 
-def create_event(event, cfg):
-    """ create dict of transmission network
+def create_scenario(event, cfg):
+    """ create dict of transmission line
     :param event: tuple of event_name, scale, and seed
     :param cfg: instance of config class
     :return: list of instance of Line class
     """
-    event = Event(cfg=cfg, event=event)
+    scenario = Scenario(cfg=cfg, event=event)
 
-    return [x for _, x in event.lines.items()]
+    return [x for _, x in scenario.lines.items()]
 
 
-class Event(object):
-    """ class for an event"""
+class Scenario(object):
+    """ class for a scenario"""
 
     def __init__(self, cfg=None, event=None, logger=None):
 
@@ -39,8 +39,7 @@ class Event(object):
         # self.set_line_interaction()
 
     def __repr__(self):
-        return 'Event(name={}, scale={:.2f}, no_lines={})'.format(
-            self.name, self.scale, self.no_lines)
+        return 'Scenario(id={}, no_lines={})'.format(self.id, self.no_lines)
 
     def __getstate__(self):
         d = self.__dict__.copy()

@@ -33,10 +33,9 @@ class TestTower(unittest.TestCase):
                           'no_sims': 2000,
                           'damage_states': cls.cfg.damage_states,
                           'scale': 1.0,
-                          'rnd_state': np.random.RandomState(1),
-                          'event_name': 'test1'})
+                          'rnd_state': np.random.RandomState(1)})
 
-        cls.tower = Tower(tower_id=0, **tower_dic)
+        cls.tower = Tower(nid=0, **tower_dic)
 
         cls.tower.wind['ratio'] = 1.082  # 1.05*np.exp(0.03)
 
@@ -51,7 +50,7 @@ class TestTower(unittest.TestCase):
         # cls.tower.file_wind = file_wind
 
         # compute prob_damage_isolation and prob_damage_adjacent
-        # cls.tower.compute_damage_prob_isolation()
+        # cls.tower.compute_dmg_isolated_isolation()
         #cls.tower.compute_pc_adj()
 
     def test_damage_states(self):
@@ -90,45 +89,37 @@ class TestTower(unittest.TestCase):
         # FIXME
         pass
 
-    def test_damage_prob(self):
+    def test_dmg_isolated(self):
 
         self.assertAlmostEqual(self.tower.collapse_capacity, 75.0)
-        self.assertAlmostEqual(self.tower.frag_arg, {'collapse': 0.03,
-                                                     'minor': 0.02})
-        self.assertAlmostEqual(self.tower.frag_scale, {'collapse': 1.05,
-                                                       'minor': 1.02})
+        self.assertAlmostEqual(self.tower.frag_arg, {'collapse': 0.03, 'minor': 0.02})
+        self.assertAlmostEqual(self.tower.frag_scale, {'collapse': 1.05, 'minor': 1.02})
 
         self.tower.wind['ratio'] = 1.02
-        self.tower._damage_prob = None
-        self.assertAlmostEqual(self.tower.damage_prob['minor'].values[0], 0.5,
-                               places=2)
+        self.tower._dmg = None
+        self.assertAlmostEqual(self.tower.dmg['minor'].values[0], 0.5, places=2)
 
         self.tower.wind['ratio'] = 1.02*np.exp(0.02)  # 1.04
-        self.tower._damage_prob = None
-        self.assertAlmostEqual(self.tower.damage_prob['minor'].values[0], 0.84,
-                               places=2)
+        self.tower._dmg = None
+        self.assertAlmostEqual(self.tower.dmg['minor'].values[0], 0.84, places=2)
 
         self.tower.wind['ratio'] = 1.02*np.exp(-0.02)  # 1.0
-        self.tower._damage_prob = None
-        self.assertAlmostEqual(self.tower.damage_prob['minor'].values[0], 0.16,
-                               places=2)
+        self.tower._dmg = None
+        self.assertAlmostEqual(self.tower.dmg['minor'].values[0], 0.16, places=2)
 
         self.tower.wind['ratio'] = 1.05
-        self.tower._damage_prob = None
-        self.assertAlmostEqual(self.tower.damage_prob['collapse'].values[0], 0.5,
-                               places=2)
+        self.tower._dmg = None
+        self.assertAlmostEqual(self.tower.dmg['collapse'].values[0], 0.5, places=2)
 
         self.tower.wind['ratio'] = 1.082  # 1.05*np.exp(0.03)
-        self.tower._damage_prob = None
-        self.assertAlmostEqual(self.tower.damage_prob['collapse'].values[0], 0.84,
-                               places=2)
+        self.tower._dmg = None
+        self.assertAlmostEqual(self.tower.dmg['collapse'].values[0], 0.84, places=2)
 
         self.tower.wind['ratio'] = 1.019  # 1.05*np.exp(-0.03)
-        self.tower._damage_prob = None
-        self.assertAlmostEqual(self.tower.damage_prob['collapse'].values[0], 0.16,
-                               places=2)
+        self.tower._dmg = None
+        self.assertAlmostEqual(self.tower.dmg['collapse'].values[0], 0.16, places=2)
 
-    def test_collapse_prob_adjacent(self):
+    def test_collapse_adj(self):
 
         cond_pc_adj = {11: 0.125, 12: 0.575, 14: 0.575, 15: 0.125}
         assertDeepAlmostEqual(self, dict(self.tower.cond_pc_adj), cond_pc_adj)
@@ -136,98 +127,101 @@ class TestTower(unittest.TestCase):
         self.tower.wind['ratio'] = 1.082  # 1.05*np.exp(0.03)
 
         self.assertEqual(self.tower.id_adj, [11, 12, 13, 14, 15])
-        self.tower._damage_prob = None
+        self.tower._dmg = None
 
         for id_abs, value in cond_pc_adj.items():
 
-            self.assertAlmostEqual(self.tower.collapse_prob_adj[id_abs][0],
+            self.assertAlmostEqual(self.tower.collapse_adj[id_abs][0],
                                    value * 0.84, places=2)
 
-    def test_damage_prob_mc(self):
+    def test_dmg_sim(self):
 
         # 1. determine damage state of tower due to wind
-        rnd_state = np.random.RandomState(1)
-        rv = rnd_state.uniform(size=(self.tower.no_sims, self.tower.no_time))  # 10, 1045
         self.tower.wind['ratio'] = 1.082  # 1.05*np.exp(0.03)
-        self.tower._damage_prob = None
-        self.tower._damage_prob_mc = None
-        self.assertAlmostEqual(self.tower.damage_prob['collapse'].values[0],
+        self.tower._dmg = None
+        self.tower._dmg_id_sim = None
+        self.tower._dmg_state_sim = None
+        self.tower._dmg_sim = None
+        self.assertAlmostEqual(self.tower.dmg['collapse'].values[0],
                                0.842, places=2)
-        self.assertAlmostEqual(self.tower.damage_prob['minor'].values[0],
+        self.assertAlmostEqual(self.tower.dmg['minor'].values[0],
                                0.998, places=2)
 
-        a = np.array([rv < self.tower.damage_prob[ds].values
-                      for ds in self.tower.damage_states]).sum(axis=0)
-
-        b = np.array([rv[:, :, np.newaxis] <
-                      self.tower.damage_prob.values])[0].sum(axis=2)
-
-        np.testing.assert_array_equal(a, b)
+        # a = np.array([rv < self.tower.dmg[ds].values
+        #               for ds in self.tower.damage_states]).sum(axis=0)
+        #
+        # b = np.array([rv[:, :, np.newaxis] <
+        #               self.tower.dmg.values])[0].sum(axis=2)
+        #
+        # np.testing.assert_array_equal(a, b)
 
         # comparing with analytical output
         for ids, ds in enumerate(self.tower.damage_states, 1):
-            prob_mc = (a >= ids).sum(axis=0) / self.tower.no_sims
-            isclose = np.isclose(prob_mc[0], self.tower.damage_prob[ds].values[0],
+            # PE not PD 1, 2 (collapse)
+            # prob_exceedance = (b >= ids).sum(axis=0) / self.tower.no_sims
+            isclose = np.isclose(self.tower.dmg_sim[ds][0],
+                                 self.tower.dmg[ds].values[0],
                                  rtol=RTOL, atol=ATOL)
             if not isclose:
                 self.logger.warning('PE of {}: {:.3f} vs {:.3f}'.format(
-                    ds, prob_mc[0], self.tower.damage_prob[ds].values[0]))
+                    ds, self.tower.dmg_sim[ds][0], self.tower.dmg[ds].values[0]))
 
-    def test_compare_damage_prob_vs_mc(self):
+    def test_compare_dmg_isolated_vs_sim(self):
 
-        # damage_prob vs. damage_prob_mc
-        prob_mc = 0
+        # dmg_isolated vs. dmg_sim
+        prob_sim = 0
         for ds in self.tower.damage_states[::-1]:
-            no = len(self.tower.damage_prob_mc[ds]['id_sim'][
-                 self.tower.damage_prob_mc[ds]['id_time'] == 1])
-            prob_mc += no / self.tower.no_sims
-            isclose = np.isclose(prob_mc,
-                                 self.tower.damage_prob[ds].values[1],
+            no = len(self.tower.dmg_id_sim[ds]['id_sim'][
+                 self.tower.dmg_id_sim[ds]['id_time'] == 1])
+            prob_sim += no / self.tower.no_sims
+            isclose = np.isclose(prob_sim,
+                                 self.tower.dmg[ds].values[1],
                                  rtol=RTOL, atol=ATOL)
             if not isclose:
                 self.logger.warning('PE of {}: {:.3f} vs {:.3f}'.format(
-                    ds, prob_mc, self.tower.damage_prob[ds].values[1]))
+                    ds, prob_sim, self.tower.dmg[ds].values[1]))
 
-    def test_collapse_prob_adj_mc(self):
+    def test_collapse_adj_sim(self):
 
-        # tower14 (lid: 13,
+        # tower14 (idl: 13,
         tower_dic = self.cfg.towers_by_line['LineA'][0].copy()
         path_event = os.path.join(self.cfg.path_wind_scenario_base, 'test1')
         tower_dic.update({'path_event': path_event,
                           'no_sims': 35000,
                           'damage_states': self.cfg.damage_states,
                           'scale': 1.0,
-                          'rnd_state': np.random.RandomState(1),
-                          'event_name': 'test1'})
+                          'rnd_state': np.random.RandomState(1)})
 
         tower = Tower(tower_id=0, **tower_dic)
 
         tower.wind['ratio'] = 1.082  # 1.05*np.exp(0.03)
-        tower._damage_prob = None
-        tower._damage_prob_mc = None
-        tower._collapse_prob_adj = None
-        tower._collapse_prob_adj_mc = None
+        tower._dmg = None
+        tower._dmg_state_sim = None
+        tower._dmg_sim = None
+        tower._dmg_id_sim = None
+        tower._collapse_adj = None
+        tower._collapse_adj_sim = None
 
         msg = 'P({}|{}) at {}: analytical {:.3f} vs. simulation {:.3f}'
 
         # comparing with analytical output
-        id_adj_removed = [x for x in tower.id_adj if x >=0]
-        id_adj_removed.remove(tower.lid)
+        id_adj_removed = [x for x in tower.id_adj if x >= 0]
+        id_adj_removed.remove(tower.idl)
 
-        for id_time, grouped in tower.collapse_prob_adj_mc.groupby('id_time'):
+        for id_time, grouped in tower.collapse_adj_sim.groupby('id_time'):
 
-            for lid in id_adj_removed:
+            for idl in id_adj_removed:
 
-                prob = grouped['id_adj'].apply(lambda x: lid in x).sum() / tower.no_sims
+                prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / tower.no_sims
                 try:
-                    assert np.isclose(tower.collapse_prob_adj[lid][id_time], prob,
+                    assert np.isclose(tower.collapse_adj[idl][id_time], prob,
                                       atol=ATOL, rtol=RTOL)
                 except AssertionError:
                     self.logger.warning(msg.format(
-                        lid,
+                        idl,
                         tower.name,
                         id_time,
-                        tower.collapse_prob_adj[lid][id_time],
+                        tower.collapse_adj[idl][id_time],
                         prob
                         ))
 
@@ -259,18 +253,18 @@ class TestTower(unittest.TestCase):
                 # print('{}:{}'.format(sim_result, value[ds]))
                 np.testing.assert_almost_equal(sim_result, value[ds],
                                                decimal=1)
-        tower.determine_damage_isolation_mc(rv)
+        tower.determine_damage_isolation_sim(rv)
 
-        wind_mc = {ds: dict() for ds in self.cfg.damage_states}
+        wind_sim = {ds: dict() for ds in self.cfg.damage_states}
         for i, ds in enumerate(self.cfg.damage_states, 1):
-            wind_mc[ds]['id_sim'], wind_mc[ds]['id_time'] = \
+            wind_sim[ds]['id_sim'], wind_sim[ds]['id_time'] = \
                 np.where(ds_wind == i)
-            np.testing.assert_almost_equal(wind_mc[ds]['id_sim'],
-                                          tower.damage_isolation_mc[ds]['id_sim'])
-            np.testing.assert_almost_equal(wind_mc[ds]['id_time'],
-                                          tower.damage_isolation_mc[ds]['id_time'])
-            # assertDeepAlmostEqual(self, tower.damage_mc[ds],
-            #                      wind_mc[ds])
+            np.testing.assert_almost_equal(wind_sim[ds]['id_sim'],
+                                          tower.damage_isolation_sim[ds]['id_sim'])
+            np.testing.assert_almost_equal(wind_sim[ds]['id_time'],
+                                          tower.damage_isolation_sim[ds]['id_time'])
+            # assertDeepAlmostEqual(self, tower.damage_sim[ds],
+            #                      wind_sim[ds])
 
         no_collapse_ignoring_time = np.sum(ds_wind == 2)
 
@@ -278,44 +272,44 @@ class TestTower(unittest.TestCase):
 
         rv2 = rnd_state.uniform(size=no_collapse_ignoring_time)
 
-        print('{}:{}'.format(tower.cond_pc_adj_mc['rel_idx'],
-                             tower.cond_pc_adj_mc['cum_prob']))
+        print('{}:{}'.format(tower.cond_pc_adj_sim['rel_idx'],
+                             tower.cond_pc_adj_sim['cum_prob']))
         expected_abs_list = (0, 2)
 
-        expected = [expected_abs_list if x <= tower.cond_pc_adj_mc['cum_prob']
+        expected = [expected_abs_list if x <= tower.cond_pc_adj_sim['cum_prob']
                     else None for x in rv2]
 
         ps_ = pd.Series(expected,
-                        index=tower.damage_isolation_mc['collapse'].index,
+                        index=tower.damage_isolation_sim['collapse'].index,
                         name='id_adj')
 
-        adj_mc = pd.concat([tower.damage_isolation_mc['collapse'], ps_],
+        adj_sim = pd.concat([tower.damage_isolation_sim['collapse'], ps_],
                            axis=1)
-        adj_mc = adj_mc[pd.notnull(ps_)]
+        adj_sim = adj_sim[pd.notnull(ps_)]
 
-        #print('{}'.format(pd.unique(tower.damage_isolation_mc['collapse']['id_sim'])))
+        #print('{}'.format(pd.unique(tower.damage_isolation_sim['collapse']['id_sim'])))
 
-        damage_adjacent_mc = dict()
-        for (id_time_, id_adj_), grouped in adj_mc.groupby(['id_time', 'id_adj']):
-            damage_adjacent_mc.setdefault(id_time_, {})[id_adj_] = \
+        damage_adjacent_sim = dict()
+        for (id_time_, id_adj_), grouped in adj_sim.groupby(['id_time', 'id_adj']):
+            damage_adjacent_sim.setdefault(id_time_, {})[id_adj_] = \
                 grouped.id_sim.tolist()
 
-        #print('{}'.format(damage_adjacent_mc[0][expected_abs_list]))
+        #print('{}'.format(damage_adjacent_sim[0][expected_abs_list]))
 
-        tower.compute_mc_adj(rv, seed)
+        tower.compute_sim_adj(rv, seed)
 
-        # print('{}'.format(tower.damage_mc['collapse']['abs_idx']))
-        # self.assertEqual(damage_adjacent_mc, tower.damage_mc['collapse']['id_adj'].tolist())
-        assertDeepAlmostEqual(self, tower.damage_isolation_mc, wind_mc)
-        # assertDeepAlmostEqual(self, tower.damage_adjacent_mc, damage_adjacent_mc)
+        # print('{}'.format(tower.damage_sim['collapse']['abs_idx']))
+        # self.assertEqual(damage_adjacent_sim, tower.damage_sim['collapse']['id_adj'].tolist())
+        assertDeepAlmostEqual(self, tower.damage_isolation_sim, wind_sim)
+        # assertDeepAlmostEqual(self, tower.damage_adjacent_sim, damage_adjacent_sim)
 
 
         for i in range(5):
             print('{}:{}'.format(
-                len(tower.damage_adjacent_mc[i][(0, 2)]),
-                len(damage_adjacent_mc[i][(0, 2)])))
+                len(tower.damage_adjacent_sim[i][(0, 2)]),
+                len(damage_adjacent_sim[i][(0, 2)])))
 
-        print('{}'.format(len(wind_mc['collapse']['id_time'])))
+        print('{}'.format(len(wind_sim['collapse']['id_time'])))
 """
 
 if __name__ == '__main__':

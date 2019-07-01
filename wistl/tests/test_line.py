@@ -18,7 +18,7 @@ RTOL = 0.05
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
-class TestLine(unittest.TestCase):
+class TestLine1(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -41,11 +41,10 @@ class TestLine(unittest.TestCase):
 
         # LineB
         dic_line = cls.cfg.lines['LineB'].copy()
-        cls.no_sims = 10000
+        cls.no_sims = 1000000
         dic_line.update({'no_sims': cls.no_sims,
                          'damage_states': cls.cfg.damage_states,
                          'non_collapse': cls.cfg.non_collapse,
-                         'event_name': event_name,
                          'scale': 1.0,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,
@@ -56,22 +55,21 @@ class TestLine(unittest.TestCase):
         for _, tower in cls.line.towers.items():
             tower.wind['ratio'] = 1.0
             tower._damage_prob = None
-            tower._damage_prob_mc = None
+            tower._damage_prob_sim = None
 
         cls.line.compute_damage_prob()
 
     def test_set_towers(self):
 
         self.assertEqual(self.line.no_towers, 22)
-        self.assertEqual(self.line.no_time, 1045)
+        self.assertEqual(self.line.no_time, 3)
 
         self.assertEqual(self.line.towers[0].name, 'T23')
-        self.assertEqual(self.line.towers[0].lid, 0)
-        self.assertEqual(self.line.towers[0].nid, 24)
-        self.assertEqual(self.line.towers[0].no_time, 1045)
+        self.assertEqual(self.line.towers[0].idl, 0)
+        self.assertEqual(self.line.towers[0].idn, 24)
+        self.assertEqual(self.line.towers[0].no_time, 3)
         self.assertEqual(self.line.towers[0].no_sims, self.no_sims)
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
-        self.assertEqual(self.line.towers[0].event_name, 'test1')
         self.assertAlmostEqual(self.line.towers[0].scale, 1.0)
 
     def test_compute_damage_prob(self):
@@ -91,11 +89,11 @@ class TestLine(unittest.TestCase):
         p0gp2 = p0c * 0.125
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
 
-        self.assertAlmostEqual(p0c, tower.damage_prob['collapse'][0], places=3)
-        self.assertAlmostEqual(p0gn2, tower.collapse_prob_adj[8][0], places=3)
-        self.assertAlmostEqual(p0gn1, tower.collapse_prob_adj[9][0], places=3)
-        self.assertAlmostEqual(p0gp1, tower.collapse_prob_adj[11][0], places=3)
-        self.assertAlmostEqual(p0gp2, tower.collapse_prob_adj[12][0], places=3)
+        self.assertAlmostEqual(p0c, tower.dmg['collapse'][0], places=3)
+        self.assertAlmostEqual(p0gn2, tower.collapse_adj[8][0], places=3)
+        self.assertAlmostEqual(p0gn1, tower.collapse_adj[9][0], places=3)
+        self.assertAlmostEqual(p0gp1, tower.collapse_adj[11][0], places=3)
+        self.assertAlmostEqual(p0gp2, tower.collapse_adj[12][0], places=3)
         self.assertAlmostEqual(
             pc, self.line.damage_prob['collapse']['T33'][0], places=3)
 
@@ -105,17 +103,16 @@ class TestLine(unittest.TestCase):
         p0m = 0.1610
         pm = min(p0m - p0c + pc, 1.0)
 
-        self.assertAlmostEqual(p0m, tower.damage_prob['minor'][0], places=3)
+        self.assertAlmostEqual(p0m, tower.dmg['minor'][0], places=3)
         self.assertAlmostEqual(
             pm, self.line.damage_prob['minor']['T33'][0], places=3)
 
-    """
-    def test_compute_damage_prob_mc(self):
+    def test_compute_damage_prob_sim(self):
 
-        self.line.compute_damage_prob_mc()
+        self.line.compute_damage_prob_sim()
 
-        # tower = self.line.towers[10]
-        # self.assertEqual(tower.name, 'T33')
+        tower = self.line.towers[10]
+        self.assertEqual(tower.name, 'T33')
 
         # T33 (in the middle)
         # o----o----x----o----o
@@ -127,13 +124,13 @@ class TestLine(unittest.TestCase):
         p0gp2 = p0c * 0.125
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
 
-        np.testing.assert_allclose(
-            pc, self.line.damage_prob_mc['collapse']['T33'][0],
-            atol=ATOL,
-            rtol=RTOL)
+        # np.testing.assert_allclose(
+        #     pc, self.line.damage_prob_sim['collapse']['T33'][0],
+        #     atol=ATOL,
+        #     rtol=RTOL)
 
         msg = 'P(C) Theory: {:.4f}, Simulation: {:.4f}, Analytical: {:.4f}'
-        self.logger.info(msg.format(pc, self.line.damage_prob_mc['collapse']['T33'][0],
+        self.logger.info(msg.format(pc, self.line.damage_prob_sim['collapse']['T33'][0],
               self.line.damage_prob['collapse']['T33'][0]))
 
         # T33 (in the middle)
@@ -142,13 +139,13 @@ class TestLine(unittest.TestCase):
         p0m = 0.1610
         pm = min(p0m - p0c + pc, 1.0)
 
-        np.testing.assert_allclose(
-            pm, self.line.damage_prob_mc['minor']['T33'][0],
-            atol=ATOL,
-            rtol=RTOL)
+        # np.testing.assert_allclose(
+        #     pm, self.line.damage_prob_sim['minor']['T33'][0],
+        #     atol=ATOL,
+        #     rtol=RTOL)
 
         msg = 'P(M) Theory: {:.4f}, Simulation: {:.4f}, Analytical: {:.4f}'
-        self.logger.info(msg.format(pm, self.line.damage_prob_mc['minor']['T33'][0],
+        self.logger.info(msg.format(pm, self.line.damage_prob_sim['minor']['T33'][0],
               self.line.damage_prob['minor']['T33'][0]))
     """
 
@@ -378,7 +375,7 @@ class TestLine(unittest.TestCase):
     #                 'AC-103': {1: 0.575},
     #                 'AC-104': {-1: 0.575}}
     #
-    #     expected_cond_pc_adj_mc = {
+    #     expected_cond_pc_adj_sim = {
     #         'AC-099': {'rel_idx': [(0, 1, 2), (0, 1)],
     #                    'cum_prob': np.array([0.125, 0.45 + 0.125])},
     #         'AC-100': {'rel_idx': [(0, 1), (-1, 0), (-1, 0, 1)],
@@ -396,11 +393,11 @@ class TestLine(unittest.TestCase):
     #
     #     for name, val in self.line1.towers.items():
     #         assertDeepAlmostEqual(self, val.cond_pc_adj, expected[name])
-    #         assertDeepAlmostEqual(self, val.cond_pc_adj_mc,
-    #                               expected_cond_pc_adj_mc[name])
+    #         assertDeepAlmostEqual(self, val.cond_pc_adj_sim,
+    #                               expected_cond_pc_adj_sim[name])
     #         # print("{}:{}".format(name, val.cond_pc_adj))
-    #         # print("{}:{}:{}".format(name, val.cond_pc_adj_mc,
-    #         # expected_cond_pc_adj_mc[name]))
+    #         # print("{}:{}:{}".format(name, val.cond_pc_adj_sim,
+    #         # expected_cond_pc_adj_sim[name]))
 
     """
     def test_compute_damage_probability_simulation_alt(self):
@@ -427,25 +424,25 @@ class TestLine(unittest.TestCase):
                           len(self.line1.time_index)), dtype=bool)
 
         for name, tower in self.line1.towers.items():
-            tower.determine_damage_isolation_mc(rv)
-            tower.determine_damage_adjacent_mc(seed)
+            tower.determine_damage_isolation_sim(rv)
+            tower.determine_damage_adjacent_sim(seed)
 
             # print('{}'.format(name))
             # print('{}, {}'.format(tower.prob_damage_isolation['collapse'].max(),
             #                   tower.prob_damage_isolation['minor'].max()))
-            # print ('{}'.format(tower.damage_mc['collapse'].head()))
-            # print ('{}'.format(tower.damage_mc['minor'].head()))
+            # print ('{}'.format(tower.damage_sim['collapse'].head()))
+            # print ('{}'.format(tower.damage_sim['minor'].head()))
 
-            valid_ = tower.damage_mc['collapse'][
-                tower.damage_mc['collapse'].id_adj.notnull()]
+            valid_ = tower.damage_sim['collapse'][
+                tower.damage_sim['collapse'].id_adj.notnull()]
 
-            # for key, grouped in tower.damage_mc['collapse'].groupby('id_time'):
+            # for key, grouped in tower.damage_sim['collapse'].groupby('id_time'):
             #
             #     np.testing.assert_almost_equal(len(grouped)/float(self.cfg.no_sims),
             #                                    tower.prob_damage_isolation.iloc[key, 'collapse'],
             #                                    decimal=1)
 
-            # for key, grouped in tower.damage_mc['collapse'].groupby('id_time'):
+            # for key, grouped in tower.damage_sim['collapse'].groupby('id_time'):
 
             for _, item in valid_.iterrows():
                 # print('{}'.format(item))
@@ -456,6 +453,59 @@ class TestLine(unittest.TestCase):
                     tf_ds[idx, item['id_sim'], item['id_time']] = True
 
     """
+
+
+class TestLine2(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        logging.basicConfig(level=logging.INFO)
+        cls.logger = logging.getLogger(__name__)
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger=cls.logger)
+
+        event_name = 'test1'
+        path_event = os.path.join(cls.cfg.path_wind_scenario_base,
+                                  event_name)
+        # cls.cfg.no_sims = 10000
+        # cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)
+        # cls.all_towers.loc[1, 'Function'] = 'Suspension'
+        # populate_df_towers(cls.all_towers, cls.cfg)
+        #
+        # cls.all_lines = read_shape_file(cls.cfg.file_shape_line)
+        # populate_df_lines(cls.all_lines)
+
+        # LineB
+        dic_line = cls.cfg.lines['LineB'].copy()
+        cls.no_sims = 1000000
+        dic_line.update({'no_sims': cls.no_sims,
+                         'damage_states': cls.cfg.damage_states,
+                         'non_collapse': cls.cfg.non_collapse,
+                         'event_name': event_name,
+                         'scale': 1.0,
+                         'rnd_state': np.random.RandomState(0),
+                         'path_event': path_event,
+                         'dic_towers': cls.cfg.towers_by_line['LineB']})
+
+        cls.line = Line(name='LineB', **dic_line)
+
+        for _, tower in cls.line.towers.items():
+            tower.wind['ratio'] = 1.0
+            tower._damage_prob = None
+            tower._damage_prob_sim = None
+
+        cls.line.compute_damage_prob()
+
+    def test_compute_damage_prob_sim_no_cascading(self):
+        pass
+
+    def test_write_hdf5(self):
+        pass
+
+    def test_compute_damage_per_line(self):
+        pass
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

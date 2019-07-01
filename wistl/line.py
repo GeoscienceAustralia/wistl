@@ -23,7 +23,6 @@ class Line(object):
                   'no_sims',
                   'damage_states',
                   'non_collapse',
-                  'event_name',
                   'scale',
                   'event_id',
                   'rnd_state',
@@ -47,7 +46,6 @@ class Line(object):
         self.damage_states = None
         self.non_collapse = None
         self.path_event = None
-        self.event_name = None
         self.scale = None
         self.rnd_state = None
 
@@ -61,12 +59,12 @@ class Line(object):
         self.damage_prob = None
 
         # simulation method
-        self.damage_prob_mc = None
+        self.damage_prob_sim = None
         self.est_no_damage = None
         self.prob_no_damage = None
 
         # non cascading collapse
-        self.damage_prob_mc_no_cascading = None
+        self.damage_prob_sim_no_cascading = None
         self.est_no_damage_no_cascading = None
         self.prob_no_damage_no_cascading = None
 
@@ -83,11 +81,11 @@ class Line(object):
         self._time_index = None
         self._no_time = None
 
-        self._set_towers(kwargs['dic_towers'])
+        self._set_towers(kwargs['dic_towers'].copy())
 
     def __repr__(self):
-        return 'Line(name={}, no_towers={}, event_name={}, scale={:.2f})'.format(
-            self.name, self.no_towers, self.event_name, self.scale)
+        return 'Line(name={}, no_towers={}, event_id={})'.format(
+            self.name, self.no_towers, self.event_id)
 
     def __getstate__(self):
         d = self.__dict__.copy()
@@ -110,12 +108,11 @@ class Line(object):
 
             value.update({'no_sims': self.no_sims,
                           'damage_states': self.damage_states,
-                          'event_name': self.event_name,
                           'scale': self.scale,
                           'rnd_state': self.rnd_state,
                           'path_event': self.path_event})
 
-            self.towers[value['lid']] = Tower(nid=key, **value)
+            self.towers[value['idl']] = Tower(idn=key, **value)
 
     @property
     def time_index(self):
@@ -150,11 +147,10 @@ class Line(object):
         # prob of collapse
         for _, tower in self.towers.items():
 
-            for lid, prob in tower.collapse_prob_adj.items():
-                pc_adj_agg[tower.lid, lid, :] = prob
+            for idl, prob in tower.collapse_adj.items():
+                pc_adj_agg[tower.idl, idl, :] = prob
 
-            pc_adj_agg[tower.lid, tower.lid, :] = \
-                tower.damage_prob['collapse'].values
+            pc_adj_agg[tower.idl, tower.idl, :] = tower.dmg['collapse'].values
 
         # pc_collapse.shape == (no_tower, no_time)
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
@@ -169,20 +165,20 @@ class Line(object):
             temp = np.zeros_like(pc_collapse)
             for _, tower in self.towers.items():
                 # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                value = tower.damage_prob[ds].values \
-                        - tower.damage_prob['collapse'].values \
-                        + pc_collapse[tower.lid, :]
-                temp[tower.lid, :] = np.where(value > 1.0, [1.0], value)
+                value = tower.dmg[ds].values \
+                        - tower.dmg['collapse'].values \
+                        + pc_collapse[tower.idl, :]
+                temp[tower.idl, :] = np.where(value > 1.0, [1.0], value)
 
             self.damage_prob[ds] = pd.DataFrame(
                 temp.T,
                 columns=self.names,
                 index=self.time_index)
 
-    def compute_damage_prob_mc(self):
+    def compute_damage_prob_sim(self):
 
         # perfect correlation within a single line
-        self.damage_prob_mc = {}
+        self.damage_prob_sim = {}
 
         tf_sim = {ds: None for ds in self.damage_states}
 
@@ -192,9 +188,9 @@ class Line(object):
 
         # collapse by adjacent towers
         for _, tower in self.towers.items():
-            for id_adj, grouped in tower.collapse_prob_adj_mc.groupby('id_adj'):
-                for lid in id_adj:
-                    tf_ds[lid,
+            for id_adj, grouped in tower.collapse_adj_sim.groupby('id_adj'):
+                for idl in id_adj:
+                    tf_ds[idl,
                           grouped['id_sim'].values,
                           grouped['id_time'].values] = True
 
@@ -203,12 +199,12 @@ class Line(object):
 
             for _, tower in self.towers.items():
 
-                tf_ds[tower.lid,
-                      tower.damage_prob_mc[ds]['id_sim'].values,
-                      tower.damage_prob_mc[ds]['id_time'].values] = True
+                tf_ds[tower.idl,
+                      tower.dmg_id_sim[ds]['id_sim'].values,
+                      tower.dmg_id_sim[ds]['id_time'].values] = True
 
             # PE(DS)
-            self.damage_prob_mc[ds] = pd.DataFrame(
+            self.damage_prob_sim[ds] = pd.DataFrame(
                 tf_ds.sum(axis=1).T / self.no_sims,
                 columns=self.names,
                 index=self.time_index)
@@ -217,9 +213,9 @@ class Line(object):
 
         self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
-    def compute_damage_prob_mc_no_cascading(self):
+    def compute_damage_prob_sim_no_cascading(self):
 
-        self.damage_prob_mc_no_cascading = {}
+        self.damage_prob_sim_no_cascading = {}
 
         tf_sim = {ds: None for ds in self.damage_states}
 
@@ -231,12 +227,12 @@ class Line(object):
 
             for _, tower in self.towers.items():
 
-                tf_ds[tower.lid,
-                      tower.damage_prob_mc[ds]['id_sim'].values,
-                      tower.damage_prob_mc[ds]['id_time'].values] = True
+                tf_ds[tower.idl,
+                      tower.dmg_id_sim[ds]['id_sim'].values,
+                      tower.dmg_id_sim[ds]['id_time'].values] = True
 
             # PE(DS)
-            self.damage_prob_mc_no_cascading[ds] = pd.DataFrame(
+            self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(
                 tf_ds.sum(axis=1).T / self.no_sims,
                 columns=self.names,
                 index=self.time_index)
@@ -298,13 +294,13 @@ class Line(object):
 
     def write_hdf5(self, output_file):
 
-        items = ['damage_prob', 'damage_prob_mc', 'damage_prob_mc_no_cascading',
+        items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
                  'est_no_damage', 'est_no_damage_no_cascading',
                  'prob_no_damage', 'prob_no_damage_no_cascading']
 
         columns_by_item = {'damage_prob': self.names,
-                           'damage_prob_mc': self.names,
-                           'damage_prob_mc_no_cascading': self.names,
+                           'damage_prob_sim': self.names,
+                           'damage_prob_sim_no_cascading': self.names,
                            'est_no_damage': ['mean', 'std'],
                            'est_no_damage_no_cascading': ['mean', 'std'],
                            'prob_no_damage': range(self.no_towers + 1),
@@ -349,16 +345,16 @@ def compute_damage_per_line(line, cfg):
     line.compute_damage_prob()
 
     # perfect correlation within a single line
-    line.compute_damage_prob_mc()
+    line.compute_damage_prob_sim()
 
     if not cfg.options['skip_no_cascading_collapse']:
-        line.compute_damage_prob_mc_no_cascading()
+        line.compute_damage_prob_sim_no_cascading()
 
     # compare simulation against analytical
     msg = '{}: {:d} difference out of {:d}'
     for ds in cfg.damage_states:
 
-        idx = np.where(~np.isclose(line.damage_prob_mc[ds],
+        idx = np.where(~np.isclose(line.damage_prob_sim[ds],
                                    line.damage_prob[ds],
                                    atol=ATOL,
                                    rtol=RTOL))
@@ -412,11 +408,11 @@ def compute_damage_per_line(line, cfg):
         for _, tower in self.towers.items():
 
             # determine damage state by line interaction
-            # damage_interaction_mc['id_sim', 'id_time', 'no_collapse']
+            # damage_interaction_sim['id_sim', 'id_time', 'no_collapse']
             tower.determine_damage_by_interaction_at_tower_level(seed)
 
             for id_time, grouped \
-                    in tower.damage_interaction_mc.groupby('id_time'):
+                    in tower.damage_interaction_sim.groupby('id_time'):
 
                 wind_vector = unit_vector_by_bearing(
                     tower.wind['Bearing'][id_time])

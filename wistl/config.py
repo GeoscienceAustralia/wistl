@@ -63,8 +63,7 @@ class Config(object):
         self.file_line_interaction_metadata = None
 
         self.events = []  # list of tuples of event_name and scale
-        self.wind_file_head = None
-        self.wind_file_tail = None
+        self.wind_file_format = None
         self.event_id_format = None
         self.line_interaction = {}
 
@@ -493,8 +492,6 @@ class Config(object):
 
         # format
         self.wind_file_format = conf.get('format', 'wind_scenario') 
-        # self.wind_file_head = file_format.split('%')[0]
-        # self.wind_file_tail = file_format.split(')')[-1]
         self.event_id_format = conf.get('format', 'event_id')
 
         # input
@@ -513,31 +510,24 @@ class Config(object):
 
     def read_wind_scenario(self, conf):
 
-        seed = []
         if self.options['use_random_seed']:
+            seed = []
             for event_name in conf.options('random_seed'):
                 for x in conf.get('random_seed', event_name).split(','):
                     try:
                         seed.append(int(x))
                     except ValueError:
                         seed.append(0)
-
-            for i, event_name in enumerate(conf.options('wind_scenario')):
-                for x in conf.get('wind_scenario', event_name).split(','):
-                    try:
-                        self.events.append((event_name, float(x), seed[i]))
-                    except ValueError:
-                        msg = 'Invalid wind_scenario input'
-                        self.logger.error(msg)
-
         else:
-            for i, event_name in enumerate(conf.options('wind_scenario')):
-                for x in conf.get('wind_scenario', event_name).split(','):
-                    try:
-                        self.events.append((event_name, float(x), i))
-                    except ValueError:
-                        msg = 'Invalid wind_scenario input'
-                        self.logger.error(msg)
+            seed = range(conf.options('wind_scenario'))
+
+        for i, event_name in enumerate(conf.options('wind_scenario')):
+            for x in conf.get('wind_scenario', event_name).split(','):
+                try:
+                    self.events.append((event_name, float(x), seed[i]))
+                except ValueError:
+                    msg = 'Invalid wind_scenario input'
+                    self.logger.error(msg)
 
     def process_config(self):
 
@@ -561,10 +551,10 @@ class Config(object):
                 # cond_pc, max_no_adj_towers
                 tower.update(self.assign_cond_collapse_prob(tower=tower))
 
-                # lid, id_adj
+                # idl, id_adj
                 tower.update(self.assign_id_adj_towers(tower=tower))
 
-                # cond_pc_adj, cond_pc_adj_mc_idx, cond_pc_adj_mc_prob
+                # cond_pc_adj, cond_pc_adj_sim_idx, cond_pc_adj_sim_prob
                 tower.update(assign_cond_pc_adj(tower=tower))
 
     def sort_by_location(self, line_name, line):
@@ -749,14 +739,14 @@ class Config(object):
         """
 
         names = self.lines[tower['lineroute']]['names']
-        lid = names.index(tower['name'])  # tower id in the line
+        idl = names.index(tower['name'])  # tower id in the line
         max_no_towers = self.no_towers_by_line[tower['lineroute']]
 
-        list_left = create_list_idx(lid, tower['max_no_adj_towers'],
+        list_left = create_list_idx(idl, tower['max_no_adj_towers'],
                                     max_no_towers, -1)
-        list_right = create_list_idx(lid, tower['max_no_adj_towers'],
+        list_right = create_list_idx(idl, tower['max_no_adj_towers'],
                                      max_no_towers, 1)
-        id_adj = list_left[::-1] + [lid] + list_right
+        id_adj = list_left[::-1] + [idl] + list_right
 
         # assign -1 to strainer tower
         for i, idx in enumerate(id_adj):
@@ -768,7 +758,7 @@ class Config(object):
                 if flag_strainer:
                     id_adj[i] = -1
 
-        return {'id_adj': id_adj, 'lid': lid}
+        return {'id_adj': id_adj, 'idl': idl}
 
 
 def assign_cond_pc_adj(tower):
@@ -820,8 +810,8 @@ def assign_cond_pc_adj(tower):
             cond_pc_adj[idx] += value
 
     return {'cond_pc_adj': cond_pc_adj,
-            'cond_pc_adj_mc_idx': abs_idx,
-            'cond_pc_adj_mc_prob': cum_prob}
+            'cond_pc_adj_sim_idx': abs_idx,
+            'cond_pc_adj_sim_prob': cum_prob}
 
 
 def create_list_idx(idx, no_towers, max_no_towers, flag_direction):
@@ -973,7 +963,7 @@ def set_line_interaction(self):
             if id_on_target_line:
                 tower.id_on_target_line = id_on_target_line
 
-
+# TODO
 def get_cond_prob_line_interaction(self):
     """ get dict of conditional collapse probabilities
     :return: cond_prob_line
@@ -990,9 +980,9 @@ def get_cond_prob_line_interaction(self):
         tf_array = (df_prob[att + '_lower'] <= self.ps_tower[att]) & \
                    (df_prob[att + '_upper'] > self.ps_tower[att])
 
-    self.cond_pc_line_mc['no_collapse'] = \
+    self.cond_pc_line_sim['no_collapse'] = \
         df_prob.loc[tf_array, 'no_collapse'].tolist()
-    self.cond_pc_line_mc['cum_prob'] = np.cumsum(
+    self.cond_pc_line_sim['cum_prob'] = np.cumsum(
         df_prob.loc[tf_array, 'probability']).tolist()
 
 
@@ -1051,16 +1041,7 @@ def angle_between_unit_vectors(v1, v2):
     :param v2: vector 2
     :return: the angle in degree between vectors 'v1' and 'v2'
 
-            >>> angle_between_unit_vectors((1, 0), (0, 1))
-            90.0
-            >>> angle_between_unit_vectors((1, 0), (1, 0))
-            0.0
-            >>> angle_between_unit_vectors((1, 0), (-1, 0))
-            180.0
-
     """
-    #     v1_u = unit_vector(v1)
-    #     v2_u = unit_vector(v2)
     return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
 
 

@@ -38,9 +38,8 @@ class TestTransmission(unittest.TestCase):
     def h5file_full(cls, line, str_head):
 
         h5file = os.path.join(
-            cls.cfg.path_output,
-            damage_line.event_id_scale,
-            '{}_{}.h5'.format(str_head, damage_line.name_output))
+            cls.cfg.path_output, ine.event_id_scale,
+            '{}_{}.h5'.format(str_head, line.name_output))
 
         return h5file
 
@@ -162,8 +161,8 @@ class TestTransmission(unittest.TestCase):
     """
     def compare_analytical_vs_simulation_for_collapse(self, tower):
 
-        for key, grouped in tower.damage_prob_mc['collapse'].groupby('id_time'):
-            result = tower.damage_prob.ix[key, 'collapse']
+        for key, grouped in tower.dmg_id_sim['collapse'].groupby('id_time'):
+            result = tower.dmg.ix[key, 'collapse']
             expected = len(grouped)/float(self.cfg.no_sims)
             np.testing.assert_almost_equal(result, expected, decimal=1)
 

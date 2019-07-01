@@ -2,7 +2,7 @@ __author__ = 'sudipta'
 import os
 import logging
 import unittest
-from wistl.event import create_event
+from wistl.scenario import create_scenario
 from wistl.config import Config
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -19,7 +19,7 @@ class EventTest(unittest.TestCase):
 
         assert os.path.exists(file_cfg), 'config file does not exist'
         cls.cfg = Config(file_cfg, logger)
-        cls.event = create_event(cfg=cls.cfg,
+        cls.event = create_scenario(cfg=cls.cfg,
                                  event=cls.cfg.events[0])
 
     def test_time_index(self):
@@ -29,6 +29,14 @@ class EventTest(unittest.TestCase):
 
     def test_number_of_damaged_networks(self):
         self.assertEqual(len(self.event), len(self.cfg.lines))
+
+    def test_no_lines(self):
+        pass
+
+    def test_path_output(self):
+        pass
+
+
 
     # def test_damaged_network_type(self):
     #     from wistl.transmission_network import TransmissionNetwork
