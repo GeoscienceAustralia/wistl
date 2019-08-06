@@ -83,6 +83,16 @@ class TestConfig(unittest.TestCase):
         result = split_str(str_, ':')
         self.assertEqual(result, expected)
 
+        str_ = 'bb: 0.0'
+        expected = ('bb', 0.0)
+        result = split_str(str_, ':')
+        self.assertEqual(result, expected)
+
+        str_ = 'cc: dd'
+        expected = ('cc', 'dd')
+        result = split_str(str_, ':')
+        self.assertEqual(result, expected)
+
     def test_design_value(self):
 
         expected = {'LineA': {'terrain_cat': 2,
@@ -697,6 +707,12 @@ class TestConfig(unittest.TestCase):
         # FIXME
         pass
 
+    def test_read_wind_scenario(self):
+
+        self.assertEqual(self.cfg.events[0], ('test1', 3.0, 1))
+        self.assertEqual(self.cfg.events[1], ('test2', 2.5, 2))
+        self.assertEqual(self.cfg.events[2], ('test2', 3.5, 3))
+
     def test_find_id_nearest_pt(self):
 
         pt_coord = [0, 0]
@@ -786,6 +802,23 @@ class TestConfig(unittest.TestCase):
 #         expected = pd.read_csv(file_, skipinitialspace=1)
 #
 #         pd.util.testing.assert_frame_equal(expected, cfg.prob_line_interaction)
+
+class TestConfig1(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        logging.basicConfig(level=logging.INFO)
+        cls.logger = logging.getLogger(__name__)
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test1.cfg'), cls.logger)
+
+    def test_read_wind_scenario(self):
+
+        self.assertEqual(self.cfg.events[0], ('test1', 3.0, 0))
+        self.assertEqual(self.cfg.events[1], ('test2', 2.5, 1))
+        self.assertEqual(self.cfg.events[2], ('test2', 3.5, 2))
+
 
 if __name__ == '__main__':
     # suite = unittest.TestSuite()

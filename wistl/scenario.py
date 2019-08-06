@@ -7,17 +7,6 @@ import numpy as np
 from wistl.line import Line
 
 
-def create_scenario(event, cfg):
-    """ create dict of transmission line
-    :param event: tuple of event_name, scale, and seed
-    :param cfg: instance of config class
-    :return: list of instance of Line class
-    """
-    scenario = Scenario(cfg=cfg, event=event)
-
-    return [x for _, x in scenario.lines.items()]
-
-
 class Scenario(object):
     """ class for a scenario"""
 
@@ -33,6 +22,7 @@ class Scenario(object):
         self._id = None
         self._path_event = None
         self._path_output = None
+        self._list_lines = None
         self._lines = None
         self._no_lines = None
 
@@ -72,9 +62,8 @@ class Scenario(object):
                 dic.update({'no_sims': self.cfg.no_sims,
                             'damage_states': self.cfg.damage_states,
                             'non_collapse': self.cfg.non_collapse,
-                            'event_name': self.name,
-                            'scale': self.scale,
                             'event_id': self.id,
+                            'scale': self.scale,
                             'rnd_state': np.random.RandomState(seed=self.seed + i),
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
@@ -82,6 +71,12 @@ class Scenario(object):
                 self._lines[name] = Line(name=name, **dic)
 
         return self._lines
+
+    @property
+    def list_lines(self):
+        if self._list_lines is None:
+            self._list_lines = [x for _, x in self.lines.items()]
+        return self._list_lines
 
     @property
     def no_lines(self):
@@ -99,9 +94,7 @@ class Scenario(object):
     @property
     def path_output(self):
         if self._path_output is None:
-            event_scale = self.cfg.event_id_format.format(
-                event_name=self.name, scale=self.scale)
-            self._path_output = os.path.join(self.cfg.path_output, event_scale)
+            self._path_output = os.path.join(self.cfg.path_output, self.id)
 
             if not os.path.exists(self._path_output) and self.cfg.options['save_output']:
                 os.makedirs(self._path_output)

@@ -13,8 +13,8 @@ from wistl.tests.test_config import assertDeepAlmostEqual
 # from wistl.transmission_network import read_shape_file, populate_df_lines, \
 #     populate_df_towers
 
-ATOL = 0.001
-RTOL = 0.05
+ATOL = 0.0005
+RTOL = 0.01
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -29,6 +29,7 @@ class TestLine1(unittest.TestCase):
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger=cls.logger)
 
         event_name = 'test1'
+        event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_scenario_base,
                                   event_name)
         # cls.cfg.no_sims = 10000
@@ -45,7 +46,8 @@ class TestLine1(unittest.TestCase):
         dic_line.update({'no_sims': cls.no_sims,
                          'damage_states': cls.cfg.damage_states,
                          'non_collapse': cls.cfg.non_collapse,
-                         'scale': 1.0,
+                         'event_id': cls.cfg.event_id_format.format(event_name=event_name, scale=event_scale),
+                         'scale': event_scale,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,
                          'dic_towers': cls.cfg.towers_by_line['LineB']})
@@ -70,7 +72,7 @@ class TestLine1(unittest.TestCase):
         self.assertEqual(self.line.towers[0].no_time, 3)
         self.assertEqual(self.line.towers[0].no_sims, self.no_sims)
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
-        self.assertAlmostEqual(self.line.towers[0].scale, 1.0)
+        self.assertAlmostEqual(self.line.towers[0].scale, 3.0)
 
     def test_compute_damage_prob(self):
 
@@ -90,6 +92,7 @@ class TestLine1(unittest.TestCase):
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
 
         self.assertAlmostEqual(p0c, tower.dmg['collapse'][0], places=3)
+        self.assertAlmostEqual(p0c, tower.dmg_sim['collapse'][0], places=3)
         self.assertAlmostEqual(p0gn2, tower.collapse_adj[8][0], places=3)
         self.assertAlmostEqual(p0gn1, tower.collapse_adj[9][0], places=3)
         self.assertAlmostEqual(p0gp1, tower.collapse_adj[11][0], places=3)
@@ -104,8 +107,10 @@ class TestLine1(unittest.TestCase):
         pm = min(p0m - p0c + pc, 1.0)
 
         self.assertAlmostEqual(p0m, tower.dmg['minor'][0], places=3)
+        self.assertAlmostEqual(p0m, tower.dmg_sim['minor'][0], places=3)
         self.assertAlmostEqual(
             pm, self.line.damage_prob['minor']['T33'][0], places=3)
+
 
     def test_compute_damage_prob_sim(self):
 
@@ -124,14 +129,16 @@ class TestLine1(unittest.TestCase):
         p0gp2 = p0c * 0.125
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
 
-        # np.testing.assert_allclose(
-        #     pc, self.line.damage_prob_sim['collapse']['T33'][0],
-        #     atol=ATOL,
-        #     rtol=RTOL)
-
-        msg = 'P(C) Theory: {:.4f}, Simulation: {:.4f}, Analytical: {:.4f}'
-        self.logger.info(msg.format(pc, self.line.damage_prob_sim['collapse']['T33'][0],
-              self.line.damage_prob['collapse']['T33'][0]))
+        try:
+            np.testing.assert_allclose(
+                pc, self.line.damage_prob_sim['collapse']['T33'][0], atol=ATOL, rtol=RTOL)
+        except AssertionError:
+            msg = 'P(C) Theory: {:.4f}, Analytical: {:.4f}, Simulation: {:.4f}'
+            self.logger.warning(
+                msg.format(pc,
+                           self.line.damage_prob['collapse']['T33'][0],
+                           self.line.damage_prob_sim['collapse']['T33'][0],
+                           ))
 
         # T33 (in the middle)
         # o----o----x----o----o
@@ -139,14 +146,17 @@ class TestLine1(unittest.TestCase):
         p0m = 0.1610
         pm = min(p0m - p0c + pc, 1.0)
 
-        # np.testing.assert_allclose(
-        #     pm, self.line.damage_prob_sim['minor']['T33'][0],
-        #     atol=ATOL,
-        #     rtol=RTOL)
-
-        msg = 'P(M) Theory: {:.4f}, Simulation: {:.4f}, Analytical: {:.4f}'
-        self.logger.info(msg.format(pm, self.line.damage_prob_sim['minor']['T33'][0],
-              self.line.damage_prob['minor']['T33'][0]))
+        try:
+            np.testing.assert_allclose(
+                pm, self.line.damage_prob_sim['minor']['T33'][0], atol=ATOL, rtol=RTOL)
+        except AssertionError:
+            msg = 'P(M) Theory: {:.4f}, Simulation: {:.4f}, Analytical: {:.4f}'
+            self.logger.warning(
+                msg.format(
+                    pm,
+                    self.line.damage_prob['minor']['T33'][0],
+                    self.line.damage_prob_sim['minor']['T33'][0],
+                    ))
     """
 
     def test_compute_stats(self):

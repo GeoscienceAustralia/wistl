@@ -20,7 +20,7 @@ class Config(object):
     class to hold all configuration variables.
     """
     option_keys = ['run_parallel', 'save_output', 'save_figure',
-                   'use_random_seed', 'run_analytical', 'run_simulation',
+                   'run_analytical', 'run_simulation',
                    'skip_no_cascading_collapse', 'adjust_design_by_topography',
                    'apply_line_interaction']
 
@@ -510,21 +510,28 @@ class Config(object):
 
     def read_wind_scenario(self, conf):
 
-        if self.options['use_random_seed']:
-            seed = []
+        seeds = None
+        if conf.has_section('random_seed'):
+            seeds = []
             for event_name in conf.options('random_seed'):
                 for x in conf.get('random_seed', event_name).split(','):
                     try:
-                        seed.append(int(x))
+                        seeds.append(int(x))
                     except ValueError:
-                        seed.append(0)
-        else:
-            seed = range(conf.options('wind_scenario'))
+                        msg = 'Invalid random_seed input'
+                        self.logger.error(msg)
 
+        k = -1
         for i, event_name in enumerate(conf.options('wind_scenario')):
             for x in conf.get('wind_scenario', event_name).split(','):
+                k += 1
+                if seeds:
+                    seed = seeds[k]
+                else:
+                    seed = k
+
                 try:
-                    self.events.append((event_name, float(x), seed[i]))
+                    self.events.append((event_name, float(x), seed))
                 except ValueError:
                     msg = 'Invalid wind_scenario input'
                     self.logger.error(msg)
@@ -859,29 +866,27 @@ def read_shape_file(file_shape):
     :param file_shape: Esri shape file
     :return data_frame: pandas.DataFrame
     """
-
     try:
-        sf = shapefile.Reader(file_shape)
+        with shapefile.Reader(file_shape) as sf:
+            shapes = sf.shapes()
+            records = [x[:] for x in sf.records()]
+            fields = [x[0].lower() for x in sf.fields[1:]]
+            fields_type = [x[1] for x in sf.fields[1:]]
     except shapefile.ShapefileException:
         msg = '{} is not a valid shapefile'.format(file_shape)
         raise shapefile.ShapefileException(msg)
     else:
-        shapes = sf.shapes()
-        records = sf.records()
-        fields = [x[0].lower() for x in sf.fields[1:]]
-        fields_type = [x[1] for x in sf.fields[1:]]
+        dic_type = {'C': object, 'F': np.float64, 'N': np.int64}
+        df = pd.DataFrame(records, columns=fields)
 
-    dic_type = {'C': object, 'F': np.float64, 'N': np.int64}
-    df = pd.DataFrame(records, columns=fields)
+        for name, _type in zip(df.columns, fields_type):
+            if df[name].dtype != dic_type[_type]:
+                df[name] = df[name].astype(dic_type[_type])
 
-    for name, _type in zip(df.columns, fields_type):
-        if df[name].dtype != dic_type[_type]:
-            df[name] = df[name].astype(dic_type[_type])
-
-    if 'shapes' in fields:
-        raise KeyError('shapes is already in the fields')
-    else:
-        df['shapes'] = shapes
+        if 'shapes' in fields:
+            raise KeyError('shapes is already in the fields')
+        else:
+            df['shapes'] = shapes
 
     return df
 
@@ -1043,8 +1048,3 @@ def angle_between_unit_vectors(v1, v2):
 
     """
     return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
-
-
-if __name__ == '__main__':
-    BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-    cfg = Config(os.path.join(BASE_DIR, 'tests/test.cfg'))
