@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import os
+import bisect
 import sys
 import logging
 import math
+import yaml
 import numpy as np
 import pandas as pd
 import configparser
@@ -11,30 +13,36 @@ import shapefile
 from collections import defaultdict
 from shapely import geometry
 from geopy.distance import geodesic
+from scipy import stats
 
 from wistl.constants import K_FACTOR, NO_CIRCUIT
 
+OPTIONS = ['run_parallel', 'save_output', 'save_figure',
+           'run_analytical', 'run_simulation', 'use_random_seed',
+           'skip_no_cascading_collapse', 'adjust_design_by_topography',
+           'apply_line_interaction']
+DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
+GIS_DATA = ['shape_tower', 'shape_line']
+FORMAT = ['wind_file', 'event_id']
+INPUT_FILES = ['design_value', 'fragility_metadata', 'drag_height_by_type',
+              'cond_collapse_prob_metadata',
+              'terrain_multiplier', 'topographic_multiplier',
+              'design_adjustment_factor_by_topography',
+              'line_interaction_metadata']
 
+FRAGILITY_ATT = ['section', 'limit_states', 'form', 'param1', 'param2']
+
+
+# scenario -> damage scenario
+# event -> wind event
 class Config(object):
     """
     class to hold all configuration variables.
     """
-    option_keys = ['run_parallel', 'save_output', 'save_figure',
-                   'run_analytical', 'run_simulation',
-                   'skip_no_cascading_collapse', 'adjust_design_by_topography',
-                   'apply_line_interaction']
-
-    directory_keys = ['gis_data', 'wind_scenario_base', 'input', 'output']
-
-    input_keys = ['design_value', 'fragility_metadata', 'drag_height_by_type',
-                  'cond_collapse_prob_metadata',
-                  'terrain_multiplier', 'topographic_multiplier',
-                  'design_adjustment_factor_by_topography',
-                  'line_interaction_metadata']
 
     def __init__(self, file_cfg=None, logger=None):
 
-        self.file_cfg = file_cfg
+        self.file_cfg = os.path.abspath(file_cfg)
         self.logger = logger or logging.getLogger(__name__)
 
         self.options = {}
@@ -42,30 +50,17 @@ class Config(object):
         self.no_sims = None
         self.strainer = []
         self.selected_lines = []
-        self.abs_tol = None
-        self.rel_tol = None
 
-        self.path_gis_data = None
-        self.path_input = None
-        self.path_output = None
-        self.path_wind_scenario_base = None
+        #for item in DIRECTORIES:
+        #    setattr(self, f'path_{item}', None)
 
-        self.file_shape_line = None
-        self.file_shape_tower = None
-        self.file_design_value = None
-        self.file_fragility_metadata = None
-        self.file_cond_collapse_prob_metadata = None
-        self.file_terrain_multiplier = None
-        self.file_drag_height_by_type = None
-        # if only adjust_design_by_topography
-        self.file_topographic_multiplier = None
-        self.file_design_adjustment_factor_by_topography = None
-        self.file_line_interaction_metadata = None
+        #for item in INPUT_FILES + GIS_DATA:
+        #    setattr(self, f'file_{item}', None)
 
         self.events = []  # list of tuples of event_name and scale
-        self.wind_file_format = None
-        self.event_id_format = None
         self.line_interaction = {}
+        #for item in FORMAT:
+        #    setattr(self, f'{}_format', None)
 
         self._topographic_multiplier = None
         self._design_value_by_line = None
@@ -90,10 +85,8 @@ class Config(object):
         self._no_towers_by_line = None
 
         if not os.path.isfile(file_cfg):
-            msg = '{} not found'.format(file_cfg)
-            sys.exit(msg)
+            self.logger.error(f'{file_cfg} not found')
         else:
-            self.path_cfg_file = os.sep.join(os.path.abspath(file_cfg).split(os.sep)[:-1])
             self.read_config()
             self.process_config()
 
@@ -116,17 +109,11 @@ class Config(object):
 
         """
         if self._drag_height_by_type is None:
-            try:
-                data = pd.read_csv(self.file_drag_height_by_type,
-                                   skipinitialspace=True,
-                                   index_col=0,
-                                   names=['value'],
-                                   skiprows=1)
-            except IOError:
-                msg = '{} not found'.format(self.file_drag_height_by_type)
-                self.logger.critical(msg)
+            if os.path.exists(self.file_drag_height_by_type):
+                self._drag_height_by_type = h_drag_height_by_type(self.file_drag_height_by_type)
             else:
-                self._drag_height_by_type = data['value'].to_dict()
+                msg = f'{self.file_drag_height_by_type} not found'
+                self.logger.critical(msg)
 
         return self._drag_height_by_type
 
@@ -137,13 +124,12 @@ class Config(object):
         :rtype: dict
         """
         if self._topographic_multiplier is None and self.options['adjust_design_by_topography']:
-            try:
-                data = pd.read_csv(self.file_topographic_multiplier, index_col=0)
-            except IOError:
-                msg = '{} not found'.format(self.file_topographic_multiplier)
-                self.logger.error(msg)
+            if os.path.exists(self.file_topographic_multiplier):
+                self._topographic_multiplier = h_topographic_multiplier(
+                    self.file_topographic_multiplier)
             else:
-                self._topographic_multiplier = data.max(axis=1).to_dict()
+                msg = f'{self.file_topographic_multiplier} not found'
+                self.logger.error(msg)
 
         return self._topographic_multiplier
 
@@ -155,28 +141,12 @@ class Config(object):
 
         """
         if self._design_adjustment_factor_by_topography is None and self.options['adjust_design_by_topography']:
-
             if os.path.exists(self.file_design_adjustment_factor_by_topography):
-
-                dic = configparser.ConfigParser()
-                dic.read(self.file_design_adjustment_factor_by_topography)
-
-                data = {}
-                for key, value in dic.items('main'):
-                    try:
-                        data[int(key)] = float(value)
-                    except ValueError:
-                        data[key] = np.array(
-                            [float(x) for x in value.split(',')])
-
-                assert len(data['threshold']) == len(data.keys()) - 2
-
-                self._design_adjustment_factor_by_topography = data
-                return self._design_adjustment_factor_by_topography
-
+                self._design_adjustment_factor_by_topography = \
+                    h_design_adjustment_factor_by_topography(
+                        self.file_design_adjustment_factor_by_topography)
             else:
-                msg = '{} not found'.format(
-                    self.file_design_adjustment_factor_by_topography)
+                msg = f'{self.file_design_adjustment_factor_by_topography} not found'
                 self.logger.error(msg)
 
         return self._design_adjustment_factor_by_topography
@@ -187,16 +157,12 @@ class Config(object):
         read terrain multiplier (AS/NZS 1170.2:2011 Table 4.1)
         """
         if self._terrain_multiplier is None:
-            try:
-                data = pd.read_csv(self.file_terrain_multiplier,
-                                   skipinitialspace=True,
-                                   names=['height', 'tc1', 'tc2', 'tc3', 'tc4'],
-                                   skiprows=1)
-            except IOError:
-                msg = '{} not found'.format(self.file_terrain_multiplier)
-                self.logger.critical(msg)
+            if os.path.exists(self.file_terrain_multiplier):
+                self._terrain_multiplier = h_terrain_multiplier(
+                    self.file_terrain_multiplier)
             else:
-                self._terrain_multiplier = data.to_dict('list')
+                msg = f'{self.file_terrain_multiplier} not found'
+                self.logger.critical(msg)
 
         return self._terrain_multiplier
 
@@ -205,12 +171,10 @@ class Config(object):
         """read design values by line
         """
         if self._design_value_by_line is None:
-            try:
-                data = pd.read_csv(self.file_design_value, index_col=0,
-                                   skipinitialspace=True)
-                self._design_value_by_line = data.transpose().to_dict()
-            except IOError:
-                msg = '{} not found'.format(self.file_design_value)
+            if os.path.exists(self.file_design_value):
+                self._design_value_by_line = h_design_value_by_line(self.file_design_value)
+            else:
+                msg = f'{self.file_design_value} not found'
                 self.logger.critical(msg)
 
         return self._design_value_by_line
@@ -221,54 +185,40 @@ class Config(object):
         read collapse fragility parameter values
         """
         if self._fragility_metadata is None:
-
-            metadata = configparser.ConfigParser()
-            ok = metadata.read(self.file_fragility_metadata)
-
-            if ok:
-                self._fragility_metadata = {}
-                for item, value in metadata.items('main'):
-                    if ',' in value:
-                        self._fragility_metadata[item] = [x.strip() for x in value.split(',')]
-                    else:
-                        self._fragility_metadata[item] = value
-
-                left = metadata.sections()
-                left.remove('main')
-                for name in left:
-                    self._fragility_metadata[name] = dict(metadata.items(name))
-
-            else:
-                msg = '{} not found'.format(self.file_fragility_metadata)
+            try:
+                with open(self.file_fragility_metadata, 'r') as ymlfile:
+                    tmp = yaml.load(ymlfile, Loader=yaml.FullLoader)
+            except IOError:
+                msg = f'{self.file_fragility_metadata} not found'
                 self.logger.critical(msg)
-
+            else:
+                self._fragility_metadata = nested_dic(tmp)
         return self._fragility_metadata
 
     @property
     def fragility(self):
-
         if self._fragility is None:
             path_metadata = os.path.dirname(
                 os.path.realpath(self.file_fragility_metadata))
-            _file = os.path.join(path_metadata, self.fragility_metadata['file'])
-            try:
-                self._fragility = pd.read_csv(_file, skipinitialspace=True)
-            except IOError:
-                self.logger.critical('{} not found'.format(_file))
-                pass
+            _file = os.path.join(path_metadata, self.fragility_metadata['main']['file'])
+
+            if os.path.exists(_file):
+                self._fragility = h_fragility(_file)
+            else:
+                self.logger.critical(f'{_file} not found')
 
         return self._fragility
 
     @property
     def damage_states(self):
         if self._damage_states is None:
-            self._damage_states = self.fragility_metadata['limit_states']
+            self._damage_states = self.fragility_metadata['main']['limit_states']
         return self._damage_states
 
     @property
     def no_damage_states(self):
         if self._no_damage_states is None:
-            self._no_damage_states = len(self.fragility_metadata['limit_states'])
+            self._no_damage_states = len(self.damage_states)
         return self._no_damage_states
 
     @property
@@ -279,61 +229,31 @@ class Config(object):
         return self._non_collapse
 
     @property
-    def cond_collapse_prob(self):
-
-        if self._cond_collapse_prob is None:
-
-            metadata = configparser.ConfigParser()
-            ok = metadata.read(self.file_cond_collapse_prob_metadata)
-
-            if ok:
-                path_metadata = os.path.dirname(
-                    os.path.realpath(self.file_cond_collapse_prob_metadata))
-
-                kinds = [x.strip() for x in
-                         dict(metadata.items('main'))['list'].split(',')]
-
-                self._cond_collapse_prob = {}
-                for item in kinds:
-                    _file = os.path.join(path_metadata,
-                                         dict(metadata.items(item))['file'])
-                    df = pd.read_csv(_file, skipinitialspace=1)
-                    df['list'] = df.apply(lambda row: tuple(
-                        range(row['start'], row['end'] + 1)), axis=1)
-                    self._cond_collapse_prob[item] = df
-            else:
-                msg = '{} not found'.format(self.file_cond_collapse_prob_metadata)
-                self.logger.critical(msg)
-
-        return self._cond_collapse_prob
-
-    @property
     def cond_collapse_prob_metadata(self):
         """
         read condition collapse probability defined by tower function
         """
         if self._cond_collapse_prob_metadata is None:
 
-            if not os.path.exists(self.file_cond_collapse_prob_metadata):
-                msg = '{} not found'.format(self.file_cond_collapse_prob_metadata)
-                self.logger.critical(msg)
+            if os.path.exists(self.file_cond_collapse_prob_metadata):
+                self._cond_collapse_prob_metadata = h_cond_collapse_prob_metadata(
+                    self.file_cond_collapse_prob_metadata)
             else:
-                metadata = configparser.ConfigParser()
-                metadata.read(self.file_cond_collapse_prob_metadata)
-
-                self._cond_collapse_prob_metadata = {}
-                for item, value in metadata.items('main'):
-                    if ',' in value:
-                        self._cond_collapse_prob_metadata[item] = [x.strip() for x in value.split(',')]
-                    else:
-                        self._cond_collapse_prob_metadata[item] = value
-
-                left = metadata.sections()
-                left.remove('main')
-                for item in left:
-                    self._cond_collapse_prob_metadata[item] = dict(metadata.items(item))
-
+                msg = f'{self.file_cond_collapse_prob_metadata} not found'
+                self.logger.critical(msg)
         return self._cond_collapse_prob_metadata
+
+    @property
+    def cond_collapse_prob(self):
+
+        if self._cond_collapse_prob is None:
+
+            _file = os.path.join(self.cond_collapse_prob_metadata['path'],
+                                 self.cond_collapse_prob_metadata['file'])
+
+            self._cond_collapse_prob = h_cond_collapse_prob(_file)
+
+        return self._cond_collapse_prob
 
     @property
     def prob_line_interaction_metadata(self):
@@ -343,7 +263,7 @@ class Config(object):
         if self.options['apply_line_interaction'] and self._prob_line_interaction_metadata is None:
 
             if not os.path.exists(self.file_line_interaction_metadata):
-                msg = '{} not found'.format(self.file_line_interaction_metadata)
+                msg = f'{self.file_line_interaction_metadata} not found'
                 self.logger.critical(msg)
             else:
                 metadata = configparser.ConfigParser()
@@ -367,7 +287,7 @@ class Config(object):
             try:
                 self._prob_line_interaction = pd.read_csv(_file, skipinitialspace=1)
             except IOError:
-                msg = '{} not found'.format(self.file_line_interaction_metadata)
+                msg = f'{self.file_line_interaction_metadata} not found'
                 self.logger.critical(msg)
 
         return self._prob_line_interaction
@@ -384,7 +304,6 @@ class Config(object):
 
     @property
     def towers_by_line(self):
-
         if self._towers_by_line is None:
 
             df = read_shape_file(self.file_shape_tower)
@@ -401,8 +320,12 @@ class Config(object):
                           left_index=True, right_index=True)
 
             # frag_scale, frag_arg, frag_func
-            df = df.merge(df.apply(self.assign_fragility_parameters, axis=1),
-                          left_index=True, right_index=True)
+            #_df = df.apply(
+            #        self.assign_fragility_parameters, axis=1)
+            #print(_df.head())
+            #print(df.head())
+            #df = df.merge(df.apply(self.assign_fragility_parameters, axis=1),
+            #              left_index=True, right_index=True)
 
             df['file_wind_base_name'] = df['name'].apply(
                 lambda x: self.wind_file_format.format(tower_name=x))
@@ -449,12 +372,14 @@ class Config(object):
         conf.optionxform = str
         conf.read(self.file_cfg)
 
-        # run_type
-        for item in self.option_keys:
+        self.path_cfg = os.sep.join(self.file_cfg.split(os.sep)[:-1])
+
+        # options 
+        for item in OPTIONS:
             try:
                 self.options[item] = conf.getboolean('options', item)
             except configparser.NoOptionError:
-                msg = '{} not set in {}'.format(item, self.file_cfg)
+                msg = f'{item} not set in [options] in {self.file_cfg}'
                 self.logger.critical(msg)
 
         # run_parameters
@@ -464,66 +389,79 @@ class Config(object):
             self.strainer.append(x.strip())
         for x in conf.get(key, 'selected_lines').split(','):
             self.selected_lines.append(x.strip())
-        # self.rel_tol = conf.getfloat(key, 'relative_tolerance')
-        # self.abs_tol = conf.getfloat(key, 'absolute_tolerance')
 
-        # directories: gis_data, wind_scenario_base, input, output
+        # directories: gis_data, wind_event_base, input, output
         key = 'directories'
-        for item in self.directory_keys:
-            setattr(self, 'path_{}'.format(item),
-                    os.path.realpath(os.path.join(self.path_cfg_file,
-                                                  conf.get(key, item))))
-            if not os.path.exists(getattr(self, 'path_{}'.format(item))):
-                if item == 'output':
-                    os.makedirs(self.path_output)
-                    self.logger.info('{} is created'.format(self.path_output))
-                else:
-                    self.logger.error('Invalid path for {}'.format(item))
+        for item in DIRECTORIES:
+            try:
+                setattr(self, f'path_{item}',
+                        os.path.join(self.path_cfg, conf.get(key, item)))
+            except configparser.NoOptionError:
+                msg = f'{item} not set in [{key}] in {self.file_cfg}'
+                self.logger.critical(msg)
+
+            else:
+                if not os.path.exists(getattr(self, f'path_{item}')):
+                    if item == 'output':
+                        os.makedirs(self.path_output)
+                        self.logger.info(f'{self.path_output} is created')
+                    else:
+                        self.logger.error(f'Invalid path for {item}')
 
         # gis_data
         key = 'gis_data'
-        for item in ['shape_tower', 'shape_line']:
-            setattr(self, 'file_{}'.format(item),
-                    os.path.realpath(os.path.join(self.path_gis_data,
-                                                  conf.get(key, item))))
+        for item in GIS_DATA:
+            try:
+                setattr(self, f'file_{item}',
+                        os.path.join(self.path_gis_data, conf.get(key, item)))
+            except configparser.NoOptionError:
+                msg = f'{item} not set in [{key}] in {self.file_cfg}'
+                self.logger.critical(msg)
 
-        # wind_scenario
-        self.read_wind_scenario(conf)
+        # wind_event
+        self.read_wind_event(conf)
 
         # format
-        self.wind_file_format = conf.get('format', 'wind_scenario') 
-        self.event_id_format = conf.get('format', 'event_id')
+        for item in FORMAT:
+            key = f'{item}_format'
+            try:
+                setattr(self, key, conf.get('format', item))
+            except configparser.NoOptionError:
+                msg = f'{item} not set in [format] in {self.file_cfg}'
+                self.logger.critical(msg)
 
         # input
-        key = 'input'
-        for item in self.input_keys:
+        key = 'input_files'
+        for item in INPUT_FILES:
             try:
-                setattr(self, 'file_{}'.format(item),
-                        os.path.realpath(os.path.join(self.path_input,
-                                                      conf.get(key, item))))
+                setattr(self, f'file_{item}',
+                        os.path.join(self.path_input, conf.get(key, item)))
             except configparser.NoOptionError:
-                msg = '{} is not set'.format(item)
-                self.logger.warning(msg)
+                self.logger.warning(f'{item} is not set in [{key}] in {self.file_cfg}')
 
         # line_interaction
         self.read_line_interaction(conf)
 
-    def read_wind_scenario(self, conf):
 
-        seeds = None
-        if conf.has_section('random_seed'):
-            seeds = []
-            for event_name in conf.options('random_seed'):
-                for x in conf.get('random_seed', event_name).split(','):
-                    try:
-                        seeds.append(int(x))
-                    except ValueError:
-                        msg = 'Invalid random_seed input'
-                        self.logger.error(msg)
+    def read_wind_event(self, conf):
 
+        # read random_seed
+        seeds = []
+        if self.options['use_random_seed']:
+            try:
+                for event_name in conf.options('random_seed'):
+                    for x in conf.get('random_seed', event_name).split(','):
+                        try:
+                            seeds.append(int(x))
+                        except ValueError:
+                            self.logger.error('Invalid random_seed')
+            except configparser.NoOptionError:
+                self.logger.critical(f'[random_seed] is not set in {self.file_cfg}')
+
+        # read wind_event
         k = -1
-        for i, event_name in enumerate(conf.options('wind_scenario')):
-            for x in conf.get('wind_scenario', event_name).split(','):
+        for i, event_name in enumerate(conf.options('wind_event')):
+            for x in conf.get('wind_event', event_name).split(','):
                 k += 1
                 if seeds:
                     seed = seeds[k]
@@ -533,15 +471,10 @@ class Config(object):
                 try:
                     self.events.append((event_name, float(x), seed))
                 except ValueError:
-                    msg = 'Invalid wind_scenario input'
+                    msg = 'Invalid wind_event input'
                     self.logger.error(msg)
 
     def process_config(self):
-
-        # max_adj
-        for item in self.cond_collapse_prob_metadata['list']:
-            self._cond_collapse_prob_metadata[item]['max_adj'] = \
-                self.cond_collapse_prob[item]['end'].max()
 
         # id2name, ids, names
         for line_name, line in self.lines.items():
@@ -579,8 +512,7 @@ class Config(object):
             id_closest = np.argmin(temp)
             ok = abs(temp[id_closest]) < 1.0e-4
             if not ok:
-                msg = 'Can not locate {tower:} in {line:}'.format(
-                    tower=tower['name'], line=line_name)
+                msg = f"Can not locate {tower:tower['name']} in {line:line_name}"
                 self.logger.error(msg)
             idx_sorted.append(id_closest)
 
@@ -623,40 +555,25 @@ class Config(object):
                 try:
                     selected_lines.remove(line)
                 except ValueError:
-                    msg = '{} is excluded in the simulation'.format(line)
+                    msg = f'{line} is excluded in the simulation'
                     self.logger.error(msg)
 
             # check completeness
             if selected_lines:
-                msg = 'No line interaction info provided for {}'.format(selected_lines)
+                msg = f'No line interaction info provided for {selected_lines}'
                 self.logger.error(msg)
 
     def assign_cond_collapse_prob(self, tower):
         """ get dict of conditional collapse probabilities
         :return: cond_pc, max_no_adj_towers
         """
-        kind = tower[self.cond_collapse_prob_metadata['by']]
-        df_prob = self.cond_collapse_prob[kind]
-        att = self.cond_collapse_prob_metadata[kind]['by']
-        att_type = self.cond_collapse_prob_metadata[kind]['type']
 
-        tf = None
-        if att_type == 'string':
-            tf = df_prob[att] == tower[att]
-        elif att_type == 'numeric':
-            tf = (df_prob[att + '_lower'] <= tower[att]) & (
-                df_prob[att + '_upper'] > tower[att])
-        else:
-            msg = 'Invalid type {} for cond_collapse_prob'.format(att_type)
-            self.logger.critical(msg)
+        cond_pc = get_value_given_conditions(
+                self.cond_collapse_prob_metadata['probability'],
+                self.cond_collapse_prob, tower)
 
-        if tf.values.sum() == 0:
-            msg = 'can not assign cond_pc for tower {}'.format(tower['name'])
-            self.logger.critical(msg)
-
-        return {'cond_pc': dict(zip(df_prob.loc[tf, 'list'],
-                                    df_prob.loc[tf, 'probability'])),
-                'max_no_adj_towers': self.cond_collapse_prob_metadata[kind]['max_adj']}
+        max_no_adj_towers = sorted(cond_pc.keys(), key=lambda x: len(x))[-1][-1]
+        return {'cond_pc': cond_pc, 'max_no_adj_towers': max_no_adj_towers}
 
     def ratio_z_to_10(self, tower):
         """
@@ -669,7 +586,7 @@ class Config(object):
                                 self.terrain_multiplier['height'],
                                 self.terrain_multiplier[tc_str])
         except KeyError:
-            msg = '{} is undefined in {}'.format(tc_str, self.file_terrain_multiplier)
+            msg = f'{tc_str} is undefined in {self.file_terrain_multiplier}'
             self.logger.critical(msg)
         else:
             idx_10 = self.terrain_multiplier['height'].index(10)
@@ -687,8 +604,7 @@ class Config(object):
         try:
             design_value = self.design_value_by_line[row['lineroute']]
         except KeyError:
-            msg = '{} is undefined in {}'.format(row['lineroute'],
-                                                 self.file_design_value)
+            msg = f"{row['lineroute']} is undefined in {self.file_design_value}"
             self.logger.critical(msg)
         else:
             design_speed = design_value['design_speed']
@@ -709,34 +625,8 @@ class Config(object):
         :param tower: pandas series of tower
         :return: pandas series of frag_func, frag_scale, frag_arg
         """
-
-        tf_array = np.ones((self.fragility.shape[0],), dtype=bool)
-        for att, att_type in zip(self.fragility_metadata['by'],
-                                 self.fragility_metadata['type']):
-            if att_type == 'string':
-                tf_array &= self.fragility[att] == tower[att]
-            elif att_type == 'numeric':
-                tf_array &= (self.fragility[att + '_lower'] <= tower[att]) & \
-                            (self.fragility[att + '_upper'] > tower[att])
-
-        params = pd.Series({'frag_scale': {}, 'frag_arg': {},
-                            'frag_func': None})
-        for ds in self.damage_states:
-            try:
-                idx = self.fragility[
-                    tf_array & (self.fragility['limit_states'] == ds)].index[0]
-            except IndexError:
-                msg = 'No matching fragility params for {}'.format(tower['name'])
-                self.logger.error(msg)
-            else:
-                fn_form = self.fragility.loc[idx, self.fragility_metadata['function']]
-                params['frag_func'] = fn_form
-                params['frag_scale'][ds] = self.fragility.loc[
-                    idx, self.fragility_metadata[fn_form]['scale']]
-                params['frag_arg'][ds] = self.fragility.loc[
-                    idx, self.fragility_metadata[fn_form]['arg']]
-
-        return params
+        return get_value_given_conditions(self.fragility_metadata['fragility'],
+                                          self.fragility, tower)
 
     def assign_id_adj_towers(self, tower):
         """
@@ -873,7 +763,7 @@ def read_shape_file(file_shape):
             fields = [x[0].lower() for x in sf.fields[1:]]
             fields_type = [x[1] for x in sf.fields[1:]]
     except shapefile.ShapefileException:
-        msg = '{} is not a valid shapefile'.format(file_shape)
+        msg = f'{file_shape} is not a valid shapefile'
         raise shapefile.ShapefileException(msg)
     else:
         dic_type = {'C': object, 'F': np.float64, 'N': np.int64}
@@ -1006,14 +896,14 @@ def find_id_nearest_pt(pt_coord, line_coord):
     try:
         assert pt_coord.shape == (2,)
     except AssertionError:
-        logger.error('Invalid pt_coord: {}'.format(pt_coord))
+        logger.error(f'Invalid pt_coord: {pt_coord}')
 
     if not isinstance(line_coord, np.ndarray):
         line_coord = np.array(line_coord)
     try:
         assert line_coord.shape[1] == 2
     except AssertionError:
-        logger.error('Invalid line_coord: {}'.format(line_coord))
+        logger.error(f'Invalid line_coord: {line_coord}')
 
     diff = np.linalg.norm(line_coord - pt_coord, axis=1)
     return np.argmin(diff)
@@ -1048,3 +938,129 @@ def angle_between_unit_vectors(v1, v2):
 
     """
     return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
+
+def h_fragility(_file):
+    with open(_file, 'r') as ymlfile:
+        out = yaml.load(ymlfile, Loader=yaml.FullLoader)
+    return nested_dic(out)
+
+def nested_dic(d):
+    assert isinstance(d, dict)
+    for k, v in d.items():
+        if isinstance(v, dict):
+            nested_dic(v)
+        else:
+            # clean up value
+            if (k != 'file') & (',' in v):
+                d[k] = [x.strip() for x in v.split(',')]
+    return d
+
+
+def h_design_adjustment_factor_by_topography(_file):
+
+    dic = configparser.ConfigParser()
+    dic.read(_file)
+
+    data = {}
+    for key, value in dic.items('main'):
+        try:
+            data[int(key)] = float(value)
+        except ValueError:
+            data[key] = np.array(
+                [float(x) for x in value.split(',')])
+
+    assert len(data['threshold']) == len(data.keys()) - 2
+
+    return data
+
+def h_terrain_multiplier(_file):
+    data = pd.read_csv(_file,
+                       skipinitialspace=True,
+                       names=['height', 'tc1', 'tc2', 'tc3', 'tc4'],
+                       skiprows=1)
+    return data.to_dict('list')
+
+def h_design_value_by_line(_file):
+    data = pd.read_csv(_file, index_col=0, skipinitialspace=True)
+    return data.transpose().to_dict()
+
+def h_topographic_multiplier(_file):
+    data = pd.read_csv(_file, index_col=0)
+    return data.max(axis=1).to_dict()
+
+def h_drag_height_by_type(_file):
+    data = pd.read_csv(_file,
+                       skipinitialspace=True,
+                       index_col=0,
+                       names=['value'],
+                       skiprows=1)
+    return data['value'].to_dict()
+
+def h_cond_collapse_prob_metadata(_file):
+
+    with open(_file, 'r') as ymlfile:
+        out = yaml.load(ymlfile, Loader=yaml.FullLoader)
+
+    out['path'] = os.path.dirname(os.path.realpath(_file))
+
+    return out
+
+def h_cond_collapse_prob(_file):
+
+    def h_dic(d):
+        for k, v in list(d.items()):
+            if isinstance(v, dict):
+                h_dic(v)
+            else:
+                # clean up value
+                if ',' in k:
+                    tmp = [int(x.strip()) for x in k.split(',')]
+                    key = tuple(range(tmp[0], tmp[1]+1))
+                    d[key] = d.pop(k)
+
+    with open(_file, 'r') as ymlfile:
+        out = yaml.load(ymlfile, Loader=yaml.FullLoader)
+    h_dic(out)
+
+    return out
+
+def get_value_given_conditions(metadata, prob, tower):
+    """ find prob/fragility meeting condition given metadata
+    """
+    logger = logging.getLogger(__name__)
+
+    def h_dic(metadata, prob, tower):
+
+        nonlocal attr
+        nonlocal result
+
+        for k, v in metadata.items():
+
+            if k in tower:
+                key = tower[k]
+
+                if isinstance(v[key], dict):
+                    h_dic(v[key], prob[key], tower)
+
+                else:
+                    attr = v[key]
+                    result = prob[key]
+            else:
+                h_dic(v, prob, tower)
+
+    attr = None
+    result = None
+
+    h_dic(metadata, prob, tower)
+
+    idx = tower[attr]
+    if not isinstance(idx, str):
+        sorted_keys = sorted(result.keys())
+        if idx <= sorted_keys[-1]:
+            loc = min(bisect.bisect_right(sorted_keys, idx),
+                  len(sorted_keys) - 1)
+        else:
+            loc = 0  # take the first one 
+            logger.critical(f'unable to assign cond_pc for tower {tower["name"]}')
+        idx = sorted_keys[loc]
+    return result[idx]

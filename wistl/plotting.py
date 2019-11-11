@@ -21,13 +21,13 @@ def plot_tower_line(line):
     plt.title(line.name)
 
     png_file = os.path.join(line.path_output,
-                            'line_{}.png'.format(line.name))
+                            f'line_{line.name}.png')
 
     if not os.path.exists(line.path_output):
         os.makedirs(line.path_output)
 
     plt.savefig(png_file)
-    print('{} is created'.format(png_file))
+    print(f'{png_file} is created')
     plt.close()
 
 
@@ -59,21 +59,19 @@ def plot_line_interaction(network, cfg):
                     plt.plot([tower.coord[0], target_tower.coord[0]],
                              [tower.coord[1], target_tower.coord[1]],
                              'ro-',
-                             label='{}->{}'.format(tower.name,
-                                                   target_tower_name))
+                             label=f'{tower.name}->{target_tower_name}')
 
         plt.title(line_name)
         plt.legend(loc=0)
         plt.xlabel('Longitude')
         plt.ylabel('Latitude')
-        png_file = os.path.join(cfg.path_output,
-                                'line_interaction_{}.png'.format(line_name))
+        png_file = os.path.join(cfg.path_output, f'line_interaction_{line_name}.png')
 
         if not os.path.exists(cfg.path_output):
             os.makedirs(cfg.path_output)
 
         plt.savefig(png_file)
-        print('{} is created'.format(png_file))
+        print(f'{png_file} is created')
         plt.close()
 
 

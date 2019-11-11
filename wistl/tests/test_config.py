@@ -5,12 +5,11 @@ import logging
 import os
 import tempfile
 import numpy as np
+import shapefile
+import pandas as pd
+from unittest.mock import patch
 
-from wistl.config import Config, split_str, calculate_distance_between_towers, \
-    unit_vector, find_id_nearest_pt, create_list_idx, assign_cond_pc_adj, \
-    assign_shapely_line, assign_shapely_point, unit_vector_by_bearing, \
-    angle_between_unit_vectors
-
+from wistl.config import *
 from geopy.distance import geodesic
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -59,22 +58,322 @@ def assertDeepAlmostEqual(test_case, expected, actual, *args, **kwargs):
         exc.__dict__.setdefault('traces', []).append(trace)
         if is_root:
             trace = ' -> '.join(reversed(exc.traces))
-            exc = AssertionError("%s\nTRACE: %s" % (exc.message, trace))
+            exc = AssertionError(f'{str(exc)}\nTRACE: {trace}')
         raise exc
 
 
-class TestConfig(unittest.TestCase):
+def create_shapefiles():
 
-    @classmethod
-    def setUpClass(cls):
+    # fields
+    fields_pt = [['Type', 'C'],
+                  ['Name', 'C'],
+                  ['Latitude', 'N', 5],
+                  ['Longitude', 'N', 5],
+                  ['Comment', 'C'],
+                  ['Function', 'C'],
+                  ['Shape', 'C'],
+                  ['DevAngle', 'N', 2],
+                  ['AxisAz', 'N', 2],
+                  ['ConstCost', 'N', 2],
+                  ['Height', 'N', 2],
+                  ['YrBuilt', 'N', 0],
+                  ['LocSource', 'C'],
+                  ['LineRoute', 'C']]
+     # records
+    #file_records_pt = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+    #file_records_ln = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+    file_records_pt = os.path.join(BASE_DIR, 'gis_data/data_for_points.csv')
+    file_records_ln = os.path.join(BASE_DIR, 'gis_data/data_for_lines.csv')
 
-        logging.basicConfig(level=logging.INFO)
-        cls.logger = logging.getLogger(__name__)
+    # read file_records_pt
+#    file_records_pt.writelines([
+#        'Type,Name,Latitude,Longitude,Comment,Function,Shape,DevAngle,AsixAz,ConstCost,Height,YrBuilt,LocSource,LineRoute\n',
+#        'Lattice Tower,T1,0.01,149.0,Test,Terminal,Rectangle,0,134,0.00E+00,1.78E+01,1980,Fake,LineA\n',
+#        'Lattice Tower,T2,0.01,149.01,Test,Suspension,Rectangle,0,134,0.00E+00,1.78E+01,1980,Fake,LineA\n',
+#        'Lattice Tower,T3,0.01,149.02,Test,Terminal,Rectangle,0,134,0.00E+00,1.78E+01,1980,Fake,LineB\n',
+#        'Lattice Tower,T4,0.01,149.03,Test,Suspension,Rectangle,0,134,0.00E+00,1.78E+01,1980,Fake,LineB\n'])
+#    file_records_pt.seek(0)
 
-        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), cls.logger)
+    # shapefile_pt
+    #shapefile_pt = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+    #shapefile_pt = open('test_points.shp', 'w')
+    _file = os.path.join(BASE_DIR, 'test_points.shp')
+    if os.path.exists(_file):
+        os.remove(_file)
+    w_pt = shapefile.Writer(_file)
+    for item in fields_pt:
+        if item[1] == 'N':
+            w_pt.field(item[0], item[1], decimal=item[2])
+        else:
+            w_pt.field(item[0], item[1])
 
-        # for testing purpose
-        cls.cfg.options['adjust_design_by_topography'] = True
+    #records_pt = pd.read_csv(file_records_pt.name)
+    records_pt = pd.read_csv(file_records_pt)
+    _index = np.random.choice(records_pt.index, size=len(records_pt), replace=False)
+
+    for _id in _index:
+        item = records_pt.loc[_id]
+        w_pt.record(*item)
+        w_pt.point(item.Longitude, item.Latitude)
+
+    w_pt.close()
+
+    # fields
+    fields_ln = [['LineName', 'C'],
+                   ['Type', 'C'],
+                   ['Owner', 'C'],
+                   ['Operator', 'C'],
+                   ['LineRoute', 'C'],
+                   ['Capacity', 'N'],
+                   ['TypeConduc', 'C'],
+                   ['NumCircuit', 'N'],
+                   ['Current', 'C'],
+                   ['YrBuilt', 'N']]
+#    # read file_records_ln
+#    file_records_ln.writelines([
+#        'LineName,Type,Owner,Operator,LineRoute,Capacity,TypeConduc,NumCircuit,Current,YrBuilt\n',
+#        'LineA,HV Transmission Line,A,B,LineA,230,Unknown,2,Unknown,1980\n',
+#        'LineB,HV Transmission Line,C,D,LineB,230,Unknown,2,Unknown,1985\n',
+#        ])
+#    file_records_ln.seek(0)
+#
+    # shapefile_lines
+    #shapefile_ln = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+    #w_ln = shapefile.Writer(shapefile_ln.name)
+    _file = os.path.join(BASE_DIR, 'test_lines.shp')
+    if os.path.exists(_file):
+        os.remove(_file)
+    w_ln = shapefile.Writer(_file)
+    for item in fields_ln:
+        w_ln.field(item[0], item[1])
+
+    records_ln = pd.read_csv(file_records_ln)
+    for _, row in records_ln.iterrows():
+        w_ln.record(*row)
+        coords = records_pt.loc[records_pt.LineRoute==row.LineRoute, ['Longitude', 'Latitude']].values.tolist()
+        w_ln.line([coords])
+
+    w_ln.close()
+
+
+class TestConfig1(unittest.TestCase):
+
+
+    def test_nested_dic(self):
+
+        _input = {'main': {'limit_states': 'minor, collapse',
+                           'file': './test_fragility.yml'},
+                  'fragility': {'function': {'Terminal': 'shape, angle',
+                      'Suspension': 'shape, angle', 'Strainer': 'devangle, angle'}},
+                  }
+        expected = {'main': {'limit_states': ['minor', 'collapse'],
+                             'file': './test_fragility.yml'},
+                    'fragility': {'function':
+                            {'Terminal': ['shape', 'angle'],
+                             'Suspension': ['shape', 'angle'],
+                             'Strainer': ['devangle', 'angle']}},
+                    }
+
+        output = nested_dic(_input)
+        assertDeepAlmostEqual(self, expected, output)
+
+    def test_h_design_adjustment_factor_by_topograhpy(self):
+
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines(['[main]\n',
+                          'threshold: 1.05, 1.1, 1.2, 1.3, 1.45\n',
+                          '0:1.0\n',
+                          '1:1.1\n',
+                          '2:1.2\n',
+                          '3:1.3\n',
+                          '4:1.45\n',
+                          '5:1.6\n',
+                          ])
+        _file.seek(0)
+
+        expected = {0: 1.0,
+                    1: 1.1,
+                    2: 1.2,
+                    3: 1.3,
+                    4: 1.45,
+                    5: 1.60,
+                    'threshold': np.array([1.05, 1.1, 1.2, 1.3, 1.45])}
+
+        output = h_design_adjustment_factor_by_topography(_file.name)
+        assertDeepAlmostEqual(self, expected, output)
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_h_terrain_multiplier(self):
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            'height(m), terrain category 1, terrain category 2, terrain category 3, terrain category 4\n',
+            '3,   0.99,  0.91,  0.83,  0.75\n',
+            '5,   1.05,  0.91,  0.83,  0.75\n',
+            '10,  1.12,  1.00,  0.83,  0.75\n',
+            '15,  1.16,  1.05,  0.89,  0.75\n',
+            '20,  1.19,  1.08,  0.94,  0.75\n',
+            '30,  1.22,  1.12,  1.00,  0.80\n',
+            '40,  1.24,  1.16,  1.04,  0.85\n',
+            '50,  1.25,  1.18,  1.07,  0.90\n',
+            '75,  1.27,  1.22,  1.12,  0.98\n',
+            '100, 1.29,  1.24,  1.16,  1.03\n',
+            '150, 1.31,  1.27,  1.21,  1.11\n',
+            '200, 1.32,  1.29,  1.24,  1.16\n',
+                          ])
+        _file.seek(0)
+
+        expected = [0.98999999999999999,
+                    1.05,
+                    1.1200000000000001,
+                    1.1599999999999999,
+                    1.1899999999999999,
+                    1.22,
+                    1.24,
+                    1.25,
+                    1.27,
+                    1.29,
+                    1.3100000000000001,
+                    1.3200000000000001]
+        expected_keys = ['height', 'tc1', 'tc2', 'tc3', 'tc4']
+
+        output = h_terrain_multiplier(_file.name)
+
+        self.assertEqual(list(output.keys()), expected_keys)
+        assertDeepAlmostEqual(self, expected,
+                              output['tc1'])
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_h_design_value_by_line(self):
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            'lineroute, design_speed, design_span, terrain_cat, design_level\n',
+            'LineA, 75.0, 400.0, 2, low\n',
+            'LineB, 51.389, 400.0, 2, low\n',
+                          ])
+        _file.seek(0)
+
+        expected = {'LineA': {'design_speed': 75.0,
+                              'design_span': 400.0,
+                              'terrain_cat': 2,
+                              'design_level': 'low'},
+                    'LineB': {'design_speed': 51.389,
+                              'design_span': 400.0,
+                              'terrain_cat': 2,
+                              'design_level': 'low'},
+                    }
+
+        output = h_design_value_by_line(_file.name)
+
+        assertDeepAlmostEqual(self, expected, output)
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_h_topographic_multiplier(self):
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            'Station,Mh,Mhopp\n',
+            'T1,1,1\n',
+            'T2,0.8,0.6\n',
+            'T3,1,1\n',
+            'T4,1,1\n',
+                          ])
+        _file.seek(0)
+
+        expected = {'T1': 1.0,
+                    'T2': 0.8,
+                    'T3': 1.0,
+                    'T4': 1.0}
+
+        output = h_topographic_multiplier(_file.name)
+
+        assertDeepAlmostEqual(self, expected, output)
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_h_drag_height_by_type(self):
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            '# typical drag height by tower type\n',
+            'Suspension,15.4\n',
+            'Strainer,12.2\n',
+            'Terminal,12.2\n',
+                          ])
+        _file.seek(0)
+
+        expected = {'Suspension': 15.4,
+                    'Strainer': 12.2,
+                    'Terminal': 12.2}
+
+        output = h_drag_height_by_type(_file.name)
+
+        assertDeepAlmostEqual(self, expected, output)
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_h_cond_collapse_prob_metadata(self):
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            '---\n',
+            'file: ./test_cond_collapse_prob.yml\n',
+            'probability:\n',
+            '    type:\n',
+            '        Lattice Tower:\n',
+            '            function:\n',
+            '                Suspension: height\n',
+            '                Terminal: height\n',
+            '                Strainer: design_level\n',
+            ])
+        _file.seek(0)
+
+        expected = {'file': './test_cond_collapse_prob.yml',
+                    'probability': {'type': {'Lattice Tower':
+                        {'function': {'Suspension': 'height',
+                                      'Terminal': 'height',
+                                      'Strainer': 'design_level'}}}},
+                    'path': os.path.dirname(os.path.realpath(_file.name))
+                    }
+
+        output = h_cond_collapse_prob_metadata(_file.name)
+
+        assertDeepAlmostEqual(self, expected, output)
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_h_cond_collapse_prob(self):
+
+        expected = {'Lattice Tower': {
+            'Suspension': {40: { (0,1): 0.075, (-1,0): 0.075, (-2, -1, 0, 1, 2): 0.02}},
+            'Strainer': {'low': { (-1, 0, 1): 0.05, (-2,-1,0,1,2): 0.08}},
+            }}
+
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            'Lattice Tower:\n',
+            '    Suspension:\n',
+            '        40:\n',
+            '            0,1: 0.075\n',
+            '            -1,0: 0.075\n',
+            '            -2,2: 0.02\n',
+            '    Strainer:\n',
+            '        low:\n',
+            '            -1,1: 0.05\n',
+            '            -2,2: 0.08\n',
+            ])
+
+        _file.seek(0)
+
+        output = h_cond_collapse_prob(_file.name)
+        assertDeepAlmostEqual(self, expected, output)
+        _file.close()
+        os.unlink(_file.name)
 
     def test_split_str(self):
 
@@ -93,6 +392,21 @@ class TestConfig(unittest.TestCase):
         result = split_str(str_, ':')
         self.assertEqual(result, expected)
 
+
+class TestConfig(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        logging.basicConfig(level=logging.INFO)
+        cls.logger = logging.getLogger(__name__)
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), cls.logger)
+
+        # for testing purpose
+        cls.cfg.options['adjust_design_by_topography'] = True
+
+
     def test_design_value(self):
 
         expected = {'LineA': {'terrain_cat': 2,
@@ -107,37 +421,71 @@ class TestConfig(unittest.TestCase):
         assertDeepAlmostEqual(self, expected, self.cfg.design_value_by_line)
 
     def test_fragility_metadata(self):
+        expected = {'main': {'limit_states': ['minor', 'collapse'],
+                             'file': './test_fragility.yml'},
+                    'fragility': {'function':
+                            {'Terminal': ['shape', 'angle'],
+                             'Suspension': ['shape', 'angle'],
+                             'Strainer': ['devangle', 'angle']}},
+                    }
 
-        expected_metadata = dict([
-            ('by', ['type', 'function', 'devAngle']),
-            ('type', ['string', 'string', 'numeric']),
-            ('limit_states', ['minor', 'collapse']),
-            ('function', 'form'),
-            ('file', './fragility.csv'),
-            ('lognorm', dict([('scale', 'param1'),
-                              ('arg', 'param2')]))])
 
         _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
-        try:
-            _file.writelines(['[main]\n',
-                              'by: type, function, devAngle\n',
-                              'type: string, string, numeric\n',
-                              'limit_states: minor, collapse\n',
-                              'function: form\n',
-                              'file: ./fragility.csv\n',
-                              '[lognorm]\n',
-                              'scale: param1\n',
-                              'arg: param2\n'])
-            _file.seek(0)
+        _file.writelines([
+            '---\n',
+            'main:\n',
+            '    limit_states: minor, collapse\n',
+            '    file: ./test_fragility.yml\n',
+            '\n',
+            '#function:\n',
+            '#    lognorm: \n',
+            '#        param1: scale\n',
+            '#        param2: arg\n',
+            'fragility: \n',
+            '    function: \n',
+            '        Terminal: shape, angle \n',
+            '        Suspension: shape, angle\n',
+            '        Strainer: devangle, angle\n',
+            ])
+        _file.seek(0)
 
-            self.cfg._fragility_metadata = None
-            self.cfg.file_fragility_metadata = _file.name
+        self.cfg._fragility_metadata = None
+        self.cfg.file_fragility_metadata = _file.name
+        assertDeepAlmostEqual(self, expected,
+                              self.cfg.fragility_metadata)
+        _file.close()
+        os.unlink(_file.name)
 
-            assertDeepAlmostEqual(self, expected_metadata,
-                                  self.cfg.fragility_metadata)
-        finally:
-            _file.close()
-            os.unlink(_file.name)
+    def test_h_fragility(self):
+        expected = {'Lattice Tower': {
+            'Suspension': {'rectangle': { 11.5: {'minor': ['lognorm', '1.02', '0.02'],
+                'collapse': ['lognorm', '1.05', '0.02']}}},
+            'Strainer': {5.0: { 180.0: {'minor': ['lognorm', '1.143', '0.032'],
+                'collapse': ['lognorm', '1.18', '0.04']}}},
+            }}
+
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            '---\n',
+            'Lattice Tower:\n',
+            '    Suspension:\n',
+            '        rectangle: # assume starting from 0\n',
+            '            11.5: # normal1 \n',
+            '                minor: lognorm,1.02,0.02\n',
+            '                collapse: lognorm,1.05,0.02\n',
+            '    Strainer:\n',
+            '        5: # dev_angle\n',
+            '            180: # all\n',
+            '                minor: lognorm,1.143,0.032\n',
+            '                collapse: lognorm,1.18,0.04\n',
+            ])
+
+        _file.seek(0)
+
+        output = h_fragility(_file.name)
+        assertDeepAlmostEqual(self, expected, output)
+        _file.close()
+        os.unlink(_file.name)
 
     def test_damage_states(self):
         expected = ['minor', 'collapse']
@@ -153,42 +501,6 @@ class TestConfig(unittest.TestCase):
         expected = ['minor']
         self.cfg._non_collapse = None
         self.assertEqual(self.cfg.non_collapse, expected)
-
-    def test_cond_collapse_prob_metadata(self):
-
-        self.assertEqual(self.cfg.cond_collapse_prob_metadata['list'],
-                         ['Suspension', 'Terminal', 'Strainer'])
-
-        self.assertEqual(self.cfg.cond_collapse_prob_metadata['by'],
-                         'function')
-
-        expected = {'by': 'design_level',
-                    'type': 'string',
-                    'max_adj': 6,
-                    'file': './cond_collapse_prob_strainer.csv'}
-        self.assertEqual(self.cfg.cond_collapse_prob_metadata['Strainer'],
-                         expected)
-
-        expected = {'by': 'height',
-                    'type': 'numeric',
-                    'max_adj': 2,
-                    'file': './cond_collapse_prob_suspension.csv'}
-        self.assertEqual(self.cfg.cond_collapse_prob_metadata['Suspension'],
-                         expected)
-
-    def test_cond_collapse_prob(self):
-
-        expected = {'function': 'Suspension',
-                    'height_lower': 0,
-                    'height_upper': 40,
-                    'no_collapse': 4,
-                    'probability': 0.10000000000000001,
-                    'start': -2,
-                    'end': 2,
-                    'list': (-2, -1, 0, 1, 2)}
-
-        assertDeepAlmostEqual(self, expected,
-                              self.cfg.cond_collapse_prob['Suspension'].loc[5].to_dict())
 
     def test_no_towers_by_line(self):
 
@@ -247,14 +559,16 @@ class TestConfig(unittest.TestCase):
 
     def test_towers(self):
         # file_wind_base_name
-        self.assertEqual(self.cfg.towers_by_line['LineA'][0]['file_wind_base_name'],
-                         'ts.T14.csv')
+        self.assertEqual(self.cfg.towers_by_line['LineA'][57]['file_wind_base_name'],
+                         'ts.T1.csv')
 
         # height_z
-        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][0]['height_z'],
-                               15.4)
-        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][1]['height_z'],
+        # terminal/strainer
+        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][57]['height_z'],
                                12.2)
+        # suspension
+        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][46]['height_z'],
+                               15.4)
 
     def test_lines(self):
         # name_output
@@ -264,12 +578,12 @@ class TestConfig(unittest.TestCase):
         self.assertAlmostEqual(self.cfg.lines['LineB']['no_towers'], 22)
 
     def test_process_config(self):
-
-        # max_adj
-        expected = {'Terminal': 2, 'Suspension': 2, 'Strainer': 6}
-        for key, value in expected.items():
-            self.assertEqual(value,
-                             self.cfg.cond_collapse_prob_metadata[key]['max_adj'])
+        pass
+        ## max_adj
+        #expected = {'Terminal': 2, 'Suspension': 2, 'Strainer': 6}
+        #for key, value in expected.items():
+        #    self.assertEqual(value,
+        #                     self.cfg.cond_collapse_prob_metadata[key]['max_adj'])
 
     def test_sort_by_location(self):
 
@@ -280,27 +594,19 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(self.cfg.lines[line]['names'],
                              expected_names[line])
 
-        expected_ids = {'LineA': [23, 39, 3, 33, 4, 5, 7, 6, 31, 8, 38, 29, 34,
-                                  0, 42, 12, 2, 10, 40, 14, 22, 1],
-                        'LineB': [24, 35, 17, 9, 32, 19, 21, 16, 36, 28, 30, 20,
-                                  37, 13, 41, 11, 26, 43, 15, 27, 25, 18]}
+        expected_ids = {
+            'LineA': [57, 44, 33, 64, 63, 43, 20, 24, 23, 48, 46, 50, 32, 39, 40, 62, 2, 29, 6, 8, 56, 19]
+,
+            'LineB': [41, 10, 21, 58, 12, 14, 54, 47, 59, 27, 49, 55, 65, 11, 4, 13, 5, 22, 25, 26, 34, 1]
+             }
 
         for line in ['LineA', 'LineB']:
             self.assertEqual(self.cfg.lines[line]['ids'], expected_ids[line])
 
         expected_id2name = {
-            'LineA': {0: 'T14', 1: 'T22', 2: 'T17', 3: 'T3',
-                      4: 'T5', 5: 'T6', 6: 'T8', 7: 'T7',
-                      8: 'T10', 10: 'T18', 12: 'T16', 14: 'T20',
-                      22: 'T21', 23: 'T1', 29: 'T12', 31: 'T9',
-                      33: 'T4', 34: 'T13', 38: 'T11', 39: 'T2',
-                      40: 'T19', 42: 'T15'},
-            'LineB': {9: 'T26', 11: 'T38', 13: 'T36', 15: 'T41',
-                      16: 'T30', 17: 'T25', 18: 'T44', 19: 'T28',
-                      20: 'T34', 21: 'T29', 24: 'T23', 25: 'T43',
-                      26: 'T39', 27: 'T42', 28: 'T32', 30: 'T33',
-                      32: 'T27', 35: 'T24', 36: 'T31', 37: 'T35',
-                      41: 'T37', 43: 'T40'}}
+            'LineA': {2: 'T17', 6: 'T19', 8: 'T20', 19: 'T22', 20: 'T7', 23: 'T9', 24: 'T8', 29: 'T18', 32: 'T13', 33: 'T3', 39: 'T14', 40: 'T15', 43: 'T6', 44: 'T2', 46: 'T11', 48: 'T10', 50: 'T12', 56: 'T21', 57: 'T1', 62: 'T16', 63: 'T5', 64: 'T4'},
+            'LineB': {1: 'T44', 4: 'T37', 5: 'T39', 10: 'T24', 11: 'T36', 12: 'T27', 13: 'T38', 14: 'T28', 21: 'T25', 22: 'T40', 25: 'T41', 26: 'T42', 27: 'T32', 34: 'T43', 41: 'T23', 47: 'T30', 49: 'T33', 54: 'T29', 55: 'T34', 58: 'T26', 59: 'T31', 65: 'T35'}
+            }
 
         expected_name2id = {key: {v: k for k, v in value.items()}
                             for key, value in expected_id2name.items()}
@@ -314,7 +620,7 @@ class TestConfig(unittest.TestCase):
                              expected_name2id[line])
 
     def test_assign_collapse_capacity(self):
-
+        # TODO
         # u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1-actual_span/design_span)
         # collapse_capacity = design_speed / sqrt(u_factor)
         # K_FACTOR = {1: 0.33, 2: 0.5}  # hard-coded
@@ -374,9 +680,21 @@ class TestConfig(unittest.TestCase):
         # FIXME
         pass
 
+    def test_assign_cond_collapse_prob_logging(self):
+
+        # Raise warning for undefined cond_pc
+        with self.assertLogs('wistl.config', level='INFO') as cm:
+            row = self.cfg.towers_by_line['LineB'][12]
+            row['height'] = 55.0   # beyond the height
+            self.cfg.assign_cond_collapse_prob(row)
+        msg = f'unable to assign cond_pc for tower {row["name"]}'
+        self.assertIn(f'CRITICAL:wistl.config:{msg}', cm.output)
+
     def test_assign_cond_collapse_prob(self):
+
+        #logger = logging.getLogger(__file__)
         # Tower 1: Terminal
-        row = self.cfg.towers_by_line['LineA'][23]
+        row = self.cfg.towers_by_line['LineA'][57]
         out = self.cfg.assign_cond_collapse_prob(row)
 
         expected = {(0, 1): 0.075,
@@ -384,22 +702,12 @@ class TestConfig(unittest.TestCase):
                     (-1, 0, 1): 0.35,
                     (-1, 0, 1, 2): 0.025,
                     (-2, -1, 0, 1): 0.025,
-                    (-2, -1, 0, 1, 2): 0.10}
+                    (-2, -1, 0, 1, 2): 0.1}
         self.assertEqual(out['cond_pc'], expected)
         self.assertEqual(out['max_no_adj_towers'], 2)
 
-        # Raise warning for undefined cond_pc
-        row = self.cfg.towers_by_line['LineA'][23]
-        row['height'] = 55.0   # beyond the height
-        msg = 'can not assign cond_pc for tower T1'
-        with self.assertLogs(logger=self.logger, level='CRITICAL') as cm:
-            self.cfg.assign_cond_collapse_prob(row)
-            self.assertEqual(
-                '{}:{}'.format(cm.output[0].split(':')[0],cm.output[0].split(':')[-1]),
-                'CRITICAL:{}'.format(msg))
-
         # Tower 26
-        row = self.cfg.towers_by_line['LineB'][9]
+        row = self.cfg.towers_by_line['LineB'][58]
         out = self.cfg.assign_cond_collapse_prob(row)
         self.assertEqual(out['cond_pc'], expected)
         self.assertEqual(out['max_no_adj_towers'], 2)
@@ -409,31 +717,49 @@ class TestConfig(unittest.TestCase):
         functions = ['Suspension', 'Terminal']
         heights = [20.0, 35.0]
 
+        expected = {(0, 1): 0.075,
+                    (-1, 0): 0.075,
+                    (-1, 0, 1): 0.35,
+                    (-1, 0, 1, 2): 0.025,
+                    (-2, -1, 0, 1): 0.025,
+                    (-2, -1, 0, 1, 2): 0.1}
         for func, height in zip(functions, heights):
 
-            row = self.cfg.towers_by_line['LineA'][0].copy()
+            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row['type'] = 'Lattice Tower'
             row['function'] = func
             row['height'] = height
-            tmp = self.cfg.cond_collapse_prob[func]
-            expected = tmp.set_index('list').to_dict()['probability']
             out = self.cfg.assign_cond_collapse_prob(row)
             assertDeepAlmostEqual(self, out['cond_pc'], expected)
 
         functions = ['Strainer'] * 2
         levels = ['low', 'high']
+        expected = {'low': {(-1, 0, 1): 0.05,
+                    (-2, -1, 0, 1, 2): 0.08,
+                    (-3, -2, -1, 0, 1, 2, 3): 0.10,
+                    (-4, -3, -2, -1, 0, 1, 2, 3, 4): 0.08,
+                    (-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5): 0.05,
+                    (-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6): 0.62},
+                    'high': {(-1, 0, 1): 0.15,
+                    (-2, -1, 0, 1, 2): 0.22,
+                    (-3, -2, -1, 0, 1, 2, 3): 0.22,
+                    (-4, -3, -2, -1, 0, 1, 2, 3, 4): 0.15,
+                    (-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5): 0.12,
+                    (-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6): 0.08},
+                    }
+
 
         for func, level in zip(functions, levels):
-            row = self.cfg.towers_by_line['LineA'][0].copy()
+            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row['type'] = 'Lattice Tower'
             row['function'] = func
             row['design_level'] = level
-            tmp = self.cfg.cond_collapse_prob[func]
-            expected = tmp.loc[tmp['design_level'] == level, :].set_index('list').to_dict()['probability']
             out = self.cfg.assign_cond_collapse_prob(row)
-            assertDeepAlmostEqual(self, out['cond_pc'], expected)
+            assertDeepAlmostEqual(self, out['cond_pc'], expected[level])
 
     def test_ratio_z_to_10(self):
         # Tower 14
-        row = self.cfg.towers_by_line['LineA'][0]
+        row = self.cfg.towers_by_line['LineA'][39]
         assert row['terrain_cat'] == 2
         result = self.cfg.ratio_z_to_10(row)
         self.assertAlmostEqual(result, 1.0524)
@@ -447,7 +773,7 @@ class TestConfig(unittest.TestCase):
 
         height_z = 15.4  # Suspension
         for cat, mzcat10 in zip(categories, mzcat10s):
-            row = (self.cfg.towers_by_line['LineA'][0]).copy()
+            row = (self.cfg.towers_by_line['LineA'][39]).copy()
             row['terrain_cat'] = cat
             row['function'] = 'Suspension'
             row['height_z'] = height_z
@@ -458,7 +784,7 @@ class TestConfig(unittest.TestCase):
 
         height_z = 12.2  # Strainer, Terminal
         for cat, mzcat10 in zip(categories, mzcat10s):
-            row = (self.cfg.towers_by_line['LineA'][0]).copy()
+            row = (self.cfg.towers_by_line['LineA'][57]).copy()
             row['terrain_cat'] = cat
             row['function'] = 'Strainer'
             row['height_z'] = height_z
@@ -473,7 +799,7 @@ class TestConfig(unittest.TestCase):
                          True)
 
         # Tower 14
-        row = self.cfg.towers_by_line['LineA'][0]
+        row = self.cfg.towers_by_line['LineA'][39]
         line = row['lineroute']
         self.assertEqual(line, 'LineA')
         out = self.cfg.assign_design_values(row)
@@ -488,7 +814,7 @@ class TestConfig(unittest.TestCase):
                          self.cfg.design_value_by_line[line]['design_speed'])
 
         # Tower 26
-        row = self.cfg.towers_by_line['LineB'][9]
+        row = self.cfg.towers_by_line['LineB'][58]
         line = row['lineroute']
         self.assertEqual(line, 'LineB')
         out = self.cfg.assign_design_values(row)
@@ -503,7 +829,7 @@ class TestConfig(unittest.TestCase):
                          self.cfg.design_value_by_line[line]['design_speed'])
 
         # Tower 34
-        row = self.cfg.towers_by_line['LineB'][20]
+        row = self.cfg.towers_by_line['LineB'][55]
         self.assertEqual(row['name'], 'T34')
         out = self.cfg.assign_design_values(row)
 
@@ -518,7 +844,7 @@ class TestConfig(unittest.TestCase):
                          1.6 * self.cfg.design_value_by_line[line]['design_speed'])
 
         # Tower 42
-        row = self.cfg.towers_by_line['LineB'][27]
+        row = self.cfg.towers_by_line['LineB'][26]
         self.assertEqual(row['name'], 'T42')
         out = self.cfg.assign_design_values(row)
 
@@ -532,46 +858,46 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(out.design_speed,
                          1.3 * self.cfg.design_value_by_line[line]['design_speed'])
 
-    def test_assign_fragility_parameters(self):
+   # def test_assign_fragility_parameters(self):
 
-        # Tower 14
-        row = self.cfg.towers_by_line['LineA'][0]
-        result = self.cfg.assign_fragility_parameters(row)
+   #     # Tower 14
+   #     row = self.cfg.towers_by_line['LineA'][0]
+   #     result = self.cfg.assign_fragility_parameters(row)
 
-        self.assertEqual(result.frag_func, 'lognorm')
-        assertDeepAlmostEqual(self,
-                              result['frag_arg'],
-                              {'collapse': 0.03, 'minor': 0.02}, places=4)
-        assertDeepAlmostEqual(self,
-                              result['frag_scale'],
-                              {'collapse': 1.05, 'minor': 1.02})
-
+   #     self.assertEqual(result.frag_func, 'lognorm')
+   #     assertDeepAlmostEqual(self,
+   #                           result['frag_arg'],
+   #                           {'collapse': 0.03, 'minor': 0.02}, places=4)
+   #     assertDeepAlmostEqual(self,
+   #                           result['frag_scale'],
+   #                           {'collapse': 1.05, 'minor': 1.02})
+    
     def test_assign_id_adj_towers(self):
 
         # Tower 14
-        row = self.cfg.towers_by_line['LineA'][0]
+        row = self.cfg.towers_by_line['LineA'][39]
+        self.assertEqual(row['name'], 'T14')
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'], [11, 12, 13, 14, 15])
         self.assertEqual(result['idl'], 13)
 
         # T26
-        row = self.cfg.towers_by_line['LineB'][9]
+        row = self.cfg.towers_by_line['LineB'][58]
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'], [1, 2, 3, 4, 5])
         self.assertEqual(result['idl'], 3)
 
-        # T39
-        row = self.cfg.towers_by_line['LineB'][26]
+        # T32
+        row = self.cfg.towers_by_line['LineB'][27]
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'],
-                         [10, 11, 12, 13, 14, 15, -1, 17, 18, 19, 20, 21, -1])
-        self.assertEqual(result['idl'], 16)
-
+                         [3, 4, 5, 6, 7, 8, -1, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(result['idl'], 9)
 
     def test_assign_cond_pc_adj(self):
 
         # T14
-        tower = self.cfg.towers_by_line['LineA'][0]
+        tower = self.cfg.towers_by_line['LineA'][39]
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {14: 0.575, 12: 0.575, 15: 0.125, 11: 0.125},
                     # 'cond_pc_adj_sim_idx': [(-1, 0, 1, 2), (-2, -1, 0, 1),
@@ -594,7 +920,7 @@ class TestConfig(unittest.TestCase):
             print('{}'.format(row['cond_pc_adj_sim_prob']))
 
         # T1: terminal tower
-        tower = self.cfg.towers_by_line['LineA'][23]
+        tower = self.cfg.towers_by_line['LineA'][57]
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {1: 0.575, 2: 0.125},
                     # 'cond_pc_adj_sim_idx': [(0, 1, 2), (0, 1)],
@@ -609,7 +935,7 @@ class TestConfig(unittest.TestCase):
                                    expected['cond_pc_adj_sim_prob'])
 
         # T22: terminal tower
-        tower = self.cfg.towers_by_line['LineA'][1]
+        tower = self.cfg.towers_by_line['LineA'][19]
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {20: 0.575, 19: 0.125},
                     # 'cond_pc_adj_sim_idx': [(-2, -1, 0), (-1, 0)],
@@ -644,7 +970,7 @@ class TestConfig(unittest.TestCase):
     def test_assign_shapely_point(self):
 
         # T1: terminal tower
-        tower = self.cfg.towers_by_line['LineA'][23]
+        tower = self.cfg.towers_by_line['LineA'][57]
         row = assign_shapely_point(tower['shapes'])
         expected = {'coord': [149.0, 0.0],
                     'coord_lat_lon': [0.0, 149.0]}
@@ -803,7 +1129,7 @@ class TestConfig(unittest.TestCase):
 #
 #         pd.util.testing.assert_frame_equal(expected, cfg.prob_line_interaction)
 
-class TestConfig1(unittest.TestCase):
+class TestConfig2(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -815,14 +1141,14 @@ class TestConfig1(unittest.TestCase):
 
     def test_read_wind_scenario(self):
 
-        self.assertEqual(self.cfg.events[0], ('test1', 3.0, 0))
-        self.assertEqual(self.cfg.events[1], ('test2', 2.5, 1))
-        self.assertEqual(self.cfg.events[2], ('test2', 3.5, 2))
+        self.assertEqual(self.cfg.events[0], ('test1', 3.0, 1))
+        #self.assertEqual(self.cfg.events[1], ('test2', 2.5, 1))
+        #self.assertEqual(self.cfg.events[2], ('test2', 3.5, 2))
 
 
 if __name__ == '__main__':
-    # suite = unittest.TestSuite()
+    #suite = unittest.TestLoader().loadTestsFromTestCase(TestConfig)
     # suite.addTest(TestConfig("test_assign_collapse_capacity"))
-    # runner = unittest.TextTestRunner()
-    # runner.run(suite)
+    #runner = unittest.TextTestRunner(verbosity=2)
+    #runner.run(suite)
     unittest.main(verbosity=2)

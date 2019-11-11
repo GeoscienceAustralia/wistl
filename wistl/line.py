@@ -1,4 +1,5 @@
 
+import copy
 import os
 import pandas as pd
 import numpy as np
@@ -56,10 +57,10 @@ class Line(object):
         self.towers = None
 
         # analytical method
-        self.damage_prob = None
+        self._damage_prob = None
 
         # simulation method
-        self.damage_prob_sim = None
+        self._damage_prob_sim = None
         self.est_no_damage = None
         self.prob_no_damage = None
 
@@ -84,8 +85,7 @@ class Line(object):
         self._set_towers(kwargs['dic_towers'].copy())
 
     def __repr__(self):
-        return 'Line(name={}, no_towers={}, event_id={})'.format(
-            self.name, self.no_towers, self.event_id)
+        return f'Line(name={self.name}, no_towers={self.no_towers}, event_id={self.event_id})'
 
     def __getstate__(self):
         d = self.__dict__.copy()
@@ -120,7 +120,7 @@ class Line(object):
             try:
                 self._time_index = self.towers[0].wind.index
             except AttributeError:
-                self.logger.error('Can not retrieve time_index of tower {}'.format(self.towers[0].name))
+                self.logger.error(f'Can not retrieve time_index of tower {self.towers[0].name}')
         return self._time_index
 
     @property
@@ -129,7 +129,8 @@ class Line(object):
             self._no_time = len(self.time_index)
         return self._no_time
 
-    def compute_damage_prob(self):
+    @property
+    def damage_prob(self):
         """
         calculate damage probability of towers analytically
         Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
@@ -137,43 +138,46 @@ class Line(object):
         Pi,j: collapse probability due to collapse of j (=Pd(j)*Pc(i|j))
         pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
         """
+        if self._damage_prob is None:
 
-        self.damage_prob = {}
+            self._damage_prob = {}
 
-        pc_adj_agg = np.zeros((self.no_towers,
-                               self.no_towers,
-                               self.no_time))
+            pc_adj_agg = np.zeros((self.no_towers,
+                                   self.no_towers,
+                                   self.no_time))
 
-        # prob of collapse
-        for _, tower in self.towers.items():
-
-            for idl, prob in tower.collapse_adj.items():
-                pc_adj_agg[tower.idl, idl, :] = prob
-
-            pc_adj_agg[tower.idl, tower.idl, :] = tower.dmg['collapse'].values
-
-        # pc_collapse.shape == (no_tower, no_time)
-        pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
-
-        self.damage_prob['collapse'] = pd.DataFrame(
-            pc_collapse.T,
-            columns=self.names,
-            index=self.time_index)
-
-        # non_collapse state
-        for ds in self.non_collapse:
-            temp = np.zeros_like(pc_collapse)
+            # prob of collapse
             for _, tower in self.towers.items():
-                # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                value = tower.dmg[ds].values \
-                        - tower.dmg['collapse'].values \
-                        + pc_collapse[tower.idl, :]
-                temp[tower.idl, :] = np.where(value > 1.0, [1.0], value)
 
-            self.damage_prob[ds] = pd.DataFrame(
-                temp.T,
+                for idl, prob in tower.collapse_adj.items():
+                    pc_adj_agg[tower.idl, idl, :] = prob
+
+                pc_adj_agg[tower.idl, tower.idl, :] = tower.dmg['collapse'].values
+
+            # pc_collapse.shape == (no_tower, no_time)
+            pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
+
+            self._damage_prob['collapse'] = pd.DataFrame(
+                pc_collapse.T,
                 columns=self.names,
                 index=self.time_index)
+
+            # non_collapse state
+            for ds in self.non_collapse:
+                temp = np.zeros_like(pc_collapse)
+                for _, tower in self.towers.items():
+                    # P(DS>ds) - P(collapse directly) + P(collapse induced)
+                    value = tower.dmg[ds].values \
+                            - tower.dmg['collapse'].values \
+                            + pc_collapse[tower.idl, :]
+                    temp[tower.idl, :] = np.where(value > 1.0, [1.0], value)
+
+                self._damage_prob[ds] = pd.DataFrame(
+                    temp.T,
+                    columns=self.names,
+                    index=self.time_index)
+
+        return self._damage_prob
 
     def compute_damage_prob_sim(self):
 
@@ -198,7 +202,6 @@ class Line(object):
         for ds in self.damage_states[::-1]:  # collapse first
 
             for _, tower in self.towers.items():
-
                 tf_ds[tower.idl,
                       tower.dmg_id_sim[ds]['id_sim'].values,
                       tower.dmg_id_sim[ds]['id_time'].values] = True
@@ -209,7 +212,7 @@ class Line(object):
                 columns=self.names,
                 index=self.time_index)
 
-            tf_sim[ds] = tf_ds.copy()
+            tf_sim[ds] = copy.deepcopy(tf_ds)
 
         self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
@@ -338,11 +341,10 @@ def compute_damage_per_line(line, cfg):
 
     logger = logging.getLogger(__name__)
 
-    logger.info('computing damage of {} for {}'.format(line.name,
-                                                       line.event_id))
+    logger.info(f'computing damage of {line.name} for {line.event_id}')
 
     # compute damage probability analytically
-    line.compute_damage_prob()
+    # line.compute_damage_prob()
 
     # perfect correlation within a single line
     line.compute_damage_prob_sim()
@@ -351,7 +353,6 @@ def compute_damage_per_line(line, cfg):
         line.compute_damage_prob_sim_no_cascading()
 
     # compare simulation against analytical
-    msg = '{}: {:d} difference out of {:d}'
     for ds in cfg.damage_states:
 
         idx = np.where(~np.isclose(line.damage_prob_sim[ds],
@@ -359,14 +360,14 @@ def compute_damage_per_line(line, cfg):
                                    atol=ATOL,
                                    rtol=RTOL))
         logger.debug(
-            msg.format(ds, len(idx[0]), line.no_towers*line.no_time))
+                f'{ds}: {len(idx[0]):d} difference out of {line.no_towers*line.no_time:d}')
 
     # save
     if cfg.options['save_output']:
         output_file = os.path.join(cfg.path_output,
-                                   '{}_{}.h5'.format(line.event_id, line.name))
+                                   f'{line.event_id}_{line.name}.h5')
         line.write_hdf5(output_file=output_file)
-        logger.info('{} is saved'.format(output_file))
+        logger.info(f'{output_file} is saved')
 
     #
     # try:

@@ -5,9 +5,10 @@ import pandas as pd
 import os
 import logging
 import scipy.stats as stats
+import bisect
 
 from wistl.constants import ATOL, RTOL
-
+from wistl.config import unit_vector_by_bearing, angle_between_unit_vectors
 
 class Tower(object):
     """
@@ -56,24 +57,22 @@ class Tower(object):
                   'damage_states',
                   'rnd_state',
                   'scale',
-                  'frag_arg',
-                  'frag_func',
-                  'frag_scale',
+                  'frag_dic',
                   'id_adj',
                   'idl',
+                  'idn',
                   'max_no_adj_towers',
                   'height_z',
                   'point',
                   'terrain_cat',
                   'path_event']
 
-    def __init__(self, idn=None, logger=None, **kwargs):
+    def __init__(self, logger=None, **kwargs):
         """
         :param cfg: instance of config clas
         :param ps_tower: panda series containing tower details
         """
 
-        self.idn = idn  # id within network
         self.logger = logger or logging.getLogger(__name__)
 
         self.no_sims = None  # o
@@ -104,9 +103,7 @@ class Tower(object):
         self.cond_pc_adj = None  # dict
         self.collapse_capacity = None
         self.file_wind_base_name = None
-        self.frag_arg = None
-        self.frag_func = None
-        self.frag_scale = None
+        self.frag_dic = None
         self.path_event = None
         self.idl = None  # local id (starting from 0 for each line)
         self.id_adj = None
@@ -131,6 +128,7 @@ class Tower(object):
         self._file_wind = None
         self._wind = None
         self._no_time = None
+        self._sorted_frag_dic_keys = None
 
         # analytical method
         self._dmg = None
@@ -168,8 +166,7 @@ class Tower(object):
     #     return self._damage_states
 
     def __repr__(self):
-        return 'Tower(name={}, function={}, idl={}, idn={})'.format(
-            self.name, self.function, self.idl, self.idn)
+        return f'Tower(name={self.name}, function={self.function}, idl={self.idl}, idn={self.idn})'
 
     def __getstate__(self):
         d = self.__dict__.copy()
@@ -184,6 +181,12 @@ class Tower(object):
 
 
     @property
+    def sorted_frag_dic_keys(self):
+        if self._sorted_frag_dic_keys is None:
+            self._sorted_frag_dic_keys = sorted(self.frag_dic.keys())
+        return self._sorted_frag_dic_keys
+
+    @property
     def no_time(self):
         if self._no_time is None:
             self._no_time = len(self.wind.index)
@@ -196,13 +199,13 @@ class Tower(object):
                 self._file_wind = os.path.join(
                     self.path_event, self.file_wind_base_name)
             except AttributeError:
-                self.logger.error('Invalid path_event {}'.format(self.path_event))
+                self.logger.error(f'Invalid path_event {self.path_event}')
             else:
                 try:
                     assert os.path.exists(self._file_wind)
                 except AssertionError:
                     self.logger.error(
-                        'Invalid file_wind {}'.format(self._file_wind))
+                        f'Invalid file_wind {self._file_wind}')
 
         return self._file_wind
 
@@ -232,13 +235,11 @@ class Tower(object):
                                          index_col=['Time'],
                                          usecols=['Time', 'Speed', 'Bearing'])
             except IOError:
-                msg = 'Invalid file_wind {}'.format(self.file_wind)
+                msg = f'Invalid file_wind {self.file_wind}'
                 self.logger.critical(msg)
             else:
-                self._wind['Speed'] *= self.scale
-                self._wind['directional_speed'] = self._wind.apply(
-                    self.compute_directional_wind_speed, axis=1)
-                self._wind['ratio'] = self._wind['directional_speed'] / self.collapse_capacity
+                self._wind['Speed'] *= self.scale * self.ratio_z_to_10
+                self._wind['ratio'] = self._wind['Speed'] / self.collapse_capacity
 
         return self._wind
 
@@ -248,30 +249,10 @@ class Tower(object):
         compute probability of damage of tower in isolation (Pc)
         """
         if self._dmg is None:
-            self._dmg = pd.DataFrame(None, columns=self.damage_states)
-            for ds, arg in self.frag_arg.items():
-                value = getattr(stats, self.frag_func).cdf(
-                    self.wind['ratio'], arg, scale=self.frag_scale[ds])
-                self._dmg[ds] = pd.Series(value, index=self.wind.index, name=ds)
+            self._dmg = self.wind.apply(
+                    self.compute_damage_using_directional_vulnerability, axis=1)
+            self._dmg.index = self.wind.index
         return self._dmg
-
-    @property
-    def collapse_adj(self):
-        """
-        used only for analytical approach
-        calculate collapse probability of jth tower due to pull by the tower
-        Pc(j,i) = P(j|i)*Pc(i)
-        """
-        # only applicable for tower collapse
-        if self._collapse_adj is None:
-
-            self._collapse_adj = {}
-
-            for key, value in self.cond_pc_adj.items():
-
-                self._collapse_adj[key] = self.dmg['collapse'].values * value
-
-        return self._collapse_adj
 
     @property
     def dmg_state_sim(self):
@@ -280,6 +261,7 @@ class Tower(object):
         j_time: time index (array)
         idx: multiprocessing thread id
 
+        # PD not PE = 0(non), 1, 2 (collapse)
         """
 
         if self._dmg_state_sim is None:
@@ -289,17 +271,16 @@ class Tower(object):
 
             # ds_wind.shape == (no_sims, no_time)
             # PD not PE = 0(non), 1, 2 (collapse)
-            self._dmg_state_sim = np.array(
-                [rv[:, :, np.newaxis] < self.dmg.values])[0].sum(axis=2)
+            self._dmg_state_sim = (rv[:, :, np.newaxis] < self.dmg.values).sum(axis=2)
         return self._dmg_state_sim
 
     @property
     def dmg_sim(self):
+        # PE not PD 1, 2 (collapse)
 
         if self._dmg_sim is None:
 
             self._dmg_sim = {}
-
             for ids, ds in enumerate(self.damage_states, 1):
 
                 self._dmg_sim[ds] = (self.dmg_state_sim >= ids).sum(axis=0) / self.no_sims
@@ -311,9 +292,8 @@ class Tower(object):
                                                       rtol=RTOL))
 
                 for idx in idx_not_close:
-                    msg = 'PE of {}: simulation {:.3f} vs. analytical {:.3f}'
                     self.logger.warning(
-                        msg.format(ds, self._dmg_sim[idx], self.dmg[ds].iloc[idx]))
+                            f'PE of {ds}: simulation {self._dmg_sim[ds][idx]:.3f} vs. analytical {self.dmg[ds].iloc[idx]:.3f}')
 
         return self._dmg_sim
 
@@ -338,6 +318,24 @@ class Tower(object):
                     np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
 
         return self._dmg_id_sim
+
+    @property
+    def collapse_adj(self):
+        """
+        used only for analytical approach
+        calculate collapse probability of jth tower due to pull by the tower
+        Pc(j,i) = P(j|i)*Pc(i)
+        """
+        # only applicable for tower collapse
+        if self._collapse_adj is None:
+
+            self._collapse_adj = {}
+
+            for key, value in self.cond_pc_adj.items():
+
+                self._collapse_adj[key] = self.dmg['collapse'].values * value
+
+        return self._collapse_adj
 
     @property
     def collapse_adj_sim(self):
@@ -367,6 +365,27 @@ class Tower(object):
             # replace index with tower id
             self._collapse_adj_sim['id_adj'] = self._collapse_adj_sim['id_adj'].apply(
                 lambda x: self.cond_pc_adj_sim_idx[int(x)])
+
+            # check whether MC simulation is close to analytical
+            id_adj_removed = [x for x in self.id_adj if x >= 0]
+            id_adj_removed.remove(self.idl)
+            for id_time, grouped in self._collapse_adj_sim.groupby('id_time'):
+
+                for idl in id_adj_removed:
+
+                    prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / self.no_sims
+
+                    idx_not_close, = np.where(~np.isclose(
+                        self.collapse_adj[idl][id_time],
+                        prob,
+                        atol=ATOL,
+                        rtol=RTOL))
+
+                    for idx in idx_not_close:
+                        self.logger.warning(
+                            f'P({idl}|{self.name}) at {id_time}: '
+                            f'simulation {prob:.3f} vs. '
+                            f'analytical {self.collapse_adj[idl][id_time]:.3f}')
 
         return self._collapse_adj_sim
 
@@ -407,39 +426,72 @@ class Tower(object):
     #                 adj_sim_null_removed['no_collapse'].astype(np.int64)
     #             self.damage_interaction_sim = adj_sim_null_removed
 
-    def compute_directional_wind_speed(self, row):
+    #def compute_directional_wind_speed(self, row):
 
-        return self.ratio_z_to_10 * row.Speed
+    #    return self.ratio_z_to_10 * row.Speed
 
-    def compute_directional_wind_speed_needs_to_be_fixed(self, row):
+    def get_directional_vulnerability(self, bearing):
         """
 
         :param row: pandas Series of wind
         :return:
-
+                 | North
             ------------
-           |            |
-           |            |
+           |     |      |
+           |     |______| strong axis
            |            |
            |            |
             ------------
 
-        FIXME!!!
         """
 
-        # angle of conductor relative to NS
-        t0 = np.deg2rad(self.axisaz) - np.pi / 2.0
+        if len(self.sorted_frag_dic_keys) > 1:
 
-        # angle between wind direction and tower conductor
-        phi = np.abs(np.deg2rad(row.Bearing) - t0)
+            angle = angle_between_two(bearing, self.axisaz)
+            try:
+                assert (angle <= 90) & (angle >= 0)
+            except AssertionError:
+                self.logger.error(f'Angle should be within (0, 90), but {angle} ',
+                                   'when axisaz: {self.axisaz}, bearing: {bearing}')
+            # choose fragility given angle 
+            loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
+                      len(self.sorted_frag_dic_keys) - 1)
+        else:
+            loc = 0
 
-        # angle within normal direction
-        tf = (phi <= np.pi / 4) | (phi > np.pi / 4 * 7) | \
-             ((phi > np.pi / 4 * 3) & (phi <= np.pi / 4 * 5))
+        return self.sorted_frag_dic_keys[loc]
 
-        _cos = abs(np.cos(np.pi / 4.0 - phi))
-        _sin = abs(np.sin(np.pi / 4.0 - phi))
+    def compute_damage_using_directional_vulnerability(self, row):
+        """
+        :param row: pandas Series of wind
 
-        adjustment = row.Speed * np.max([_cos, _sin])
+        """
 
-        return self.ratio_z_to_10 * np.where(tf, adjustment, row.Speed)
+        key = self.get_directional_vulnerability(row['Bearing'])
+
+        dmg = {}
+        for ds, fn in self.frag_dic[key].items():
+            dmg[ds] = np.nan_to_num(fn.cdf(row['ratio']), 0.0)
+
+        return pd.Series(dmg)
+
+
+def angle_between_two(deg1, deg2):
+    """
+    :param: deg1: angle 1 (0, 360)
+            deg2: angle 2 (0, 360)
+    """
+    assert (deg1 >= 0) and (deg1 <= 360)
+    assert (deg2 >= 0) and (deg2 <= 360)
+
+    # angle between wind and tower strong axis (normal1)
+    v1 = unit_vector_by_bearing(deg1)
+    v2 = unit_vector_by_bearing(deg1 + 180)
+
+    u = unit_vector_by_bearing(deg2)
+
+    angle = min(angle_between_unit_vectors(u, v1),
+                angle_between_unit_vectors(u, v2))
+
+    return angle
+

@@ -59,7 +59,6 @@ class TestLine1(unittest.TestCase):
             tower._damage_prob = None
             tower._damage_prob_sim = None
 
-        cls.line.compute_damage_prob()
 
     def test_set_towers(self):
 
@@ -77,6 +76,7 @@ class TestLine1(unittest.TestCase):
     def test_compute_damage_prob(self):
 
         # for name, tower in self.line1.towers.items():
+        self.line._damage_prob = None
 
         tower = self.line.towers[10]
         self.assertEqual(tower.name, 'T33')
@@ -133,12 +133,10 @@ class TestLine1(unittest.TestCase):
             np.testing.assert_allclose(
                 pc, self.line.damage_prob_sim['collapse']['T33'][0], atol=ATOL, rtol=RTOL)
         except AssertionError:
-            msg = 'P(C) Theory: {:.4f}, Analytical: {:.4f}, Simulation: {:.4f}'
             self.logger.warning(
-                msg.format(pc,
-                           self.line.damage_prob['collapse']['T33'][0],
-                           self.line.damage_prob_sim['collapse']['T33'][0],
-                           ))
+                f'P(C) Theory: {pc:.4f}, '
+                f"Analytical: {self.line.damage_prob['collapse']['T33'][0]:.4f}, "
+                f"Simulation: {self.line.damage_prob_sim['collapse']['T33'][0]:.4f}")
 
         # T33 (in the middle)
         # o----o----x----o----o
@@ -150,13 +148,10 @@ class TestLine1(unittest.TestCase):
             np.testing.assert_allclose(
                 pm, self.line.damage_prob_sim['minor']['T33'][0], atol=ATOL, rtol=RTOL)
         except AssertionError:
-            msg = 'P(M) Theory: {:.4f}, Simulation: {:.4f}, Analytical: {:.4f}'
             self.logger.warning(
-                msg.format(
-                    pm,
-                    self.line.damage_prob['minor']['T33'][0],
-                    self.line.damage_prob_sim['minor']['T33'][0],
-                    ))
+                f'P(m) Theory: {pm:.4f}, '
+                f"Analytical: {self.line.damage_prob['minor']['T33'][0]:.4f}, "
+                f"Simulation: {self.line.damage_prob_sim['minor']['T33'][0]:.4f}")
     """
 
     def test_compute_stats(self):
@@ -505,7 +500,7 @@ class TestLine2(unittest.TestCase):
             tower._damage_prob = None
             tower._damage_prob_sim = None
 
-        cls.line.compute_damage_prob()
+        #cls.line.compute_damage_prob()
 
     def test_compute_damage_prob_sim_no_cascading(self):
         pass

@@ -1,4 +1,3 @@
-
 import os
 import logging
 import pandas as pd
@@ -29,7 +28,7 @@ class Scenario(object):
         # self.set_line_interaction()
 
     def __repr__(self):
-        return 'Scenario(id={}, no_lines={})'.format(self.id, self.no_lines)
+        return f'Scenario(id={self.id}, no_lines={self.no_lines})'
 
     def __getstate__(self):
         d = self.__dict__.copy()
@@ -56,7 +55,7 @@ class Scenario(object):
             self._lines = {}
 
             for i, name in enumerate(self.cfg.lines):
-
+                # TODO: check whther copy is enough here
                 dic = self.cfg.lines[name].copy()
 
                 dic.update({'no_sims': self.cfg.no_sims,
@@ -98,7 +97,7 @@ class Scenario(object):
 
             if not os.path.exists(self._path_output) and self.cfg.options['save_output']:
                 os.makedirs(self._path_output)
-                self.logger.info('{} is created'.format(self._path_output))
+                self.logger.info(f'{self._path_output} is created')
 
         return self._path_output
 
@@ -129,11 +128,9 @@ def compute_damage_probability_line_interaction_per_network(network, cfg):
                         network[trigger_line].damage_index_line_interaction[
                             line_name])
                 except ValueError:
-                    print('no interaction applied: from {} to {}'.format(
-                        trigger_line, line_name))
+                    print(f'no interaction applied: from {trigger_line} to {line_name}')
                 else:
-                    print('interaction applied: from {} to {}'.format(
-                        trigger_line, line_name))
+                    print(f'interaction applied: from {trigger_line} to {line_name}')
                     # id_tower = pd_id['id_tower'].values
                     # id_sim = pd_id['id_sim'].values
                     # id_time = pd_id['id_time'].values
@@ -180,7 +177,7 @@ def compute_damage_probability_line_interaction_per_network(network, cfg):
                                                  tf_ds_itself)
 
         if np.any(collapse_by_interaction):
-            print('{} is affected by line interaction'.format(line_name))
+            print(f'{line_name} is affected by line interaction')
 
         # compute mean and std of no. of towers for each of damage states
         (line.est_no_damage_line_interaction,

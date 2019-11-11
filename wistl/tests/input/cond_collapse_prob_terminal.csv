@@ -1,7 +1,7 @@
-function, height_lower, height_upper, no_collapse, probability, start, end
-Terminal, 0, 40, 1, 0.075, 0, 1
-Terminal, 0, 40, 1, 0.075, -1, 0
-Terminal, 0, 40, 2, 0.35, -1, 1
-Terminal, 0, 40, 3, 0.025, -1, 2
-Terminal, 0, 40, 3, 0.025, -2, 1
-Terminal, 0, 40, 4, 0.10, -2, 2
+function,height_lower,height_upper,no_collapse,probability,start,end
+Terminal,0,40,1,0.075,0,1
+Terminal,0,40,1,0.075,-1,0
+Terminal,0,40,2,0.35,-1,1
+Terminal,0,40,3,0.025,-1,2
+Terminal,0,40,3,0.025,-2,1
+Terminal,0,40,4,0.10,-2,2

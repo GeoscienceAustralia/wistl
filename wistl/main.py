@@ -27,7 +27,7 @@ def run_simulation(cfg):
 
     if cfg.options['run_parallel']:
 
-        """    
+        """
         logger.info('parallel MC run on.......')
 
         # create transmission network with wind event
@@ -69,7 +69,7 @@ def run_simulation(cfg):
             #         compute_damage_probability_line_interaction_per_network(
             #             network_dic)
 
-    logger.info('MC simulation took {} seconds'.format(time.time() - tic))
+    logger.info(f'MC simulation took {time.time() - tic} seconds')
 
     return lines
 
@@ -113,7 +113,7 @@ def set_logger(path_cfg, logging_level=None):
             level = 'DEBUG'
         finally:
             path_output = os.path.join(path_cfg, 'output')
-            file_log = os.path.join(path_output, '{}.log'.format(logging_level))
+            file_log = os.path.join(path_output, f'{logging_level}.log')
 
             if not os.path.exists(path_output):
                 os.makedirs(path_output)
@@ -155,11 +155,13 @@ def main():
     (options, args) = parser.parse_args()
 
     if options.config_file:
-        path_cfg = os.path.dirname(os.path.realpath(options.config_file))
-        set_logger(path_cfg, options.verbose)
-
-        conf = Config(file_cfg=options.config_file)
-        run_simulation(conf)
+        if not os.path.isfile(options.config_file):
+            sys.exit(f'{options.config_file} not found')
+        else:
+            path_cfg = os.path.dirname(os.path.realpath(options.config_file))
+            set_logger(path_cfg, options.verbose)
+            conf = Config(file_cfg=options.config_file)
+            run_simulation(conf)
     else:
         parser.print_help()
 
