@@ -30,7 +30,7 @@ INPUT_FILES = ['design_value', 'fragility_metadata', 'drag_height_by_type',
               'design_adjustment_factor_by_topography',
               'line_interaction_metadata']
 
-FRAGILITY_ATT = ['section', 'limit_states', 'form', 'param1', 'param2']
+#FRAGILITY_ATT = ['section', 'limit_states', 'form', 'param1', 'param2']
 
 
 # scenario -> damage scenario
@@ -319,13 +319,9 @@ class Config(object):
             df = df.merge(df.apply(self.assign_design_values, axis=1),
                           left_index=True, right_index=True)
 
-            # frag_scale, frag_arg, frag_func
-            #_df = df.apply(
-            #        self.assign_fragility_parameters, axis=1)
-            #print(_df.head())
-            #print(df.head())
-            #df = df.merge(df.apply(self.assign_fragility_parameters, axis=1),
-            #              left_index=True, right_index=True)
+            # frag_dic
+            df = df.merge(df.apply(self.assign_fragility_parameters, axis=1),
+                          left_index=True, right_index=True)
 
             df['file_wind_base_name'] = df['name'].apply(
                 lambda x: self.wind_file_format.format(tower_name=x))
@@ -625,8 +621,9 @@ class Config(object):
         :param tower: pandas series of tower
         :return: pandas series of frag_func, frag_scale, frag_arg
         """
-        return get_value_given_conditions(self.fragility_metadata['fragility'],
-                                          self.fragility, tower)
+        return pd.Series({'frag_dic':
+            get_value_given_conditions(self.fragility_metadata['fragility'],
+                                       self.fragility, tower)})
 
     def assign_id_adj_towers(self, tower):
         """

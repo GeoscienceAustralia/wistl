@@ -58,7 +58,8 @@ class Scenario(object):
                 # TODO: check whther copy is enough here
                 dic = self.cfg.lines[name].copy()
 
-                dic.update({'no_sims': self.cfg.no_sims,
+                dic.update({'name': name,
+                            'no_sims': self.cfg.no_sims,
                             'damage_states': self.cfg.damage_states,
                             'non_collapse': self.cfg.non_collapse,
                             'event_id': self.id,
@@ -67,7 +68,7 @@ class Scenario(object):
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
 
-                self._lines[name] = Line(name=name, **dic)
+                self._lines[name] = Line(**dic)
 
         return self._lines
 

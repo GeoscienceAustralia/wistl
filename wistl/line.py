@@ -13,8 +13,10 @@ from wistl.constants import ATOL, RTOL
 class Line(object):
     """ class for a collection of towers """
 
-    registered = ['coord',
+    registered = ['name',
+                  'coord',
                   'coord_lat_lon',
+                  'dic_towers',
                   'id2name',
                   'ids',
                   'line_string',
@@ -29,13 +31,14 @@ class Line(object):
                   'rnd_state',
                   'path_event']
 
-    def __init__(self, name=None, logger=None, **kwargs):
+    def __init__(self, logger=None, **kwargs):
 
-        self.name = name
         self.logger = logger or logging.getLogger(__name__)
 
+        self.name = None
         self.coord = None
         self.coord_lat_lon = None
+        self.dic_towers = None
         self.id2name = None
         self.ids = None
         self.event_id = None
@@ -54,7 +57,7 @@ class Line(object):
             if key in self.registered:
                 setattr(self, key, value)
 
-        self.towers = None
+        self._towers = None
 
         # analytical method
         self._damage_prob = None
@@ -82,8 +85,6 @@ class Line(object):
         self._time_index = None
         self._no_time = None
 
-        self._set_towers(kwargs['dic_towers'].copy())
-
     def __repr__(self):
         return f'Line(name={self.name}, no_towers={self.no_towers}, event_id={self.event_id})'
 
@@ -98,21 +99,25 @@ class Line(object):
             d['logger'] = logging.getLogger(d['logger'])
         self.__dict__.update(d)
 
-    def _set_towers(self, dic):
+    @property
+    def towers(self):
 
-        assert isinstance(dic, dict)
+        if self._towers is None:
 
-        self.towers = {}
+            self._towers = {}
 
-        for key, value in dic.items():
+            for key, value in self.dic_towers.items():
 
-            value.update({'no_sims': self.no_sims,
-                          'damage_states': self.damage_states,
-                          'scale': self.scale,
-                          'rnd_state': self.rnd_state,
-                          'path_event': self.path_event})
+                value.update({'idn': key,
+                              'no_sims': self.no_sims,
+                              'damage_states': self.damage_states,
+                              'scale': self.scale,
+                              'rnd_state': self.rnd_state,
+                              'path_event': self.path_event})
 
-            self.towers[value['idl']] = Tower(idn=key, **value)
+                self._towers[value['idl']] = Tower(**value)
+
+        return self._towers
 
     @property
     def time_index(self):

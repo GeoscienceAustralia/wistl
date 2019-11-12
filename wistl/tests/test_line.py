@@ -30,7 +30,7 @@ class TestLine1(unittest.TestCase):
 
         event_name = 'test1'
         event_scale = 3.0
-        path_event = os.path.join(cls.cfg.path_wind_scenario_base,
+        path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
         # cls.cfg.no_sims = 10000
         # cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)
@@ -56,34 +56,37 @@ class TestLine1(unittest.TestCase):
 
         for _, tower in cls.line.towers.items():
             tower.wind['ratio'] = 1.0
+            tower.axisaz = 11.0
             tower._damage_prob = None
             tower._damage_prob_sim = None
 
 
-    def test_set_towers(self):
+    def test_towers(self):
 
         self.assertEqual(self.line.no_towers, 22)
         self.assertEqual(self.line.no_time, 3)
 
         self.assertEqual(self.line.towers[0].name, 'T23')
         self.assertEqual(self.line.towers[0].idl, 0)
-        self.assertEqual(self.line.towers[0].idn, 24)
+        self.assertEqual(self.line.towers[0].idn, 41)
         self.assertEqual(self.line.towers[0].no_time, 3)
         self.assertEqual(self.line.towers[0].no_sims, self.no_sims)
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
         self.assertAlmostEqual(self.line.towers[0].scale, 3.0)
 
     def test_compute_damage_prob(self):
-
+        name = 'T26'
         # for name, tower in self.line1.towers.items():
         self.line._damage_prob = None
 
-        tower = self.line.towers[10]
-        self.assertEqual(tower.name, 'T33')
-
-        # T33 (in the middle)
+        tower = self.line.towers[3]
+        tower._dmg = None
+        tower._dmg_sim = None
+        self.assertEqual(tower.name, name)
+        # T26 (in the middle)
         # o----o----x----o----o
         # collapse
+        # lognorm.cdf(1.0, 0.03, scale=1.05)
         p0c = 0.0519
         p0gn2 = p0c * 0.125
         p0gn1 = p0c * 0.575
@@ -93,33 +96,40 @@ class TestLine1(unittest.TestCase):
 
         self.assertAlmostEqual(p0c, tower.dmg['collapse'][0], places=3)
         self.assertAlmostEqual(p0c, tower.dmg_sim['collapse'][0], places=3)
-        self.assertAlmostEqual(p0gn2, tower.collapse_adj[8][0], places=3)
-        self.assertAlmostEqual(p0gn1, tower.collapse_adj[9][0], places=3)
-        self.assertAlmostEqual(p0gp1, tower.collapse_adj[11][0], places=3)
-        self.assertAlmostEqual(p0gp2, tower.collapse_adj[12][0], places=3)
-        self.assertAlmostEqual(
-            pc, self.line.damage_prob['collapse']['T33'][0], places=3)
 
-        # T33 (in the middle)
+        self.assertAlmostEqual(p0c, self.line.towers[1].dmg['collapse'][0], places=3)
+        self.assertAlmostEqual(p0c, self.line.towers[2].dmg['collapse'][0], places=3)
+        self.assertAlmostEqual(p0c, self.line.towers[4].dmg['collapse'][0], places=3)
+        self.assertAlmostEqual(p0c, self.line.towers[5].dmg['collapse'][0], places=3)
+
+        self.assertAlmostEqual(p0gn2, tower.collapse_adj[1][0], places=3)
+        self.assertAlmostEqual(p0gn1, tower.collapse_adj[2][0], places=3)
+        self.assertAlmostEqual(p0gp1, tower.collapse_adj[4][0], places=3)
+        self.assertAlmostEqual(p0gp2, tower.collapse_adj[5][0], places=3)
+        self.assertAlmostEqual(
+            pc, self.line.damage_prob['collapse'][name][0], places=3)
+
+        # T26 (in the middle)
         # o----o----x----o----o
         # minor
+        # lognorm.cdf(1.0, 0.03, scale=1.02)
         p0m = 0.1610
         pm = min(p0m - p0c + pc, 1.0)
 
         self.assertAlmostEqual(p0m, tower.dmg['minor'][0], places=3)
         self.assertAlmostEqual(p0m, tower.dmg_sim['minor'][0], places=3)
         self.assertAlmostEqual(
-            pm, self.line.damage_prob['minor']['T33'][0], places=3)
+            pm, self.line.damage_prob['minor'][name][0], places=3)
 
 
     def test_compute_damage_prob_sim(self):
 
-        self.line.compute_damage_prob_sim()
+        name = 'T26'
 
-        tower = self.line.towers[10]
-        self.assertEqual(tower.name, 'T33')
+        tower = self.line.towers[3]
+        self.assertEqual(tower.name, name)
 
-        # T33 (in the middle)
+        # T26 (in the middle)
         # o----o----x----o----o
         # collapse
         p0c = 0.0519
@@ -129,14 +139,15 @@ class TestLine1(unittest.TestCase):
         p0gp2 = p0c * 0.125
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
 
+        self.line.compute_damage_prob_sim()
         try:
             np.testing.assert_allclose(
-                pc, self.line.damage_prob_sim['collapse']['T33'][0], atol=ATOL, rtol=RTOL)
+                pc, self.line.damage_prob_sim['collapse'][name][0], atol=ATOL, rtol=RTOL)
         except AssertionError:
             self.logger.warning(
                 f'P(C) Theory: {pc:.4f}, '
-                f"Analytical: {self.line.damage_prob['collapse']['T33'][0]:.4f}, "
-                f"Simulation: {self.line.damage_prob_sim['collapse']['T33'][0]:.4f}")
+                f"Analytical: {self.line.damage_prob['collapse'][name][0]:.4f}, "
+                f"Simulation: {self.line.damage_prob_sim['collapse'][name][0]:.4f}")
 
         # T33 (in the middle)
         # o----o----x----o----o
@@ -159,7 +170,7 @@ class TestLine1(unittest.TestCase):
         no_sims = 10
         rnd_state = np.random.RandomState(1)
         event_name = 'test1'
-        path_event = os.path.join(self.cfg.path_wind_scenario_base,
+        path_event = os.path.join(self.cfg.path_wind_event_base,
                                   event_name)
 
         # LineB
@@ -471,7 +482,7 @@ class TestLine2(unittest.TestCase):
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger=cls.logger)
 
         event_name = 'test1'
-        path_event = os.path.join(cls.cfg.path_wind_scenario_base,
+        path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
         # cls.cfg.no_sims = 10000
         # cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)

@@ -17,9 +17,7 @@ class Tower(object):
     """
 
     registered = ['axisaz',   # azimuth of strong axis
-                  #'barangay',
-                  #'comment',
-                  #'constcost',
+                 #'constcost',
                   #'consttype',
                   # 'devangle',  # deviation angle
                   'function',
@@ -32,11 +30,6 @@ class Tower(object):
                   #'mun',
                   #'number',
                   'name',
-                  #'operator',
-                  #'owner',
-                  #'point_x',
-                  #'point_y',
-                  #'psgc',
                   #'shapes',
                   'type',
                   #'yrbuilt',
@@ -105,7 +98,8 @@ class Tower(object):
         self.file_wind_base_name = None
         self.frag_dic = None
         self.path_event = None
-        self.idl = None  # local id (starting from 0 for each line)
+        self.idl = None  # tower id within line (starting from 0 for each line)
+        self.idn = None  # tower id within network 
         self.id_adj = None
         self.max_no_adj_towers = None
 
@@ -367,11 +361,13 @@ class Tower(object):
                 lambda x: self.cond_pc_adj_sim_idx[int(x)])
 
             # check whether MC simulation is close to analytical
-            id_adj_removed = [x for x in self.id_adj if x >= 0]
-            id_adj_removed.remove(self.idl)
+            #id_adj_removed = [x for x in self.id_adj if x >= 0]
+            #if self.idl in id_adj_removed:
+            #    id_adj_removed.remove(self.idl)
+
             for id_time, grouped in self._collapse_adj_sim.groupby('id_time'):
 
-                for idl in id_adj_removed:
+                for idl in self.cond_pc_adj.keys():
 
                     prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / self.no_sims
 
@@ -470,8 +466,9 @@ class Tower(object):
         key = self.get_directional_vulnerability(row['Bearing'])
 
         dmg = {}
-        for ds, fn in self.frag_dic[key].items():
-            dmg[ds] = np.nan_to_num(fn.cdf(row['ratio']), 0.0)
+        for ds, (fn, param1, param2) in self.frag_dic[key].items():
+            value = getattr(stats, fn).cdf(row['ratio'], float(param2), scale=float(param1))
+            dmg[ds] = np.nan_to_num(value, 0.0)
 
         return pd.Series(dmg)
 

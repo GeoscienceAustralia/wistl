@@ -563,14 +563,18 @@ class TestConfig(unittest.TestCase):
                          'ts.T1.csv')
 
         # height_z
-        # terminal/strainer
+        # terminal
         self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][57]['height_z'],
                                12.2)
         # suspension
         self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][46]['height_z'],
                                15.4)
+        # strainer
+        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][23]['height_z'],
+                               12.2)
 
     def test_lines(self):
+        pass
         # name_output
         self.assertEqual(self.cfg.lines['LineA']['name_output'], 'LineA')
 
@@ -871,7 +875,7 @@ class TestConfig(unittest.TestCase):
    #     assertDeepAlmostEqual(self,
    #                           result['frag_scale'],
    #                           {'collapse': 1.05, 'minor': 1.02})
-    
+
     def test_assign_id_adj_towers(self):
 
         # Tower 14
@@ -896,13 +900,12 @@ class TestConfig(unittest.TestCase):
 
     def test_assign_cond_pc_adj(self):
 
-        # T14
+        # T14: suspension tower
         tower = self.cfg.towers_by_line['LineA'][39]
+        self.assertEqual(tower['name'], 'T14')
+        self.assertEqual(tower['idl'], 13)
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {14: 0.575, 12: 0.575, 15: 0.125, 11: 0.125},
-                    # 'cond_pc_adj_sim_idx': [(-1, 0, 1, 2), (-2, -1, 0, 1),
-                    #                            (0, 1), (-1, 0),
-                    #                            (-2, -1, 0, 1, 2), (-1, 0, 1)],
                     'cond_pc_adj_sim_idx': [(12, 14, 15), (11, 12, 14),
                                                (12,), (14,),
                                                (11, 12, 14, 15), (12, 14)],
@@ -922,8 +925,9 @@ class TestConfig(unittest.TestCase):
         # T1: terminal tower
         tower = self.cfg.towers_by_line['LineA'][57]
         row = assign_cond_pc_adj(tower)
+        self.assertEqual(tower['name'], 'T1')
+        self.assertEqual(tower['idl'], 0)
         expected = {'cond_pc_adj': {1: 0.575, 2: 0.125},
-                    # 'cond_pc_adj_sim_idx': [(0, 1, 2), (0, 1)],
                     'cond_pc_adj_sim_idx': [(1, 2), (1,)],
                     'cond_pc_adj_sim_prob': np.array([0.125, 0.575])}
 
@@ -936,9 +940,10 @@ class TestConfig(unittest.TestCase):
 
         # T22: terminal tower
         tower = self.cfg.towers_by_line['LineA'][19]
+        self.assertEqual(tower['name'], 'T22')
+        self.assertEqual(tower['idl'], 21)
         row = assign_cond_pc_adj(tower)
         expected = {'cond_pc_adj': {20: 0.575, 19: 0.125},
-                    # 'cond_pc_adj_sim_idx': [(-2, -1, 0), (-1, 0)],
                     'cond_pc_adj_sim_idx': [(19, 20,), (20,)],
                     'cond_pc_adj_sim_prob': np.array([0.125, 0.575])}
 
@@ -948,6 +953,44 @@ class TestConfig(unittest.TestCase):
                          expected['cond_pc_adj_sim_idx'])
         np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
                                    expected['cond_pc_adj_sim_prob'])
+
+        # T9: strainer tower
+        tower = self.cfg.towers_by_line['LineA'][23]
+        self.assertEqual(tower['name'], 'T9')
+        self.assertEqual(tower['idl'], 8)
+        row = assign_cond_pc_adj(tower)
+        expected = {'cond_pc_adj': {7: 0.98, 9: 0.98,
+            6: 0.93, 10: 0.93,
+            5: 0.85, 11: 0.85,
+            4: 0.75, 12: 0.75,
+            3: 0.67, 13: 0.67,
+            2: 0.62, 14: 0.62},
+            'cond_pc_adj_sim_idx': [(7, 9,), (3,4,5,6,7,9,10,11,12,13,),(6,7,9,10,), (4,5,6,7,9,10,11,12,),(5,6,7,9,10,11,),(2,3,4,5,6,7,9,10,11,12,13,14,)],
+            'cond_pc_adj_sim_prob': np.array([0.05, 0.10, 0.18, 0.26, 0.36, 0.98])}
+
+        assertDeepAlmostEqual(self, row['cond_pc_adj'], expected['cond_pc_adj'],
+                              places=4)
+        self.assertEqual(row['cond_pc_adj_sim_idx'],
+                         expected['cond_pc_adj_sim_idx'])
+        np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
+                                   expected['cond_pc_adj_sim_prob'])
+
+        # T1: suspension tower neighboring strainer (9)
+        tower = self.cfg.towers_by_line['LineB'][49]
+        row = assign_cond_pc_adj(tower)
+        self.assertEqual(tower['name'], 'T33')
+        self.assertEqual(tower['idl'], 10)
+        expected = {'cond_pc_adj': {12: 0.125, 11:0.575},
+                    'cond_pc_adj_sim_idx': [(11, 12), (11,)],
+                    'cond_pc_adj_sim_prob': np.array([0.125, 0.575])}
+
+        assertDeepAlmostEqual(self, row['cond_pc_adj'], expected['cond_pc_adj'],
+                              places=4)
+        self.assertEqual(row['cond_pc_adj_sim_idx'],
+                         expected['cond_pc_adj_sim_idx'])
+        np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
+                                   expected['cond_pc_adj_sim_prob'])
+
 
     def test_create_list_idx(self):
 
