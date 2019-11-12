@@ -1,0 +1,62 @@
+---
+Lattice Tower:
+    Suspension:
+        rectangle: # assume starting from 0
+            11.5: # normal1 
+                minor: lognorm,1.02,0.02
+                collapse: lognorm,1.05,0.03
+            28.75: # vulnerable 
+                minor: lognorm,1.0,0.02
+                collapse: lognorm,1.02,0.03
+            41.25: # normal2 
+                minor: lognorm,1.04,0.02
+                collapse: lognorm,1.07,0.03
+            90: # conductor 
+                minor: lognorm,-0.1,0.02
+                collapse: lognorm,-0.1,0.03
+        square:
+            45: # normal1
+                minor: lognorm,1.02,0.02
+                collapse: lognorm,1.05,0.03
+            90: # conductor
+                minor: lognorm,-1.02,0.02
+                collapse: lognorm,-1.05,0.03
+    Terminal:
+        rectangle: # assume starting from 0
+            11.5: # normal1 
+                minor: lognorm,1.02,0.02
+                collapse: lognorm,1.05,0.03
+            28.75: # vulnerable 
+                minor: lognorm,1.0,0.02
+                collapse: lognorm,1.02,0.03
+            41.25: # normal2 
+                minor: lognorm,1.04,0.02
+                collapse: lognorm,1.07,0.03
+            90: # conductor 
+                minor: lognorm,-0.1,0.02
+                collapse: lognorm,-0.1,0.03
+        square:
+            45: # normal1
+                minor: lognorm,1.02,0.02
+                collapse: lognorm,1.05,0.03
+            90: # conductor
+                minor: lognorm,-1.02,0.02
+                collapse: lognorm,-1.02,0.03
+    Strainer:
+        5: # dev_angle
+            180: # all
+                minor: lognorm,1.143,0.032
+                collapse: lognorm,1.18,0.04
+        15:
+            180: # all
+                minor: lognorm,1.173,0.032
+                collapse: lognorm,1.21,0.04
+        30:
+            180: 
+                minor: lognorm,1.208,0.032
+                collapse: lognorm,1.245,0.04
+        180:
+            180: 
+                minor: lognorm,1.243,0.032
+                collape: lognorm,1.28,0.04
+

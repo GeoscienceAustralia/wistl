@@ -1,0 +1,10 @@
+---
+file: ./test_cond_collapse_prob.yml
+probability:
+    type:
+        Lattice Tower:
+            function:
+                Suspension: height 
+                Terminal: height 
+                Strainer: design_level 
+

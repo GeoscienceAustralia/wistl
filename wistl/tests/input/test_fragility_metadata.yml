@@ -1,0 +1,17 @@
+---
+main:
+    limit_states: minor, collapse
+    file: ./test_fragility.yml
+
+fragility:
+    type:
+        Lattice Tower:
+            function:
+                Suspension: shape
+                Terminal: shape
+                Strainer: devangle
+#function:
+#    lognorm: 
+#        param1: scale
+#        param2: arg
+
