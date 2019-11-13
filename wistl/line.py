@@ -219,6 +219,14 @@ class Line(object):
 
             tf_sim[ds] = copy.deepcopy(tf_ds)
 
+        # checking against analytical value
+        for name in self.names:
+            try:
+                np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
+                    self.damage_prob_sim['collapse'][name].values, atol=ATOL, rtol=RTOL)
+            except AssertionError:
+                self.logger.warning(f'Simulation not close to analytical value for {name}')
+
         self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
     def compute_damage_prob_sim_no_cascading(self):
@@ -246,6 +254,14 @@ class Line(object):
                 index=self.time_index)
 
             tf_sim[ds] = tf_ds.copy()
+
+        # checking against analytical value
+        for _id, name in enumerate(self.names):
+            try:
+                np.testing.assert_allclose(self.towers[_id].dmg[ds].values,
+                    self.damage_prob_sim_no_cascading[ds][name].values, atol=ATOL, rtol=RTOL)
+            except AssertionError:
+                self.logger.warning(f'Simulation not close to analytical value for {name}')
 
         self.est_no_damage_no_cascading, self.prob_no_damage_no_cascading = \
             self.compute_stats(tf_sim)

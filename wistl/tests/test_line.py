@@ -10,6 +10,7 @@ from scipy.stats import itemfreq
 from wistl.config import Config
 from wistl.line import Line
 from wistl.tests.test_config import assertDeepAlmostEqual
+from wistl.tests.test_tower import create_wind_given_bearing
 # from wistl.transmission_network import read_shape_file, populate_df_lines, \
 #     populate_df_towers
 
@@ -32,18 +33,12 @@ class TestLine1(unittest.TestCase):
         event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
-        # cls.cfg.no_sims = 10000
-        # cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)
-        # cls.all_towers.loc[1, 'Function'] = 'Suspension'
-        # populate_df_towers(cls.all_towers, cls.cfg)
-        #
-        # cls.all_lines = read_shape_file(cls.cfg.file_shape_line)
-        # populate_df_lines(cls.all_lines)
+        cls.no_sims = 1000000
 
         # LineB
         dic_line = cls.cfg.lines['LineB'].copy()
-        cls.no_sims = 1000000
-        dic_line.update({'no_sims': cls.no_sims,
+        dic_line.update({'name': 'LineB',
+                         'no_sims': cls.no_sims,
                          'damage_states': cls.cfg.damage_states,
                          'non_collapse': cls.cfg.non_collapse,
                          'event_id': cls.cfg.event_id_format.format(event_name=event_name, scale=event_scale),
@@ -52,24 +47,26 @@ class TestLine1(unittest.TestCase):
                          'path_event': path_event,
                          'dic_towers': cls.cfg.towers_by_line['LineB']})
 
-        cls.line = Line(name='LineB', **dic_line)
+        cls.line = Line(**dic_line)
 
         for _, tower in cls.line.towers.items():
-            tower.wind['ratio'] = 1.0
+            tower._wind = create_wind_given_bearing(10.0, 1.0)
             tower.axisaz = 11.0
             tower._damage_prob = None
             tower._damage_prob_sim = None
+            tower._dmg_sim = None
+            tower._dmg_id_sim = None
 
 
     def test_towers(self):
 
         self.assertEqual(self.line.no_towers, 22)
-        self.assertEqual(self.line.no_time, 3)
+        self.assertEqual(self.line.no_time, 2)
 
         self.assertEqual(self.line.towers[0].name, 'T23')
         self.assertEqual(self.line.towers[0].idl, 0)
         self.assertEqual(self.line.towers[0].idn, 41)
-        self.assertEqual(self.line.towers[0].no_time, 3)
+        self.assertEqual(self.line.towers[0].no_time, 2)
         self.assertEqual(self.line.towers[0].no_sims, self.no_sims)
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
         self.assertAlmostEqual(self.line.towers[0].scale, 3.0)
@@ -80,8 +77,8 @@ class TestLine1(unittest.TestCase):
         self.line._damage_prob = None
 
         tower = self.line.towers[3]
-        tower._dmg = None
-        tower._dmg_sim = None
+        #tower._dmg = None
+        #tower._dmg_sim = None
         self.assertEqual(tower.name, name)
         # T26 (in the middle)
         # o----o----x----o----o
@@ -127,18 +124,20 @@ class TestLine1(unittest.TestCase):
         name = 'T26'
 
         tower = self.line.towers[3]
+        #tower._dmg = None
+        #tower._dmg_id_sim = None
+        #tower._dmg_sim = None
         self.assertEqual(tower.name, name)
-
         # T26 (in the middle)
         # o----o----x----o----o
         # collapse
+        # lognorm.cdf(1.0, 0.03, scale=1.05)
         p0c = 0.0519
         p0gn2 = p0c * 0.125
         p0gn1 = p0c * 0.575
         p0gp1 = p0c * 0.575
         p0gp2 = p0c * 0.125
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
-
         self.line.compute_damage_prob_sim()
         try:
             np.testing.assert_allclose(
@@ -149,20 +148,89 @@ class TestLine1(unittest.TestCase):
                 f"Analytical: {self.line.damage_prob['collapse'][name][0]:.4f}, "
                 f"Simulation: {self.line.damage_prob_sim['collapse'][name][0]:.4f}")
 
-        # T33 (in the middle)
+        for _id in range(23, 45):
+            name = f'T{_id}'
+            try:
+                np.testing.assert_allclose(self.line.damage_prob['collapse'][name][0],
+                        self.line.damage_prob_sim['collapse'][name][0], atol=ATOL, rtol=RTOL)
+            except AssertionError:
+                self.logger.warning(
+                    f'Tower: {name}, collapse'
+                    f"Analytical: {self.line.damage_prob['collapse'][name][0]:.4f}, "
+                    f"Simulation: {self.line.damage_prob_sim['collapse'][name][0]:.4f}")
+
         # o----o----x----o----o
         # minor
-        p0m = 0.1610
+        # lognorm.cdf(1.0, 0.02, scale=1.02) 
+        p0m = 0.16105
         pm = min(p0m - p0c + pc, 1.0)
-
         try:
-            np.testing.assert_allclose(
-                pm, self.line.damage_prob_sim['minor']['T33'][0], atol=ATOL, rtol=RTOL)
+           self.assertTrue(
+                pm >= self.line.damage_prob_sim['minor'][name][0])
         except AssertionError:
             self.logger.warning(
                 f'P(m) Theory: {pm:.4f}, '
-                f"Analytical: {self.line.damage_prob['minor']['T33'][0]:.4f}, "
-                f"Simulation: {self.line.damage_prob_sim['minor']['T33'][0]:.4f}")
+                f"Analytical: {self.line.damage_prob['minor'][name][0]:.4f}, "
+                f"Simulation: {self.line.damage_prob_sim['minor'][name][0]:.4f}")
+
+        # except 32, strainer tower
+        for _id in list(range(23, 32)) + list(range(33, 45)):
+            name = f'T{_id}'
+            try:
+                self.assertTrue(self.line.damage_prob['minor'][name][0]
+                        >= self.line.damage_prob_sim['minor'][name][0])
+            except AssertionError:
+                self.logger.warning(
+                    f'Tower: {name}, minor, '
+                    f"Analytical: {self.line.damage_prob['minor'][name][0]:.4f}, "
+                    f"Simulation: {self.line.damage_prob_sim['minor'][name][0]:.4f}")
+
+    def test_compute_damage_prob_sim_no_cascading(self):
+
+        name = 'T26'
+
+        tower = self.line.towers[3]
+        #tower._dmg = None
+        #tower._dmg_id_sim = None
+        #tower._dmg_sim = None
+        self.assertEqual(tower.name, name)
+        # T26 (in the middle)
+        # o----o----x----o----o
+        # collapse
+        # lognorm.cdf(1.0, 0.03, scale=1.05)
+        pc = tower.dmg['collapse']
+        self.line.compute_damage_prob_sim_no_cascading()
+        try:
+            np.testing.assert_allclose(
+                pc, self.line.damage_prob_sim_no_cascading['collapse'][name], atol=ATOL, rtol=RTOL)
+        except AssertionError:
+            self.logger.warning(
+                f'P(C) Theory: {pc:.4f}, '
+                f"Simulation: {self.line.damage_prob_sim_no_cascading['collapse'][name][0]:.4f}")
+
+        # o----o----x----o----o
+        # minor
+        # lognorm.cdf(1.0, 0.02, scale=1.02) 
+        pm = tower.dmg['minor']
+        try:
+           np.testing.assert_allclose(
+                pm, self.line.damage_prob_sim_no_cascading['minor'][name], atol=ATOL, rtol=RTOL)
+        except AssertionError:
+            self.logger.warning(
+                f'P(m) Theory: {pm:.4f}, '
+                f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name]:.4f}")
+
+        # except 32, strainer tower
+        for _id, name in enumerate(self.line.names):
+            try:
+                np.testing.assert_allclose(
+                        self.line.towers[_id].dmg['minor'], self.line.damage_prob_sim_no_cascading['minor'][name], atol=ATOL, rtol=RTOL)
+            except AssertionError:
+                self.logger.warning(
+                    f'Tower: {name}, minor, '
+                    f"Theory: {self.line.towers[_id].dmg['minor']:.4f}, "
+                    f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name]:.4f}")
+
     """
 
     def test_compute_stats(self):
