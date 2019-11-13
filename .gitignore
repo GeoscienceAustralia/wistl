@@ -63,7 +63,7 @@ target/
 # prokect specific files
 #output_current_glenda/
 #input/
-wind_scenario/
+#wind_scenario/
 #tests/output/
 #gis_data/
 *.pdf

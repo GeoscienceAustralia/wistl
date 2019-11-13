@@ -12,10 +12,15 @@ class Scenario(object):
     def __init__(self, cfg=None, event=None, logger=None):
 
         self.cfg = cfg
-        self.name = event[0]
-        self.scale = event[1]
-        self.seed = event[2]
         self.logger = logger or logging.getLogger(__name__)
+        try:
+            assert len(event) == 3
+        except AssertionError:
+            self.logger.critical('event should be (name, scale, seed)')
+        else:
+            self.name = event[0]
+            self.scale = event[1]
+            self.seed = event[2]
 
         # attributes
         self._id = None
@@ -87,7 +92,7 @@ class Scenario(object):
     @property
     def path_event(self):
         if self._path_event is None:
-            self._path_event = os.path.join(self.cfg.path_wind_scenario_base,
+            self._path_event = os.path.join(self.cfg.path_wind_event_base,
                                             self.name)
         return self._path_event
 

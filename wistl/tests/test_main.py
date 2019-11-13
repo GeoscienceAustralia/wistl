@@ -21,9 +21,10 @@ class TestTransmission(unittest.TestCase):
 
         logging.basicConfig(level=logging.WARNING)
         logger = logging.getLogger(__name__)
-        file_cfg = os.path.join(BASE_DIR, 'test.cfg')
+        file_cfg = os.path.join(BASE_DIR, 'test1.cfg')
 
         cls.cfg = Config(file_cfg=file_cfg, logger=logger)
+        cls.cfg.no_sims = 1000000
         cls.cfg.save = False
         cls.cfg.figure = False
 
