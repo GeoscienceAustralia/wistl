@@ -225,7 +225,7 @@ class Line(object):
                 np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
                     self.damage_prob_sim['collapse'][name].values, atol=ATOL, rtol=RTOL)
             except AssertionError:
-                self.logger.warning(f'Simulation not close to analytical value for {name}')
+                self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
 
         self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
 
@@ -261,7 +261,7 @@ class Line(object):
                 np.testing.assert_allclose(self.towers[_id].dmg[ds].values,
                     self.damage_prob_sim_no_cascading[ds][name].values, atol=ATOL, rtol=RTOL)
             except AssertionError:
-                self.logger.warning(f'Simulation not close to analytical value for {name}')
+                self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
 
         self.est_no_damage_no_cascading, self.prob_no_damage_no_cascading = \
             self.compute_stats(tf_sim)
@@ -374,14 +374,13 @@ def compute_damage_per_line(line, cfg):
         line.compute_damage_prob_sim_no_cascading()
 
     # compare simulation against analytical
-    for ds in cfg.damage_states:
-
-        idx = np.where(~np.isclose(line.damage_prob_sim[ds],
-                                   line.damage_prob[ds],
-                                   atol=ATOL,
-                                   rtol=RTOL))
-        logger.debug(
-                f'{ds}: {len(idx[0]):d} difference out of {line.no_towers*line.no_time:d}')
+    #for ds in cfg.damage_states:
+    #    idx_not_close = np.where(~np.isclose(line.damage_prob_sim[ds].values,
+    #                             line.damage_prob[ds].values,
+    #                             atol=ATOL,
+    #                             rtol=RTOL))
+    #    for idc in idx_not_close[1]:
+    #        logger.warning(f'Simulation not CLOSE {ds}:{line.towers[idc].name}')
 
     # save
     if cfg.options['save_output']:

@@ -8,7 +8,7 @@ import pandas as pd
 from scipy.stats import itemfreq
 
 from wistl.config import Config
-from wistl.line import Line
+from wistl.line import Line, compute_damage_per_line
 from wistl.tests.test_config import assertDeepAlmostEqual
 from wistl.tests.test_tower import create_wind_given_bearing
 # from wistl.transmission_network import read_shape_file, populate_df_lines, \
@@ -33,7 +33,7 @@ class TestLine1(unittest.TestCase):
         event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
-        cls.no_sims = 1000000
+        cls.no_sims = 2000000
 
         # LineB
         dic_line = cls.cfg.lines['LineB'].copy()
@@ -71,7 +71,15 @@ class TestLine1(unittest.TestCase):
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
         self.assertAlmostEqual(self.line.towers[0].scale, 3.0)
 
-    def test_compute_damage_prob(self):
+    def test_time_index(self):
+
+        pd.testing.assert_index_equal(self.line.time_index, self.line.towers[0].wind.index)
+
+    def test_no_time(self):
+
+        self.assertEqual(self.line.no_time, len(self.line.towers[0].wind.index))
+
+    def test_damage_prob(self):
         name = 'T26'
         # for name, tower in self.line1.towers.items():
         self.line._damage_prob = None
@@ -110,7 +118,7 @@ class TestLine1(unittest.TestCase):
         # o----o----x----o----o
         # minor
         # lognorm.cdf(1.0, 0.03, scale=1.02)
-        p0m = 0.1610
+        p0m = 0.16105
         pm = min(p0m - p0c + pc, 1.0)
 
         self.assertAlmostEqual(p0m, tower.dmg['minor'][0], places=3)
@@ -231,8 +239,6 @@ class TestLine1(unittest.TestCase):
                     f"Theory: {self.line.towers[_id].dmg['minor']:.4f}, "
                     f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name]:.4f}")
 
-    """
-
     def test_compute_stats(self):
 
         no_sims = 10
@@ -243,7 +249,8 @@ class TestLine1(unittest.TestCase):
 
         # LineB
         dic_line = self.cfg.lines['LineB'].copy()
-        dic_line.update({'no_sims': no_sims,
+        dic_line.update({'name': 'LineB',
+                         'no_sims': no_sims,
                          'damage_states': self.cfg.damage_states,
                          'non_collapse': self.cfg.non_collapse,
                          'event_name': event_name,
@@ -252,7 +259,7 @@ class TestLine1(unittest.TestCase):
                          'path_event': path_event,
                          'dic_towers': self.cfg.towers_by_line['LineB']})
 
-        line = Line(name='LineB', **dic_line)
+        line = Line(**dic_line)
 
         tf_ds = np.zeros((line.no_towers, no_sims, line.no_time))
         tf_ds[:line.no_towers, 0:5, 0] = 1
@@ -286,204 +293,11 @@ class TestLine1(unittest.TestCase):
         # np.sqrt(22*22*0.4-8.8**2)
         self.assertAlmostEqual(est_no_tower['minor']['std'][1], 10.778, places=2)
 
-    # def test_sort_by_location(self):
-    #
-    #     # Calaca - Amadeo
-    #     self.assertEqual([3, 4, 5, 0, 2, 1], self.line1.sort_by_location())
-    #     self.assertEqual([0, 1, 2, 3, 4, 5], self.line1.id_by_line)
+    def test_write_hdf5(self):
+        pass
 
-    # def test_assign_id_both_sides(self):
-    #
-    #     # Calaca - Amadeo
-    #     expected = {0: (-1, 1), 1: (0, 2), 2: (1, 3),
-    #                 3: (2, 4), 4: (3, 5), 5: (4, -1)}
-    #     for i in range(5):
-    #         outcome = self.line0.assign_id_both_sides(i)
-    #         self.assertEqual(expected[i], outcome)
-    #
-    #     for i in range(5):
-    #         outcome = self.line1.assign_id_both_sides(i)
-    #         self.assertEqual(expected[i], outcome)
 
-    # def test_assign_id_adj_towers(self):
-    #
-    #     # Calaca - Amadeo
-    #     id_line = 0
-    #     df_line = self.all_lines.loc[id_line, :]
-    #     tf = self.all_towers['LineRoute'] == df_line['LineRoute']
-    #     df_towers = copy.deepcopy(self.all_towers.loc[tf, :])
-    #     df_towers.loc[:, 'Function'] = 'Suspension'
-    #     line = Line(self.cfg, df_towers, df_line)
-    #
-    #     expected = {0: [-1, -1, 0, 1, 2],
-    #                 1: [-1, 0, 1, 2, 3],
-    #                 2: [0, 1, 2, 3, 4],
-    #                 3: [1, 2, 3, 4, 5],
-    #                 4: [2, 3, 4, 5, -1],
-    #                 5: [3, 4, 5, -1, -1]}
-    #     for i in line.id_by_line:
-    #         outcome = line.assign_id_adj_towers(i)
-    #         # max_no = line.towers[line.id2name[tid]].max_no_adj_towers
-    #         self.assertEqual(expected[i], outcome)
-    #
-    #     # # a bit of change
-    #     expected = {0: [-1, -1, 0, 1, 2],
-    #                 1: [-1, 0, 1, 2, 3],
-    #                 2: [0, 1, 2, 3, 4],
-    #                 3: [-1, -1, -1, 0, 1, 2, 3, 4, 5, -1, -1, -1, -1],
-    #                 4: [2, 3, 4, 5, -1],
-    #                 5: [3, 4, 5, -1, -1]}
-    #
-    #     for i in self.line1.id_by_line:
-    #         outcome = self.line1.assign_id_adj_towers(i)
-    #         # print('{}:{}'.format(outcome, expected[i]))
-    #         self.assertEqual(expected[i], outcome)
-
-    # def test_create_list_idx(self):
-    #
-    #     self.assertEqual(self.line0.create_list_idx(0, 4, +1),
-    #                      [1, 2, 3, 4])
-    #     self.assertEqual(self.line0.create_list_idx(2, 4, -1),
-    #                      [1, 0, -1, -1])
-
-    # def test_update_id_adj_by_filtering_strainer(self):
-    #
-    #     # tower[3] is strainer
-    #     expected = {0: [-1, -1, 0, 1, 2],
-    #                 1: [-1, 0, 1, 2, -1],
-    #                 2: [0, 1, 2, -1, 4],
-    #                 3: [-1, -1, -1, 0, 1, 2, -1, 4, 5, -1, -1, -1, -1],
-    #                 4: [2, -1, 4, 5, -1],
-    #                 5: [-1, 4, 5, -1, -1]}
-    #
-    #     for _, tower in self.line1.towers.items():
-    #         # print('{}:{}:{}'.format(tower.id,
-    #         #                         tower.id_adj,
-    #         #                         expected[tower.id]))
-    #         self.assertEqual(tower.id_adj, expected[tower.id])
-
-    # def test_calculate_cond_pc_adj(self):
-    #
-    #     # FIXME: Need to explain the methodology
-    #
-    #     """
-    #
-    #     - AC-099 : Terminal
-    #     [-1, -1, 1, 5, 4]
-    #
-    #     probability          list
-    #       0.075             (0, 1)  (0, 1)
-    #       0.075            (-1, 0)  x
-    #       0.350         (-1, 0, 1)  (0, 1)
-    #       0.025     (-2, -1, 0, 1)  (0, 1)
-    #       0.025      (-1, 0, 1, 2)  (0, 1, 2)
-    #       0.100  (-2, -1, 0, 1, 2)  (0, 1, 2)
-    #
-    #       rel_idx: (0, 1, 2), (0,1),
-    #       cum_prob: 0.125, 0.45+0.125
-    #
-    #     - AC-100: Suspension
-    #     [-1, 1, 5, 4, -1]
-    #     probability          list
-    #       0.075             (0, 1)  (0, 1)
-    #       0.075            (-1, 0)  (-1, 0)
-    #       0.350         (-1, 0, 1)  (-1, 0, 1)
-    #       0.025     (-2, -1, 0, 1)  (-1, 0, 1)
-    #       0.025      (-1, 0, 1, 2)  (-1, 0, 1)
-    #       0.100  (-2, -1, 0, 1, 2)  (-1, 0, 1)
-    #
-    #       rel_idx: (0, 1), (-1, 0), (-1, 0, 1)
-    #       cum_prob: 0.075, 0.075+0.075, 0.5+0.15
-    #
-    #     - AC-101: Suspension
-    #     [1, 5, 4, -1, 3]
-    #     probability          list
-    #       0.075             (0, 1)  x
-    #       0.075            (-1, 0)  (-1, 0)
-    #       0.350         (-1, 0, 1)  (-1, 0)
-    #       0.025     (-2, -1, 0, 1)  (-2, -1, 0)
-    #       0.025      (-1, 0, 1, 2)  (-1, 0)
-    #       0.100  (-2, -1, 0, 1, 2)  (-2, -1, 0)
-    #
-    #       rel_idx: (-2, -1, 1), (-1, 0)
-    #       cum_prob: 0.125, 0.125+0.45
-    #
-    #     - AC-102: Strainer
-    #     [-1, -1, -1, 1, 5, 4, (-1), 3, 2, -1, -1, -1, -1]
-    #     probability                                      list
-    #        0.05                                     (-1, 0, 1) (-1,0,1)
-    #        0.08                              (-2, -1, 0, 1, 2) (-2,-1,0,1,2)
-    #        0.10                       (-3, -2, -1, 0, 1, 2, 3) (-3,-2,-1,0,1,2)
-    #        0.08                (-4, -3, -2, -1, 0, 1, 2, 3, 4) (-3,-2,-1,0,1,2)
-    #        0.05         (-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5) (-3,-2,-1,0,1,2)
-    #        0.62  (-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6) (-3,-2,-1,0,1,2)
-    #
-    #       rel_idx: (-1, 0, 1), (-2, -1, 0, 1, 2), (-3, -2, -1, 0, 1, 2)
-    #       cum_prob: 0.05, 0.08+0.05, 0.85+0.13
-    #
-    #     - AC-103: Suspension
-    #     [4, -1, (3), 2, -1]
-    #     probability          list
-    #       0.075             (0, 1)  (0, 1)
-    #       0.075            (-1, 0)  x
-    #       0.350         (-1, 0, 1)  (0, 1)
-    #       0.025     (-2, -1, 0, 1)  (0, 1)
-    #       0.025      (-1, 0, 1, 2)  (0, 1)
-    #       0.100  (-2, -1, 0, 1, 2)  (0, 1)
-    #
-    #       rel_idx: (0, 1)
-    #       cum_prob: 0.575
-    #
-    #     - AC-104: Suspension
-    #     [-1, 3, (2), -1, -1
-    #     probability          list
-    #       0.075             (0, 1)  x
-    #       0.075            (-1, 0)  (-1, 0)
-    #       0.350         (-1, 0, 1)  (-1, 0)
-    #       0.025     (-2, -1, 0, 1)  (-1, 0)
-    #       0.025      (-1, 0, 1, 2)  (-1, 0)
-    #       0.100  (-2, -1, 0, 1, 2)  (-1, 0)
-    #
-    #       rel_idx: (-1, 0)
-    #       cum_prob: 0.575
-    #
-    #     """
-    #
-    #     expected = {'AC-099': {1: 0.575, 2: 0.125},
-    #                 'AC-100': {-1: 0.075 + 0.5, 1: 0.075 + 0.5},
-    #                 'AC-101': {-2: 0.125, -1: 0.125 + 0.45},
-    #                 'AC-102': {-3: 0.85, -2: 0.08 + 0.85,
-    #                            -1: 0.05 + 0.08 + 0.85,
-    #                            1: 0.05 + 0.08 + 0.85,
-    #                            2: 0.08 + 0.85},
-    #                 'AC-103': {1: 0.575},
-    #                 'AC-104': {-1: 0.575}}
-    #
-    #     expected_cond_pc_adj_sim = {
-    #         'AC-099': {'rel_idx': [(0, 1, 2), (0, 1)],
-    #                    'cum_prob': np.array([0.125, 0.45 + 0.125])},
-    #         'AC-100': {'rel_idx': [(0, 1), (-1, 0), (-1, 0, 1)],
-    #                    'cum_prob': np.array([
-    #                        0.075, 0.075 + 0.075, 0.5 + 0.15])},
-    #         'AC-101': {'rel_idx': [(-2, -1, 0), (-1, 0)],
-    #                    'cum_prob': np.array([0.125, 0.125 + 0.45])},
-    #         'AC-102': {'rel_idx': [(-1, 0, 1), (-2, -1, 0, 1, 2),
-    #                                (-3, -2, -1, 0, 1, 2)],
-    #                    'cum_prob': np.array([0.05, 0.08 + 0.05, 0.85 + 0.13])},
-    #         'AC-103': {'rel_idx': [(0, 1)],
-    #                    'cum_prob': np.array([0.575])},
-    #         'AC-104': {'rel_idx': [(-1, 0)],
-    #                    'cum_prob': np.array([0.575])}}
-    #
-    #     for name, val in self.line1.towers.items():
-    #         assertDeepAlmostEqual(self, val.cond_pc_adj, expected[name])
-    #         assertDeepAlmostEqual(self, val.cond_pc_adj_sim,
-    #                               expected_cond_pc_adj_sim[name])
-    #         # print("{}:{}".format(name, val.cond_pc_adj))
-    #         # print("{}:{}:{}".format(name, val.cond_pc_adj_sim,
-    #         # expected_cond_pc_adj_sim[name]))
-
-    """
+"""
     def test_compute_damage_probability_simulation_alt(self):
 
         event_id = 'test2'
@@ -536,7 +350,7 @@ class TestLine1(unittest.TestCase):
                 for idx in item['id_adj']:
                     tf_ds[idx, item['id_sim'], item['id_time']] = True
 
-    """
+"""
 
 
 class TestLine2(unittest.TestCase):
@@ -550,46 +364,35 @@ class TestLine2(unittest.TestCase):
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger=cls.logger)
 
         event_name = 'test1'
+        event_scale = 1.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
-        # cls.cfg.no_sims = 10000
-        # cls.all_towers = read_shape_file(cls.cfg.file_shape_tower)
-        # cls.all_towers.loc[1, 'Function'] = 'Suspension'
-        # populate_df_towers(cls.all_towers, cls.cfg)
-        #
-        # cls.all_lines = read_shape_file(cls.cfg.file_shape_line)
-        # populate_df_lines(cls.all_lines)
-
         # LineB
-        dic_line = cls.cfg.lines['LineB'].copy()
-        cls.no_sims = 1000000
-        dic_line.update({'no_sims': cls.no_sims,
+        dic_line = cls.cfg.lines['LineA'].copy()
+        cls.no_sims = 100000
+        dic_line.update({'name': 'LineA',
+                         'no_sims': cls.no_sims,
                          'damage_states': cls.cfg.damage_states,
                          'non_collapse': cls.cfg.non_collapse,
                          'event_name': event_name,
-                         'scale': 1.0,
+                         'event_id': cls.cfg.event_id_format.format(event_name=event_name, scale=event_scale),
+                         'scale': event_scale,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,
-                         'dic_towers': cls.cfg.towers_by_line['LineB']})
+                         'dic_towers': cls.cfg.towers_by_line['LineA']})
 
-        cls.line = Line(name='LineB', **dic_line)
+        cls.line = Line(**dic_line)
 
         for _, tower in cls.line.towers.items():
-            tower.wind['ratio'] = 1.0
+            tower._wind = create_wind_given_bearing(10.0, 1.0)
+            tower.axisaz = 11.0
             tower._damage_prob = None
             tower._damage_prob_sim = None
-
-        #cls.line.compute_damage_prob()
-
-    def test_compute_damage_prob_sim_no_cascading(self):
-        pass
-
-    def test_write_hdf5(self):
-        pass
+            tower._dmg_sim = None
+            tower._dmg_id_sim = None
 
     def test_compute_damage_per_line(self):
-        pass
-
+        compute_damage_per_line(self.line, self.cfg)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
