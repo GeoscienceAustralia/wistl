@@ -7,7 +7,7 @@ import logging
 import scipy.stats as stats
 import bisect
 
-from wistl.constants import ATOL, RTOL
+from wistl.constants import ATOL, RTOL, PM_THRESHOLD
 from wistl.config import unit_vector_by_bearing, angle_between_unit_vectors
 
 class Tower(object):
@@ -130,6 +130,7 @@ class Tower(object):
 
         # simulation method: determine_damage_isolation_sim,
         self._dmg_state_sim = None
+        self._dmg_time_idx = None
         self._dmg_sim = None
         self._dmg_id_sim = None
         self._collapse_adj_sim = None
@@ -183,8 +184,20 @@ class Tower(object):
     @property
     def no_time(self):
         if self._no_time is None:
-            self._no_time = len(self.wind.index)
+            self._no_time = len(self.dmg.index)
         return self._no_time
+
+    @property
+    def dmg_time_idx(self):
+        """
+        return starting and edning index of dmg against wind
+        """
+        if self._dmg_time_idx is None:
+            idt = self.wind.index.intersection(self.dmg.index)
+            idt0 = self.wind.index.get_loc(idt[0])
+            idt1 = self.wind.index.get_loc(idt[-1]) + 1
+            self._dmg_time_idx = (idt0, idt1)
+        return self._dmg_time_idx
 
     @property
     def file_wind(self):
@@ -241,11 +254,19 @@ class Tower(object):
     def dmg(self):
         """
         compute probability of damage of tower in isolation (Pc)
+        Note: dmg index is not identical to wind index
         """
         if self._dmg is None:
-            self._dmg = self.wind.apply(
-                    self.compute_damage_using_directional_vulnerability, axis=1)
-            self._dmg.index = self.wind.index
+
+            df = self.wind.apply(self.compute_damage_using_directional_vulnerability, axis=1)
+            # apply thresholds
+            valid = np.where(df['minor'] > PM_THRESHOLD)[0]
+            idt0 = min(valid, default=0)
+            idt1 = max(valid, default=0) + 1
+
+            self._dmg = df.iloc[idt0:idt1]
+            self._dmg.index = self.wind.index[idt0:idt1]
+
         return self._dmg
 
     @property
@@ -297,6 +318,7 @@ class Tower(object):
         determine if adjacent tower collapses or not due to pull by the tower
         j_time: time index (array)
         idx: multiprocessing thread id
+        CAUTION: id_time follows wind.index rather than dmg.index
 
         """
 
@@ -307,6 +329,9 @@ class Tower(object):
             for ids, ds in enumerate(self.damage_states, 1):
 
                 id_sim, id_time = np.where(self.dmg_state_sim == ids)
+
+                # convert to wind time index from tower dmg time index
+                id_time += self.dmg_time_idx[0]
 
                 self._dmg_id_sim[ds] = pd.DataFrame(
                     np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
@@ -370,18 +395,15 @@ class Tower(object):
                 for idl in self.cond_pc_adj.keys():
 
                     prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / self.no_sims
-
+                    adj_time = id_time - self.dmg_time_idx[0]
                     idx_not_close, = np.where(~np.isclose(
-                        self.collapse_adj[idl][id_time],
-                        prob,
-                        atol=ATOL,
-                        rtol=RTOL))
+                        self.collapse_adj[idl][adj_time], prob, atol=ATOL, rtol=RTOL))
 
                     for idx in idx_not_close:
                         self.logger.warning(
                             f'P({idl}|{self.name}) at {id_time}: '
                             f'simulation {prob:.3f} vs. '
-                            f'analytical {self.collapse_adj[idl][id_time]:.3f}')
+                            f'analytical {self.collapse_adj[idl][adj_time]:.3f}')
 
         return self._collapse_adj_sim
 

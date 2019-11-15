@@ -33,7 +33,7 @@ class TestLine1(unittest.TestCase):
         event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
-        cls.no_sims = 2000000
+        cls.no_sims = 200000
 
         # LineB
         dic_line = cls.cfg.lines['LineB'].copy()
@@ -71,9 +71,9 @@ class TestLine1(unittest.TestCase):
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
         self.assertAlmostEqual(self.line.towers[0].scale, 3.0)
 
-    def test_time_index(self):
+    def test_time(self):
 
-        pd.testing.assert_index_equal(self.line.time_index, self.line.towers[0].wind.index)
+        pd.testing.assert_index_equal(self.line.time, self.line.towers[0].wind.index)
 
     def test_no_time(self):
 
@@ -213,8 +213,8 @@ class TestLine1(unittest.TestCase):
                 pc, self.line.damage_prob_sim_no_cascading['collapse'][name], atol=ATOL, rtol=RTOL)
         except AssertionError:
             self.logger.warning(
-                f'P(C) Theory: {pc:.4f}, '
-                f"Simulation: {self.line.damage_prob_sim_no_cascading['collapse'][name][0]:.4f}")
+                    f'P(C) Theory: {pc[0]}, '
+                f"Simulation: {self.line.damage_prob_sim_no_cascading['collapse'][name][0]}")
 
         # o----o----x----o----o
         # minor
@@ -225,19 +225,21 @@ class TestLine1(unittest.TestCase):
                 pm, self.line.damage_prob_sim_no_cascading['minor'][name], atol=ATOL, rtol=RTOL)
         except AssertionError:
             self.logger.warning(
-                f'P(m) Theory: {pm:.4f}, '
-                f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name]:.4f}")
+                f'P(m) Theory: {pm.values}, '
+                f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name].values}")
 
         # except 32, strainer tower
         for _id, name in enumerate(self.line.names):
+            idt0, idt1 = self.line.towers[_id].dmg_time_idx
             try:
                 np.testing.assert_allclose(
-                        self.line.towers[_id].dmg['minor'], self.line.damage_prob_sim_no_cascading['minor'][name], atol=ATOL, rtol=RTOL)
+                        self.line.towers[_id].dmg['minor'], self.line.damage_prob_sim_no_cascading['minor'].iloc[idt0:idt1][name], atol=ATOL, rtol=RTOL)
             except AssertionError:
+
                 self.logger.warning(
                     f'Tower: {name}, minor, '
-                    f"Theory: {self.line.towers[_id].dmg['minor']:.4f}, "
-                    f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name]:.4f}")
+                    f"Theory: {self.line.towers[_id].dmg['minor'].values}, "
+                    f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name].values}")
 
     def test_compute_stats(self):
 
@@ -308,18 +310,18 @@ class TestLine1(unittest.TestCase):
         rnd_state = np.random.RandomState(seed)
 
         rv = rnd_state.uniform(size=(self.cfg.no_sims,
-                                     len(self.line1.time_index)))
+                                     len(self.line1.time)))
 
         # tf_ds = pd.Panel(np.zeros((self.cfg.no_sims,
-        #                            len(self.line1.time_index),
+        #                            len(self.line1.time),
         #                            self.line1.no_towers), dtype=bool),
         #                  items=range(self.cfg.no_sims),
-        #                  major_axis=self.line1.time_index,
+        #                  major_axis=self.line1.time,
         #                  minor_axis=self.line1.name_by_line)
 
         tf_ds = np.zeros((self.line1.no_towers,
                           self.cfg.no_sims,
-                          len(self.line1.time_index)), dtype=bool)
+                          len(self.line1.time)), dtype=bool)
 
         for name, tower in self.line1.towers.items():
             tower.determine_damage_isolation_sim(rv)
@@ -363,8 +365,8 @@ class TestLine2(unittest.TestCase):
 
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger=cls.logger)
 
-        event_name = 'test1'
-        event_scale = 1.0
+        event_name = 'test2'
+        event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
         # LineB
@@ -384,7 +386,7 @@ class TestLine2(unittest.TestCase):
         cls.line = Line(**dic_line)
 
         for _, tower in cls.line.towers.items():
-            tower._wind = create_wind_given_bearing(10.0, 1.0)
+            #tower._wind = create_wind_given_bearing(10.0, 1.0)
             tower.axisaz = 11.0
             tower._damage_prob = None
             tower._damage_prob_sim = None

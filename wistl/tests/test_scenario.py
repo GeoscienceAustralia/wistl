@@ -23,10 +23,10 @@ class EventTest(unittest.TestCase):
                                 event=cls.cfg.events[0],
                                 logger=cls.logger)
 
-    def test_time_index(self):
+    def test_time(self):
         # compare time_index
         for line in self.scenario.list_lines:
-            self.assertTrue(line.time_index.equals(self.scenario.lines['LineA'].time_index))
+            self.assertTrue(line.time.equals(self.scenario.lines['LineA'].time))
 
     def test_number_of_lines(self):
         self.assertEqual(len(self.scenario.list_lines), len(self.cfg.lines))

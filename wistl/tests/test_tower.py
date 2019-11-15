@@ -11,7 +11,7 @@ import numpy as np
 from scipy import stats
 
 from wistl.config import Config
-from wistl.constants import RTOL, ATOL
+from wistl.constants import RTOL, ATOL, PM_THRESHOLD
 from wistl.tower import Tower, angle_between_two
 from wistl.tests.test_config import assertDeepAlmostEqual
 
@@ -369,6 +369,31 @@ class TestTower1(unittest.TestCase):
 
         np.testing.assert_array_equal(a, b)
 
+    def test_dmg_threshold(self):
+
+        df = pd.DataFrame([[0.1, 130.0], [0.9605, 130.0], [0.1, 130.0], [0.97, 130.0]], columns=['ratio', 'Bearing'])
+        df['time'] = pd.date_range(start='01/01/2011', end='01/04/2011', freq='D')
+        df.set_index('time', inplace=True)
+
+        self.tower._wind = df
+        self.tower._dmg = None
+
+        # checking index
+        pd.testing.assert_index_equal(self.tower.dmg.index, df.index[1:3+1])
+
+    def test_dmg_time_idx(self):
+
+        df = pd.DataFrame([[0.1, 130.0], [0.9605, 130.0], [0.1, 130.0], [0.97, 130.0]], columns=['ratio', 'Bearing'])
+        df['time'] = pd.date_range(start='01/01/2011', end='01/04/2011', freq='D')
+        df.set_index('time', inplace=True)
+
+        self.tower._wind = df
+        self.tower._dmg = None
+        self.tower._dmg_time_idx = None
+        # checking index
+        self.assertEqual((1,4), self.tower.dmg_time_idx)
+
+
     def test_compare_dmg_with_dmg_sim(self):
 
         # dmg_isolated vs. dmg_sim
@@ -405,6 +430,38 @@ class TestTower1(unittest.TestCase):
 
         np.testing.assert_equal(self.tower.dmg_id_sim['collapse']['id_sim'].values, np.array([0, 0, 2]))
         np.testing.assert_equal(self.tower.dmg_id_sim['collapse']['id_time'].values, np.array([0, 1, 0]))
+
+    def test_dmg_id_sim_threshold(self):
+
+        # 1.05*np.exp(0.02)
+        df = pd.DataFrame([[0.1, 130.0], [1.0712, 130.0], [0.1, 130.0], [1.0712, 130.0]], columns=['ratio', 'Bearing'])
+        df['time'] = pd.date_range(start='01/01/2011', end='01/04/2011', freq='D')
+        df.set_index('time', inplace=True)
+
+        self.tower._wind = df
+        self.tower._dmg = None
+        self.tower._dmg_id_sim = None
+        self.tower._dmg_time_idx = None
+        self.tower._dmg_state_sim = None
+
+        rv = np.array([[0.9, 0.5, 0],
+                      [0.1, 0.5, 0.9],
+                      [0.5, 0.9, 0.7]])   # no_sims, no_time
+        np.testing.assert_allclose(self.tower.dmg.values,
+                                   np.array([[0.9928, 0.8412],
+                                             [0.0, 0.0],
+                                             [0.9928, 0.8412]]),
+                                   rtol=1.e-4)  # minor, collapse
+        self.tower._dmg_state_sim = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
+
+        np.testing.assert_equal(self.tower._dmg_state_sim,
+            np.array([[1, 0, 2], [2, 0, 1], [2, 0, 2]]))  # no_sims, no_time
+
+        np.testing.assert_equal(self.tower.dmg_id_sim['minor']['id_sim'].values, np.array([0, 1]))
+        np.testing.assert_equal(self.tower.dmg_id_sim['minor']['id_time'].values, np.array([1, 3]))
+
+        np.testing.assert_equal(self.tower.dmg_id_sim['collapse']['id_sim'].values, np.array([0, 1, 2, 2]))
+        np.testing.assert_equal(self.tower.dmg_id_sim['collapse']['id_time'].values, np.array([3, 1, 1, 3]))
 
 
     def test_collapse_adj_sim(self):
@@ -780,7 +837,6 @@ class TestTower2(unittest.TestCase):
         self.tower._wind = create_wind_given_bearing(130.0, 1.22816)  # 1.18*np.exp(0.04)
         self.tower._dmg = None
         self.tower._dmg_id_sim = None
-
         rv = np.array([[0, 0], [1, 1], [0.5, 0.9]])   # no_sims, no_time
         np.testing.assert_allclose(self.tower.dmg.values,
                                    np.array([[0.987637, 0.841361],

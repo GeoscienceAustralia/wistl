@@ -82,7 +82,7 @@ class Line(object):
         # self.prob_no_damage_line_interaction = None
         # self.est_no_damage_line_interaction = None
 
-        self._time_index = None
+        self._time = None
         self._no_time = None
 
     def __repr__(self):
@@ -120,18 +120,18 @@ class Line(object):
         return self._towers
 
     @property
-    def time_index(self):
-        if self._time_index is None:
+    def time(self):
+        if self._time is None:
             try:
-                self._time_index = self.towers[0].wind.index
+                self._time = self.towers[0].wind.index
             except AttributeError:
-                self.logger.error(f'Can not retrieve time_index of tower {self.towers[0].name}')
-        return self._time_index
+                self.logger.error(f'Can not retrieve time of tower {self.towers[0].name}')
+        return self._time
 
     @property
     def no_time(self):
         if self._no_time is None:
-            self._no_time = len(self.time_index)
+            self._no_time = len(self.time)
         return self._no_time
 
     @property
@@ -154,10 +154,15 @@ class Line(object):
             # prob of collapse
             for _, tower in self.towers.items():
 
-                for idl, prob in tower.collapse_adj.items():
-                    pc_adj_agg[tower.idl, idl, :] = prob
+                #idt = self.time.intersection(tower.dmg.index)
+                #idt0 = self.time.get_loc(idt[0])
+                #idt1 = self.time.get_loc(idt[-1]) + 1
+                idt0, idt1 = tower.dmg_time_idx
 
-                pc_adj_agg[tower.idl, tower.idl, :] = tower.dmg['collapse'].values
+                for idl, prob in tower.collapse_adj.items():
+                    pc_adj_agg[tower.idl, idl, idt0:idt1] = prob
+
+                pc_adj_agg[tower.idl, tower.idl, idt0:idt1] = tower.dmg['collapse'].values
 
             # pc_collapse.shape == (no_tower, no_time)
             pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
@@ -165,22 +170,30 @@ class Line(object):
             self._damage_prob['collapse'] = pd.DataFrame(
                 pc_collapse.T,
                 columns=self.names,
-                index=self.time_index)
+                index=self.time)
 
             # non_collapse state
             for ds in self.non_collapse:
                 temp = np.zeros_like(pc_collapse)
                 for _, tower in self.towers.items():
+
+                    idt0, idt1 = tower.dmg_time_idx
+
                     # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                    value = tower.dmg[ds].values \
+                    try:
+                        value = tower.dmg[ds].values \
                             - tower.dmg['collapse'].values \
-                            + pc_collapse[tower.idl, :]
-                    temp[tower.idl, :] = np.where(value > 1.0, [1.0], value)
+                            + pc_collapse[tower.idl, idt0:idt1]
+                    except ValueError:
+                        print(tower.dmg[ds].values.shape)
+                        print(idt0, idt1)
+                    else:
+                        temp[tower.idl, idt0:idt1] = np.where(value > 1.0, [1.0], value)
 
                 self._damage_prob[ds] = pd.DataFrame(
                     temp.T,
                     columns=self.names,
-                    index=self.time_index)
+                    index=self.time)
 
         return self._damage_prob
 
@@ -215,7 +228,7 @@ class Line(object):
             self.damage_prob_sim[ds] = pd.DataFrame(
                 tf_ds.sum(axis=1).T / self.no_sims,
                 columns=self.names,
-                index=self.time_index)
+                index=self.time)
 
             tf_sim[ds] = copy.deepcopy(tf_ds)
 
@@ -251,15 +264,16 @@ class Line(object):
             self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(
                 tf_ds.sum(axis=1).T / self.no_sims,
                 columns=self.names,
-                index=self.time_index)
+                index=self.time)
 
             tf_sim[ds] = tf_ds.copy()
 
         # checking against analytical value
         for _id, name in enumerate(self.names):
+            idt0, idt1 = self.towers[_id].dmg_time_idx
             try:
                 np.testing.assert_allclose(self.towers[_id].dmg[ds].values,
-                    self.damage_prob_sim_no_cascading[ds][name].values, atol=ATOL, rtol=RTOL)
+                        self.damage_prob_sim_no_cascading[ds].iloc[idt0:idt1][name].values, atol=ATOL, rtol=RTOL)
             except AssertionError:
                 self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
 
@@ -307,12 +321,12 @@ class Line(object):
             est_no_tower[ds] = pd.DataFrame(
                 np.hstack((exp_no_tower, std_no_tower)),
                 columns=['mean', 'std'],
-                index=self.time_index)
+                index=self.time)
 
             prob_no_tower[ds] = pd.DataFrame(
                 prob,
                 columns=[str(x) for x in range(self.no_towers + 1)],
-                index=self.time_index)
+                index=self.time)
 
         return est_no_tower, prob_no_tower
 
@@ -344,9 +358,9 @@ class Line(object):
 
                     # metadata
                     data.attrs['nrow'], data.attrs['ncol'] = value.shape
-                    data.attrs['time_start'] = str(self.time_index[0])
-                    data.attrs['time_freq'] = str(self.time_index[1]-self.time_index[0])
-                    data.attrs['time_period'] = self.time_index.shape[0]
+                    data.attrs['time_start'] = str(self.time[0])
+                    data.attrs['time_freq'] = str(self.time[1]-self.time[0])
+                    data.attrs['time_period'] = self.time.shape[0]
 
                     if columns_by_item[item]:
                         data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
@@ -422,7 +436,7 @@ def compute_damage_per_line(line, cfg):
             # self.tf_array_by_line[target_line] = np.zeros((
             #     self.cfg.no_towers_by_line[target_line],
             #     self.cfg.no_sims,
-            #     len(self.time_index)), dtype=bool)
+            #     len(self.time)), dtype=bool)
 
         #print('target in: {}'.format(self.damage_index_line_interaction[target_line].dtypes))
 

@@ -57,9 +57,6 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
-# PyBuilder
-target/
-
 # prokect specific files
 #output_current_glenda/
 #input/
@@ -67,6 +64,8 @@ target/
 #tests/output/
 #gis_data/
 *.pdf
+output/
+*.swp
 
 # pycharm
 .idea/
