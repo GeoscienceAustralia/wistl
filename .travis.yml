@@ -12,7 +12,7 @@ install:
   - export PATH="$HOME/miniconda/bin:$PATH"
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
-  - conda config --add channels default
+    #- conda config --add channels default
   - conda config --append channels conda-forge
   - conda update -q conda
   - head $HOME/.condarc
@@ -20,7 +20,6 @@ install:
   - conda info -a
   - conda env create --name wistl_env --file wistl_linux64_py3.6.7.yml
   - source activate wistl_env
-  - python -m unittest -v ./wistl/tests 
 after_success:
   - test $TRAVIS_BRANCH = "master" 
     #conda deactivate &&
@@ -28,5 +27,5 @@ after_success:
     #conda install anaconda-client &&
     #bash ./recipe/conda_upload.sh
 script:
-  - python -m unittest -v 
+  - python -m unittest -v discover ./wistl/wistl/tests
 

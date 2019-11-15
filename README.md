@@ -1,5 +1,4 @@
-[![Build Status](https://travis-ci.org/GeoscienceAustralia/wistl.svg?branch=master)](https://travis-ci.org/GeoscienceAustralia/wistl)
-
+[![Build Status](https://travis-ci.com/GeoscienceAustralia/wistl.svg?token=r6qYcaeJV4Tb19SjCSya&branch=master)](https://travis-ci.com/GeoscienceAustralia/wistl)
 # WISTL
 
 WIND IMPACT SIMULATION ON TRANSMISSION LINES
