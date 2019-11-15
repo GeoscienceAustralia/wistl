@@ -1,3 +1,9 @@
+[![Build Status](https://travis-ci.org/GeoscienceAustralia/wistl.svg?branch=master)](https://travis-ci.org/GeoscienceAustralia/wistl)
+
+# WISTL
+
+WIND IMPACT SIMULATION ON TRANSMISSION LINES
+
 #### Virtual setup
 It is recommended that you create a `virtualenv` to run the `tlda` code. These instructions are for `ubuntu 14.04` and is expected to work for most newer versions of `ubuntu`. The `virtualenv` and the requirements can be installed using the following steps.
 
