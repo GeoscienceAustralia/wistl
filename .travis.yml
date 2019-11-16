@@ -20,7 +20,7 @@ install:
   - conda info -a
   - conda env create --name wistl_env --file wistl_linux64_py3.6.7.yml
   - source activate wistl_env
-  - cd $TRAVIS_BUILD_DIR
+  #- cd $TRAVIS_BUILD_DIR
 after_success:
   - test $TRAVIS_BRANCH = "master" 
     #conda deactivate &&
@@ -28,5 +28,5 @@ after_success:
     #conda install anaconda-client &&
     #bash ./recipe/conda_upload.sh
 script:
-  - python -m unittest -v discover $TRAVIS_BUILD_DIR/wistl/wistl/tests
+  - python -m unittest -v $TRAVIS_BUILD_DIR/wistl/tests
 
