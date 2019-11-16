@@ -366,12 +366,12 @@ class TestLine2(unittest.TestCase):
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), logger=cls.logger)
 
         event_name = 'test2'
-        event_scale = 3.0
+        event_scale = 1.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
         # LineB
         dic_line = cls.cfg.lines['LineA'].copy()
-        cls.no_sims = 50000
+        cls.no_sims = 10000
         dic_line.update({'name': 'LineA',
                          'no_sims': cls.no_sims,
                          'damage_states': cls.cfg.damage_states,
