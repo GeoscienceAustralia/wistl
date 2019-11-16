@@ -371,7 +371,7 @@ class TestLine2(unittest.TestCase):
                                   event_name)
         # LineB
         dic_line = cls.cfg.lines['LineA'].copy()
-        cls.no_sims = 100000
+        cls.no_sims = 50000
         dic_line.update({'name': 'LineA',
                          'no_sims': cls.no_sims,
                          'damage_states': cls.cfg.damage_states,
