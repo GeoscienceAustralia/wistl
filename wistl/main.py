@@ -5,6 +5,7 @@ WISTL: Wind Impact Simulation on Transmission Lines
 """
 
 import os
+import sys
 import time
 import logging.config
 from optparse import OptionParser

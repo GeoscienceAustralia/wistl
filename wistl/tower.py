@@ -401,7 +401,7 @@ class Tower(object):
 
                     for idx in idx_not_close:
                         self.logger.warning(
-                            f'P({idl}|{self.name}) at {id_time}: '
+                            f'Pc({idl}|{self.name}) at {id_time}: '
                             f'simulation {prob:.3f} vs. '
                             f'analytical {self.collapse_adj[idl][adj_time]:.3f}')
 
