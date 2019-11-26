@@ -9,6 +9,8 @@ import sys
 import time
 import logging.config
 from optparse import OptionParser
+import dask
+from dask.distributed import Client
 
 from wistl.config import Config
 from wistl.version import VERSION_DESC
@@ -16,7 +18,7 @@ from wistl.scenario import Scenario
 from wistl.line import compute_damage_per_line
 
 
-def run_simulation(cfg):
+def run_simulation(cfg, client_ip=None):
     """
     main function
     :param cfg: an instance of TransmissionConfig
@@ -28,25 +30,22 @@ def run_simulation(cfg):
 
     if cfg.options['run_parallel']:
 
-        """
         logger.info('parallel MC run on.......')
+        client = Client(client_ip)
 
-        # create transmission network with wind event
-        events = parmap.map(create_event, cfg.events, cfg)
+        lines = []
+        for event in cfg.events:
 
-        lines = [line for sublist in events for line in sublist]
+            scenario = Scenario(event=event, cfg=cfg, logger=logger)
 
-        # compute damage probability for each pair of line and wind event
-        _ = parmap.map(compute_damage_per_line, lines, cfg)
+            for _, line in scenario.lines.items():
 
-        # if cfg.line_interaction:
-        #     damaged_networks = parmap.map(
-        #         compute_damage_probability_line_interaction_per_network,
-        #         [network for _, network in nested_dic.items()])
-        # else:
-        #  = [network for _, network in nested_dic.items()]
-        """
-        print('Not implemented yet')
+                line = client.submit(compute_damage_per_line, line=line, cfg=cfg)
+                lines.append(line)
+
+        client.gather(lines)
+        client.close()
+
     else:
 
         logger.info('serial MC run on.......')
@@ -141,6 +140,10 @@ def process_commandline():
                       dest="config_file",
                       help="read configuration from FILE",
                       metavar="FILE")
+    parser.add_option("-i", "--ip",
+                      dest="client_ip",
+                      help="set client ip address",
+                      metavar="FILE")
     parser.add_option("-v", "--verbose",
                       dest="verbose",
                       default=None,
@@ -162,7 +165,7 @@ def main():
             path_cfg = os.path.dirname(os.path.realpath(options.config_file))
             set_logger(path_cfg, options.verbose)
             conf = Config(file_cfg=options.config_file)
-            run_simulation(conf)
+            run_simulation(cfg=conf, client_ip=options.client_ip)
     else:
         parser.print_help()
 
