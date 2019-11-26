@@ -56,9 +56,9 @@ def run_simulation(cfg, client_ip=None):
 
         for event in cfg.events:
 
-            scenario = Scenario(event=event, cfg=cfg)
+            scenario = Scenario(event=event, cfg=cfg, logger=logger)
 
-            for line in scenario.list_lines:
+            for _, line in scenario.lines.items():
 
                 lines.append(line)
 

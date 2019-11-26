@@ -83,21 +83,22 @@ class Line(object):
         # self.est_no_damage_line_interaction = None
 
         self._time = None
+        self._time_idx = None
         self._no_time = None
 
     def __repr__(self):
         return f'Line(name={self.name}, no_towers={self.no_towers}, event_id={self.event_id})'
 
-    def __getstate__(self):
-        d = self.__dict__.copy()
-        if 'logger' in d:
-            d['logger'] = d['logger'].name
-        return d
+    #def __getstate__(self):
+    #    d = self.__dict__.copy()
+    #    if 'logger' in d:
+    #        d['logger'] = d['logger'].name
+    #    return d
 
-    def __setstate__(self, d):
-        if 'logger' in d:
-            d['logger'] = logging.getLogger(d['logger'])
-        self.__dict__.update(d)
+    #def __setstate__(self, d):
+    #    if 'logger' in d:
+    #        d['logger'] = logging.getLogger(d['logger'])
+    #    self.__dict__.update(d)
 
     @property
     def towers(self):
@@ -115,7 +116,7 @@ class Line(object):
                               'rnd_state': self.rnd_state,
                               'path_event': self.path_event})
 
-                self._towers[value['idl']] = Tower(**value)
+                self._towers[value['idl']] = Tower(**value, logger=self.logger)
 
         return self._towers
 
@@ -123,10 +124,24 @@ class Line(object):
     def time(self):
         if self._time is None:
             try:
-                self._time = self.towers[0].wind.index
+                self._time = self.towers[0].wind.index[
+                        self.time_idx[0]:self.time_idx[1]]
             except AttributeError:
-                self.logger.error(f'Can not retrieve time of tower {self.towers[0].name}')
+                self.logger.error(
+                        f'Can not retrieve index of {self.towers[0].name}{self.time_idx}')
         return self._time
+
+    @property
+    def time_idx(self):
+        if self._time_idx is None:
+            # get min of dmg_time_idx[0], max of dmg_time_idx[1]
+            tmp = []
+            for _, value in self.towers.items():
+                tmp.append(value.dmg_time_idx)
+            id0 = list(map(min, zip(*tmp)))[0]
+            id1 = list(map(max, zip(*tmp)))[1] + 1
+            self._time_idx = (id0, id1)
+        return self._time_idx
 
     @property
     def no_time(self):
@@ -158,6 +173,8 @@ class Line(object):
                 #idt0 = self.time.get_loc(idt[0])
                 #idt1 = self.time.get_loc(idt[-1]) + 1
                 idt0, idt1 = tower.dmg_time_idx
+                idt0 -= self.time_idx[0]
+                idt1 -= self.time_idx[1]
 
                 for idl, prob in tower.collapse_adj.items():
                     pc_adj_agg[tower.idl, idl, idt0:idt1] = prob
@@ -196,6 +213,52 @@ class Line(object):
                     index=self.time)
 
         return self._damage_prob
+
+    def compute_damage_prob_sim_by_timestamp(self):
+
+        # perfect correlation within a single line
+        self.damage_prob_sim = {}
+
+        tf_sim = {ds: None for ds in self.damage_states}
+
+        for itime in range(self.no_time):
+
+            tf_ds = np.zeros((self.no_towers, self.no_sims), dtype=bool)
+
+            # collapse by adjacent towers
+            for _, tower in self.towers.items():
+                tf_time = tower.collapse_adj_sim['id_time'].isin([itime])
+                if tf_time.sum():
+                    for id_adj, grouped in tower.collapse_adj_sim[tf_time].groupby('id_adj'):
+                        for idl in id_adj:
+                            tf_ds[idl, grouped['id_sim'].values] = True
+
+            # append damage state by direct wind
+            #for ds in self.damage_states[::-1]:  # collapse first
+
+            for _, tower in self.towers.items():
+                tf_time = tower.dmg_id_sim[ds]['id_time'].isin([itime])
+                if tf_time.sum():
+                    ids = tower.dmg_id_sim[ds][tf_time]['id_sim'].values
+                    tf_ds[tower.idl, ids] = True
+
+            # PE(DS)
+            self.damage_prob_sim[ds] = pd.DataFrame(
+                tf_ds.sum(axis=1).T / self.no_sims,
+                columns=self.names, index=itime)
+
+            tf_sim[ds] = copy.deepcopy(tf_ds)
+
+        # checking against analytical value
+        for name in self.names:
+            try:
+                np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
+                    self.damage_prob_sim['collapse'][name].values, atol=ATOL, rtol=RTOL)
+            except AssertionError:
+                self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
+
+        self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
+
 
     def compute_damage_prob_sim(self):
 
@@ -400,6 +463,7 @@ def compute_damage_per_line(line, cfg):
     if cfg.options['save_output']:
         output_file = os.path.join(cfg.path_output,
                                    f'{line.event_id}_{line.name}.h5')
+        #print(f"max: {line.name} - {line.damage_prob_sim['minor'].max()}")
         line.write_hdf5(output_file=output_file)
         logger.info(f'{output_file} is saved')
 
