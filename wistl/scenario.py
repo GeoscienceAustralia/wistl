@@ -2,6 +2,7 @@ import os
 import logging
 import pandas as pd
 import numpy as np
+import dask.array as da
 
 from wistl.line import Line
 
@@ -35,16 +36,16 @@ class Scenario(object):
     def __repr__(self):
         return f'Scenario(id={self.id}, no_lines={self.no_lines})'
 
-    def __getstate__(self):
-        d = self.__dict__.copy()
-        if 'logger' in d:
-            d['logger'] = d['logger'].name
-        return d
+    #def __getstate__(self):
+    #    d = self.__dict__.copy()
+    #    if 'logger' in d:
+    #        d['logger'] = d['logger'].name
+    #    return d
 
-    def __setstate__(self, d):
-        if 'logger' in d:
-            d['logger'] = logging.getLogger(d['logger'])
-        self.__dict__.update(d)
+    #def __setstate__(self, d):
+    #    if 'logger' in d:
+    #        d['logger'] = logging.getLogger(d['logger'])
+    #    self.__dict__.update(d)
 
     @property
     def id(self):
@@ -70,13 +71,15 @@ class Scenario(object):
                             'event_id': self.id,
                             'scale': self.scale,
                             'rnd_state': np.random.RandomState(seed=self.seed + i),
+                            #'rnd_state': da.random.RandomState(seed=self.seed + i),
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
 
-                self._lines[name] = Line(**dic)
+                self._lines[name] = Line(**dic, logger=self.logger)
 
         return self._lines
 
+    # TODO: why list_lines need?
     @property
     def list_lines(self):
         if self._list_lines is None:

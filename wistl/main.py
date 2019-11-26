@@ -9,6 +9,8 @@ import sys
 import time
 import logging.config
 from optparse import OptionParser
+import dask
+from dask.distributed import Client
 
 from wistl.config import Config
 from wistl.version import VERSION_DESC
@@ -28,25 +30,24 @@ def run_simulation(cfg):
 
     if cfg.options['run_parallel']:
 
-        """
+        #dask.config.set(scheduler='threads')
         logger.info('parallel MC run on.......')
+        client = Client()
+        # , n_workers=1)
+        lines = []
+        delayed_compute = dask.delayed(compute_damage_per_line)
 
-        # create transmission network with wind event
-        events = parmap.map(create_event, cfg.events, cfg)
+        for event in cfg.events:
 
-        lines = [line for sublist in events for line in sublist]
+            scenario = Scenario(event=event, cfg=cfg, logger=logger)
 
-        # compute damage probability for each pair of line and wind event
-        _ = parmap.map(compute_damage_per_line, lines, cfg)
+            for _, line in scenario.lines.items():
 
-        # if cfg.line_interaction:
-        #     damaged_networks = parmap.map(
-        #         compute_damage_probability_line_interaction_per_network,
-        #         [network for _, network in nested_dic.items()])
-        # else:
-        #  = [network for _, network in nested_dic.items()]
-        """
-        print('Not implemented yet')
+                line = delayed_compute(line=line, cfg=cfg)
+                lines.append(line)
+
+        lines = dask.compute(lines)
+        client.close()
     else:
 
         logger.info('serial MC run on.......')
@@ -57,9 +58,9 @@ def run_simulation(cfg):
 
         for event in cfg.events:
 
-            scenario = Scenario(event=event, cfg=cfg)
+            scenario = Scenario(event=event, cfg=cfg, logger=logger)
 
-            for line in scenario.list_lines:
+            for _, line in scenario.lines.items():
 
                 lines.append(line)
 
