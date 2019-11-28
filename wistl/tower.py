@@ -112,6 +112,11 @@ class Tower(object):
             if key in self.registered:
                 setattr(self, key, value)
 
+        # analytical method
+        # dmg, dmg_time_idx, collapse_adj
+
+        # simulation method
+
         # self._damage_states = None
         # print('{}'.format(self.id_adj))
         # computed by functions in transmission_line class
@@ -134,6 +139,7 @@ class Tower(object):
         self._dmg_sim = None
         self._dmg_id_sim = None
         self._collapse_adj_sim = None
+
         # self.damage_adjacent_sim = dict.fromkeys(['id_adj', 'id_time', 'id_sim'])
         # self.damage_adjacent_sim = pd.DataFrame(None, columns=['id_adj',
         #                                                       'id_time',
@@ -288,6 +294,22 @@ class Tower(object):
             # PD not PE = 0(non), 1, 2 (collapse)
             self._dmg_state_sim = (rv[:, :, np.newaxis] < self.dmg.values).sum(axis=2)
         return self._dmg_state_sim
+
+    def compute_dmg_state_sim_by_sim(self):
+        """
+        determine if adjacent tower collapses or not due to pull by the tower
+        j_time: time index (array)
+
+        # PD not PE = 0(non), 1, 2 (collapse)
+        """
+
+        # 1. determine damage state of tower due to wind
+        rv = self.rnd_state.uniform(size=(self.no_time))
+
+        # ds_wind.shape == (no_sims, no_time)
+        # PD not PE = 0(non), 1, 2 (collapse)
+        self.dmg_state_sim_by_sim = (rv[:, np.newaxis] < self.dmg.values).sum(axis=1)
+
 
     @property
     def dmg_sim(self):

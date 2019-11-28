@@ -483,6 +483,7 @@ class TestTower1(unittest.TestCase):
 
         tower.collapse_adj_sim
 
+
 class TestTower3(unittest.TestCase):
     # suspension tower neighboring strainer
     @classmethod

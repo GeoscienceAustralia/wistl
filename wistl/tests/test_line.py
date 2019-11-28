@@ -111,6 +111,7 @@ class TestLine1(unittest.TestCase):
         self.assertAlmostEqual(p0gn1, tower.collapse_adj[2][0], places=3)
         self.assertAlmostEqual(p0gp1, tower.collapse_adj[4][0], places=3)
         self.assertAlmostEqual(p0gp2, tower.collapse_adj[5][0], places=3)
+        self.line.compute_damage_prob()
         self.assertAlmostEqual(
             pc, self.line.damage_prob['collapse'][name][0], places=3)
 
@@ -146,6 +147,7 @@ class TestLine1(unittest.TestCase):
         p0gp1 = p0c * 0.575
         p0gp2 = p0c * 0.125
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
+        self.line.compute_damage_prob()
         self.line.compute_damage_prob_sim()
         try:
             np.testing.assert_allclose(
@@ -294,6 +296,53 @@ class TestLine1(unittest.TestCase):
         self.assertAlmostEqual(est_no_tower['minor']['mean'][1], 8.8)
         # np.sqrt(22*22*0.4-8.8**2)
         self.assertAlmostEqual(est_no_tower['minor']['std'][1], 10.778, places=2)
+
+    def test_compute_stats_given_timestamp(self):
+
+        no_sims = 10
+        rnd_state = np.random.RandomState(1)
+        event_name = 'test1'
+        path_event = os.path.join(self.cfg.path_wind_event_base,
+                                  event_name)
+
+        # LineB
+        dic_line = self.cfg.lines['LineB'].copy()
+        dic_line.update({'name': 'LineB',
+                         'no_sims': no_sims,
+                         'damage_states': self.cfg.damage_states,
+                         'non_collapse': self.cfg.non_collapse,
+                         'event_name': event_name,
+                         'scale': 1.0,
+                         'rnd_state': rnd_state,
+                         'path_event': path_event,
+                         'dic_towers': self.cfg.towers_by_line['LineB']})
+
+        line = Line(**dic_line)
+
+        tf_ds = np.zeros((line.no_towers, no_sims))
+        tf_ds[:line.no_towers, 0:5] = 1
+        #tf_ds[:line.no_towers, 0] = 1
+
+        tf_ds_minor = np.zeros_like(tf_ds)
+        tf_ds_minor[:line.no_towers, 0:8] = 1
+        #tf_ds_minor[:line.no_towers, 0:5] = 1
+
+        tf_sim = {'minor': tf_ds_minor, 'collapse': tf_ds}
+
+        prob_no_tower = line.compute_stats_given_timestamp(tf_sim)
+
+        # collapse 
+        prob = np.zeros((line.no_towers + 1))
+        prob[0] = 0.5
+        prob[-1] = 0.5
+        np.testing.assert_almost_equal(prob_no_tower['collapse'], prob)
+
+        # minor
+        prob = np.zeros((line.no_towers + 1))
+        prob[0] = 0.7
+        prob[-1] = 0.3
+        np.testing.assert_almost_equal(prob_no_tower['minor'], prob)
+
 
     def test_write_hdf5(self):
         pass
