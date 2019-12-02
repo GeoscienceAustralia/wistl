@@ -5,8 +5,8 @@ set -eu
 #shift
 # ppn: processes per node: no. for worker processes to start on each node
 # tpp: threads per process
-ppn=1
-tpp=4
+ppn=48
+tpp=1
 mem=4e9 # Four gigabytes per worker process
 umask=0027
 HOME_PATH=/home/547/hxr547
@@ -47,7 +47,7 @@ export PROJECT=y57
 #init_env="umask ${umask}; source /etc/bashrc; module use /g/data/v10/public/modules/modulefiles/; module use /g/data/v10/private/modules/modulefiles/; module load ${module_name}"
 #init_env="umask ${umask}; source /etc/bashrc; source /home/547/hxr547/.bashrc; module use /g/data3/hh5/public/modules/; module load conda/analysis3; env"
 #init_env="umask ${umask}; source /etc/bashrc; export USER=$USER; export PROJECT=$PROJECT; export LC_ALL=en_US.UTF-8; export LANG=en_US.UTF-8; source /g/data3/hh5/public/apps/miniconda3/bin/activate /short/y57/hxr547/conda/envs/wistl"
-init_env="umask ${umask}; source $HOME_PATH/.bash_profile; export USER=$USER; export PROJECT=$PROJECT; module use /g/data3/hh5/public/modules; module load conda/analysis3; source activate $WISTL_ENV_PATH; export PYTHONPATH=$PROJ_PATH"
+init_env="umask ${umask}; source $HOME_PATH/.bash_profile; export USER=$USER; export PROJECT=$PROJECT; module use /g/data3/hh5/public/modules; module load conda/analysis3; source /g/data3/hh5/public/apps/miniconda3/bin/activate $WISTL_ENV_PATH; export PYTHONPATH=$PROJ_PATH"
 #init_env="umask ${umask}; source /etc/bashrc; source /home/547/hxr547/.bashrc; module use /g/data3/hh5/public/modules/; module load conda/analysis3; env"
 
 #echo "Using DEA module: ${module_name}"
@@ -96,12 +96,14 @@ echo "
   # PBS: NCPUS                  = $PBS_NCPUS
   # PBS: NODENUM                = $PBS_NODENUM
   # PBS: MEM                    = $PBS_VMEM
+  # PBS: PPN                    = $ppn
+  # PBS: TPP                    = $tpp
   # 
   #------------------------------------------------------"
 
 #"${@/DSCHEDULER/${SCHEDULER_ADDR}}"
 #echo $PROJ_PATH
-python $PROJ_PATH/aa.py "${SCHEDULER_ADDR}"
+python $PROJ_PATH/check_time_dask.py "${SCHEDULER_ADDR}" 100000
 #cd $PROJ_PATH
 #python wistl/main.py -c $PROJ_PATH/wistl/tests/test1_parallel.cfg -i "${SCHEDULER_ADDR}"
 #python wistl/aa.py

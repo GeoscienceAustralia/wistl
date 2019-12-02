@@ -1,8 +1,8 @@
 #PBS -m e
 #PBS -P y57
 #PBS -q normal 
-#PBS -l walltime=00:10:00
-#PBS -l ncpus=4
+#PBS -l walltime=01:00:00
+#PBS -l ncpus=96
 #PBS -l mem=32GB
 #PBS -l wd
 #PBS -N job

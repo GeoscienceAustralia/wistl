@@ -8,7 +8,7 @@ __pycache__/
 # NCI
 job.e*
 job.o*
-
+worker*
 # C extensions
 *.so
 
