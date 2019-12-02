@@ -254,7 +254,7 @@ class Line(object):
         return results
 
     def compute_damage_prob_sim_given_sim(self, id_sim):
-        tic = time.time()
+        #tic = time.time()
         # perfect correlation within a single line
 
         results = {ds: None for ds in self.damage_states}
@@ -281,7 +281,7 @@ class Line(object):
         return results
 
 
-    def compute_damage_prob_sim_given_sim1(self, isim):
+    def compute_damage_prob_sim_given_sim1(self, id_sim):
         """
         """
         #tic = time.time()
@@ -295,7 +295,6 @@ class Line(object):
         _idl = []
         for _, tower in self.towers.items():
             dmg_state_sim = tower.compute_dmg_state_sim()
-            dmg_state_sim = tower.compute_dmg_state_sim(dmg_state_sim)
             collapse_adj_sim = tower.compute_collapse_adj_sim(dmg_state_sim)
             _collapse_adj_sim.append(collapse_adj_sim)
             _dmg_state_sim.append(dmg_state_sim)
@@ -310,12 +309,11 @@ class Line(object):
 
         # append damage state by direct wind
         for ds in self.damage_states[::-1]:  # collapse first
-
             for idl, dmg_state_sim in zip(_idl, _dmg_state_sim):
                 tf_ds[idl, dmg_state_sim[ds]] = True
 
             idx = np.where(tf_ds)
-            results[ds] = [(x, isim, y) for x, y in idx]
+            results[ds] = [(id_time, id_sim, id_tower) for id_time, id_tower in zip(*idx)]
 
         #results['prob_no_tower'] = self.compute_stats_given_timestamp(tf_sim)
 
