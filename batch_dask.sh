@@ -3,19 +3,25 @@ set -eu
 # The specific module+version that each node should load.
 #module_name=$1
 #shift
-
+# ppn: processes per node: no. for worker processes to start on each node
+# tpp: threads per process
 ppn=1
-tpp=1
+tpp=4
 mem=4e9 # Four gigabytes per worker process
 umask=0027
-#set PROJ=/home/547/hxr547/Projects/wistl
+HOME_PATH=/home/547/hxr547
+WISTL_ENV_PATH=$HOME_PATH/.conda/envs/wistl
+PROJ_PATH=$HOME_PATH/Projects/wistl
+export USER=hxr547
+export PROJECT=y57
 
 #while [[ $# -gt 0 ]]
 #do
 #    key="$1"
 #    case $key in
 #    --help)
-#        echo "Usage: $0 <dea_module> --umask ${umask} --ppn ${ppn} --tpp ${tpp} script args"
+#        #echo "Usage: $0 <dea_module> --umask ${umask} --ppn ${ppn} --tpp ${tpp} script args"
+#        echo "Usage: $0 --ppn ${ppn} --tpp ${tpp} script args"
 #        exit 0
 #        ;;
 #    --umask)
@@ -36,12 +42,12 @@ umask=0027
 #    esac
 #shift
 #done
-#
+
 
 #init_env="umask ${umask}; source /etc/bashrc; module use /g/data/v10/public/modules/modulefiles/; module use /g/data/v10/private/modules/modulefiles/; module load ${module_name}"
 #init_env="umask ${umask}; source /etc/bashrc; source /home/547/hxr547/.bashrc; module use /g/data3/hh5/public/modules/; module load conda/analysis3; env"
 #init_env="umask ${umask}; source /etc/bashrc; export USER=$USER; export PROJECT=$PROJECT; export LC_ALL=en_US.UTF-8; export LANG=en_US.UTF-8; source /g/data3/hh5/public/apps/miniconda3/bin/activate /short/y57/hxr547/conda/envs/wistl"
-init_env="umask ${umask}; source /home/547/hxr547/.profile; export USER=$USER; export PROJECT=$PROJECT; module use /g/data3/hh5/public/modules; module load conda/analysis3; source activate /short/y57/hxr547/conda/envs/wistl"
+init_env="umask ${umask}; source $HOME_PATH/.bash_profile; export USER=$USER; export PROJECT=$PROJECT; module use /g/data3/hh5/public/modules; module load conda/analysis3; source activate $WISTL_ENV_PATH; export PYTHONPATH=$PROJ_PATH"
 #init_env="umask ${umask}; source /etc/bashrc; source /home/547/hxr547/.bashrc; module use /g/data3/hh5/public/modules/; module load conda/analysis3; env"
 
 #echo "Using DEA module: ${module_name}"
@@ -87,10 +93,15 @@ echo "
   # PBS: Node_file              = $PBS_NODEFILE
   # PBS: Current home directory = $PBS_O_HOME
   # PBS: PATH                   = $PBS_O_PATH
+  # PBS: NCPUS                  = $PBS_NCPUS
+  # PBS: NODENUM                = $PBS_NODENUM
+  # PBS: MEM                    = $PBS_VMEM
+  # 
   #------------------------------------------------------"
 
 #"${@/DSCHEDULER/${SCHEDULER_ADDR}}"
-
-#python /home/547/hxr547/Projects/wistl/aa.py "${SCHEDULER_ADDR}"
-cd /home/547/hxr547/Projects/wistl
-python wist/main.py -c /home/547/hxr547/Projects/wistl/wistl/tests/test1_parallel.cfg -i "${SCHEDULER_ADDR}"
+#echo $PROJ_PATH
+python $PROJ_PATH/aa.py "${SCHEDULER_ADDR}"
+#cd $PROJ_PATH
+#python wistl/main.py -c $PROJ_PATH/wistl/tests/test1_parallel.cfg -i "${SCHEDULER_ADDR}"
+#python wistl/aa.py

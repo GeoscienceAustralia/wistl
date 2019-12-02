@@ -134,7 +134,7 @@ def set_logger(path_cfg, logging_level=None):
 
 
 def process_commandline():
-    usage = '%prog -c <config_file> [-v <logging_level>]'
+    usage = '%prog -c <config_file> [-i <client_ip>] [-v <logging_level>]'
     parser = OptionParser(usage=usage, version=VERSION_DESC)
     parser.add_option("-c", "--config",
                       dest="config_file",
@@ -142,8 +142,8 @@ def process_commandline():
                       metavar="FILE")
     parser.add_option("-i", "--ip",
                       dest="client_ip",
-                      help="set client ip address",
-                      metavar="FILE")
+                      help="set client ip address for dask cluster",
+                      metavar="ip_address")
     parser.add_option("-v", "--verbose",
                       dest="verbose",
                       default=None,
