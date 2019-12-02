@@ -5,6 +5,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# NCI
+job.e*
+job.o*
+
 # C extensions
 *.so
 
