@@ -112,11 +112,6 @@ class Tower(object):
             if key in self.registered:
                 setattr(self, key, value)
 
-        # analytical method
-        # dmg, dmg_time_idx, collapse_adj
-
-        # simulation method
-
         # self._damage_states = None
         # print('{}'.format(self.id_adj))
         # computed by functions in transmission_line class
@@ -130,14 +125,16 @@ class Tower(object):
         self._sorted_frag_dic_keys = None
 
         # analytical method
+        # dmg, dmg_time_idx, collapse_adj
         self._dmg = None
+        self._dmg_time_idx = None
         self._collapse_adj = None
 
         # simulation method: determine_damage_isolation_sim,
+        # dmg_state_sim -> dmg_sim (just for validation against dmg)
+        # dmg_state_sim -> dmg_id_sim -> collapse_adj_sim
         self._dmg_state_sim = None
-        self._dmg_time_idx = None
         self._dmg_sim = None
-        self._dmg_id_sim = None
         self._collapse_adj_sim = None
 
         # self.damage_adjacent_sim = dict.fromkeys(['id_adj', 'id_time', 'id_sim'])
@@ -169,16 +166,16 @@ class Tower(object):
     def __repr__(self):
         return f'Tower(name={self.name}, function={self.function}, idl={self.idl}, idn={self.idn})'
 
-    def __getstate__(self):
-        d = self.__dict__.copy()
-        if 'logger' in d:
-            d['logger'] = d['logger'].name
-        return d
+    #def __getstate__(self):
+    #    d = self.__dict__.copy()
+    #    if 'logger' in d:
+    #        d['logger'] = d['logger'].name
+    #    return d
 
-    def __setstate__(self, d):
-        if 'logger' in d:
-            d['logger'] = logging.getLogger(d['logger'])
-        self.__dict__.update(d)
+    #def __setstate__(self, d):
+    #    if 'logger' in d:
+    #        d['logger'] = logging.getLogger(d['logger'])
+    #    self.__dict__.update(d)
 
 
     @property
@@ -259,7 +256,7 @@ class Tower(object):
     @property
     def dmg(self):
         """
-        compute probability of damage of tower in isolation (Pc)
+        compute probability exceedance of damage of tower in isolation (Pc)
         Note: dmg index is not identical to wind index
         """
         if self._dmg is None:
@@ -278,87 +275,92 @@ class Tower(object):
     @property
     def dmg_state_sim(self):
         """
-        determine if adjacent tower collapses or not due to pull by the tower
-        j_time: time index (array)
-        idx: multiprocessing thread id
-
+        determine damage state of tower in isolation by simulation
         # PD not PE = 0(non), 1, 2 (collapse)
+        TODO: changed to for loop by no_sims and using delayed?
         """
 
         if self._dmg_state_sim is None:
+
+            self._dmg_state_sim = {}
 
             # 1. determine damage state of tower due to wind
             rv = self.rnd_state.uniform(size=(self.no_sims, self.no_time))
 
             # ds_wind.shape == (no_sims, no_time)
             # PD not PE = 0(non), 1, 2 (collapse)
-            self._dmg_state_sim = (rv[:, :, np.newaxis] < self.dmg.values).sum(axis=2)
+            # dmg_state_sim.shape == (no_sims, no_time)
+            _array = (rv[:, :, np.newaxis] < self.dmg.values).sum(axis=2)
+
+            for ids, ds in enumerate(self.damage_states, 1):
+
+                id_sim, id_time = np.where(_array == ids)
+
+                # convert to wind time index for aggregation at line level
+                id_time += self.dmg_time_idx[0]
+
+                self._dmg_state_sim[ds] = pd.DataFrame(
+                    np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
+
         return self._dmg_state_sim
 
-    def compute_dmg_state_sim_by_sim(self):
+    def compute_dmg_state_sim(self):
         """
         determine if adjacent tower collapses or not due to pull by the tower
         j_time: time index (array)
+        idx: multiprocessing thread id
 
         # PD not PE = 0(non), 1, 2 (collapse)
+        TODO: changed to for loop by no_sims and using delayed?
         """
-
+        dmg_state_sim = {}
         # 1. determine damage state of tower due to wind
         rv = self.rnd_state.uniform(size=(self.no_time))
 
         # ds_wind.shape == (no_sims, no_time)
         # PD not PE = 0(non), 1, 2 (collapse)
-        self.dmg_state_sim_by_sim = (rv[:, np.newaxis] < self.dmg.values).sum(axis=1)
+        # dmg_state_sim.shape == (no_time)
+        _array = (rv[:, np.newaxis] < self.dmg.values).sum(axis=1)
 
+        for ids, ds in enumerate(self.damage_states, 1):
+
+            id_time = np.where(_array == ids)[0]
+
+            # convert to wind time index for aggregation at line level
+            id_time += self.dmg_time_idx[0]
+
+            dmg_state_sim[ds] = id_time
+
+        return dmg_state_sim
 
     @property
     def dmg_sim(self):
-        # PE not PD 1, 2 (collapse)
+        """
+        calls self.dmg_state_sim and compare against dmg
+        PE not PD 1, 2 (collapse)
+        """
 
         if self._dmg_sim is None:
 
             self._dmg_sim = {}
-            for ids, ds in enumerate(self.damage_states, 1):
 
-                self._dmg_sim[ds] = (self.dmg_state_sim >= ids).sum(axis=0) / self.no_sims
+            pb = np.zeros(self.dmg['collapse'].shape)
+
+            for ds in self.damage_states[::-1]:  # collapse first
+
+                _array = self.dmg_state_sim[ds].groupby('id_time').agg(len)['id_sim'].values
+                self._dmg_sim[ds] = pb + _array / self.no_sims
+                pb = _array / self.no_sims
 
                 # check whether MC simulation is close to analytical
                 idx_not_close, = np.where(~np.isclose(self._dmg_sim[ds],
                                                       self.dmg[ds],
                                                       atol=ATOL,
                                                       rtol=RTOL))
-
-                for idx in idx_not_close:
-                    self.logger.warning(
-                            f'PE of {ds}: simulation {self._dmg_sim[ds][idx]:.3f} vs. analytical {self.dmg[ds].iloc[idx]:.3f}')
-
+                if len(idx_not_close):
+                    idx = idx_not_close[0]
+                    self.logger.warning(f'PE of {ds} in isolation: {self._dmg_sim[ds][idx]:.3f} vs {self.dmg[ds].iloc[idx]:.3f}')
         return self._dmg_sim
-
-    @property
-    def dmg_id_sim(self):
-        """
-        determine if adjacent tower collapses or not due to pull by the tower
-        j_time: time index (array)
-        idx: multiprocessing thread id
-        CAUTION: id_time follows wind.index rather than dmg.index
-
-        """
-
-        if self._dmg_id_sim is None:
-
-            self._dmg_id_sim = {}
-
-            for ids, ds in enumerate(self.damage_states, 1):
-
-                id_sim, id_time = np.where(self.dmg_state_sim == ids)
-
-                # convert to wind time index from tower dmg time index
-                id_time += self.dmg_time_idx[0]
-
-                self._dmg_id_sim[ds] = pd.DataFrame(
-                    np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
-
-        return self._dmg_id_sim
 
     @property
     def collapse_adj(self):
@@ -381,14 +383,14 @@ class Tower(object):
     @property
     def collapse_adj_sim(self):
         """
-
+        : calls self.dmg_state_sim
         :param seed: seed is None if no seed number is provided
         :return:
         """
 
         if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx:
 
-            self._collapse_adj_sim = self.dmg_id_sim['collapse'].copy()
+            self._collapse_adj_sim = self.dmg_state_sim['collapse'].copy()
 
             # generate regardless of time index
             rv = self.rnd_state.uniform(size=len(self._collapse_adj_sim['id_sim']))
@@ -428,6 +430,39 @@ class Tower(object):
                             f'analytical {self.collapse_adj[idl][adj_time]:.3f}')
 
         return self._collapse_adj_sim
+
+    def compute_collapse_adj_sim(self, dmg_id_sim):
+        """
+        : calls self.dmg_state_sim
+        :param seed: seed is None if no seed number is provided
+        :return:
+        """
+
+        collapse_adj_sim = pd.DataFrame(None, columns=['id_time', 'id_adj'])
+        collapse_adj_sim['id_time'] = dmg_id_sim['collapse']
+
+        rv = self.rnd_state.uniform(size=len(dmg_id_sim['collapse']))
+
+        collapse_adj_sim['id_adj'] = (
+            rv[:, np.newaxis] >= self.cond_pc_adj_sim_prob).sum(axis=1)
+
+        # remove case with no adjacent tower collapse
+        collapse_adj_sim.loc[
+            collapse_adj_sim['id_adj'] == len(self.cond_pc_adj_sim_prob),
+            'id_adj'] = None
+        collapse_adj_sim = collapse_adj_sim.loc[collapse_adj_sim['id_adj'].notnull()]
+
+        # replace index with tower id
+        collapse_adj_sim['id_adj'] = collapse_adj_sim['id_adj'].apply(
+            lambda x: self.cond_pc_adj_sim_idx[int(x)])
+
+        # check whether MC simulation is close to analytical
+        #id_adj_removed = [x for x in self.id_adj if x >= 0]
+        #if self.idl in id_adj_removed:
+        #    id_adj_removed.remove(self.idl)
+
+        return collapse_adj_sim
+
 
     # def determine_damage_by_interaction_at_tower_level(self, seed=None):
     #     """

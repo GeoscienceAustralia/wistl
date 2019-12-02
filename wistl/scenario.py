@@ -75,7 +75,7 @@ class Scenario(object):
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
 
-                self._lines[name] = Line(**dic, logger=self.logger)
+                self._lines[name] = Line(**dic)
 
         return self._lines
 

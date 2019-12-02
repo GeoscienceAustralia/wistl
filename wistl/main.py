@@ -36,7 +36,7 @@ def run_simulation(cfg, client_ip=None):
         lines = []
         for event in cfg.events:
 
-            scenario = Scenario(event=event, cfg=cfg, logger=logger)
+            scenario = Scenario(event=event, cfg=cfg)
 
             for _, line in scenario.lines.items():
 
@@ -56,7 +56,7 @@ def run_simulation(cfg, client_ip=None):
 
         for event in cfg.events:
 
-            scenario = Scenario(event=event, cfg=cfg, logger=logger)
+            scenario = Scenario(event=event, cfg=cfg)
 
             for _, line in scenario.lines.items():
 
