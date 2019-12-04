@@ -162,7 +162,7 @@ class TestTransmission(unittest.TestCase):
     """
     def compare_analytical_vs_simulation_for_collapse(self, tower):
 
-        for key, grouped in tower.dmg_id_sim['collapse'].groupby('id_time'):
+        for key, grouped in tower.dmg_state_sim['collapse'].groupby('id_time'):
             result = tower.dmg.ix[key, 'collapse']
             expected = len(grouped)/float(self.cfg.no_sims)
             np.testing.assert_almost_equal(result, expected, decimal=1)

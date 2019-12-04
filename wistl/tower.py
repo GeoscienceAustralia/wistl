@@ -56,7 +56,7 @@ class Tower(object):
                   'idn',
                   'max_no_adj_towers',
                   'height_z',
-                  'point',
+                  #'point',
                   'terrain_cat',
                   'path_event']
 
@@ -104,7 +104,7 @@ class Tower(object):
         self.max_no_adj_towers = None
 
         self.height_z = None
-        self.point = None
+        # self.point = None
         self.terrain_cat = None  # Terrain Category
         self.scale = None
 

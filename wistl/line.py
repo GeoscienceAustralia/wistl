@@ -64,13 +64,13 @@ class Line(object):
         self.damage_prob = None
 
         # simulation method
-        self._damage_prob_sim = None
-        self.est_no_damage = None
+        self.damage_prob_sim = None
+        self.no_damage = None
         self.prob_no_damage = None
 
         # non cascading collapse
         self.damage_prob_sim_no_cascading = None
-        self.est_no_damage_no_cascading = None
+        self.no_damage_no_cascading = None
         self.prob_no_damage_no_cascading = None
 
         # parallel line interaction
@@ -175,7 +175,7 @@ class Line(object):
             for idl, prob in tower.collapse_adj.items():
                 pc_adj_agg[tower.idl, idl, idt0:idt1] = prob
 
-            pc_adj_agg[tower.idl, tower.idl, idt0:idt1] = tower.dmg['collapse'].values
+            pc_adj_agg[tower.idl, tower.idl, idt0:idt1] = tower.dmg['collapse']
 
         # pc_collapse.shape == (no_tower, no_time)
         pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
@@ -210,49 +210,6 @@ class Line(object):
 
         return self.damage_prob
 
-    def compute_damage_prob_sim_given_sim0(self, isim):
-        """
-        """
-        #tic = time.time()
-
-        #results = {'dmg_prob': {}, 'prob_no_tower': {}}
-
-        results = {ds: None for ds in self.damage_states}
-        tf_ds = np.zeros((self.no_towers, self.no_time), dtype=bool)
-
-        # collapse by adjacent towers
-        for _, tower in self.towers.items():
-            dmg_state_sim = dask.delayed(tower.compute_dmg_state_sim)()
-            dmg_id_sim = dask.delayed(tower.compute_dmg_id_sim)(dmg_state_sim)
-            collapse_adj_sim = dask.delayed(tower.compute_collapse_adj_sim)(dmg_state_sim)
-            _collapse_adj_sim.append(collapse_adj_sim)
-            _dmg_state_sim.append(dmg_state_sim)
-            _idl.append(tower.idl)
-        _dmg_state_sim, _collapse_adj_sim = dask.compute(_dmg_state_sim, _collapse_adj_sim)
-
-        # collapse by adjacent towers
-        for idl, collapse_adj_sim in zip(_idl, _collapse_adj_sim):
-            for id_adj, grouped in collapse_adj_sim.groupby('id_adj'):
-                for idl in id_adj:
-                    tf_ds[idl, grouped['id_time'].values] = True
-
-        # append damage state by direct wind
-        for ds in self.damage_states[::-1]:  # collapse first
-
-            for idl, dmg_state_sim in zip(_idl, _dmg_state_sim):
-                tf_ds[idl, dmg_state_sim[ds]] = True
-
-            # PE(DS)
-            #results['dmg_prob'][ds] = tf_ds.sum(axis=1) / self.no_sims
-
-            results[ds] = copy.deepcopy(tf_ds)
-
-        #results['prob_no_tower'] = self.compute_stats_given_timestamp(tf_sim)
-
-        #self.logger.critical(f'Elapsed time: {time.time() - tic}')
-
-        return results
-
     def compute_damage_prob_sim_given_sim(self, id_sim):
         #tic = time.time()
         # perfect correlation within a single line
@@ -280,262 +237,41 @@ class Line(object):
 
         return results
 
-
-    def compute_damage_prob_sim_given_sim1(self, id_sim):
-        """
-        """
-        #tic = time.time()
-
-        results = {ds: None for ds in self.damage_states}
-        tf_ds = np.zeros((self.no_towers, self.no_time), dtype=bool)
-
-        # collapse by adjacent towers
-        _collapse_adj_sim = []
-        _dmg_state_sim = []
-        _idl = []
-        for _, tower in self.towers.items():
-            dmg_state_sim = tower.compute_dmg_state_sim()
-            collapse_adj_sim = tower.compute_collapse_adj_sim(dmg_state_sim)
-            _collapse_adj_sim.append(collapse_adj_sim)
-            _dmg_state_sim.append(dmg_state_sim)
-            _idl.append(tower.idl)
-        #_dmg_state_sim, _collapse_adj_sim = dask.compute(_dmg_state_sim, _collapse_adj_sim)
-
-        # collapse by adjacent towers
-        for idl, collapse_adj_sim in zip(_idl, _collapse_adj_sim):
-            for id_adj, grouped in collapse_adj_sim.groupby('id_adj'):
-                for idl in id_adj:
-                    tf_ds[idl, grouped['id_time'].values] = True
-
-        # append damage state by direct wind
-        for ds in self.damage_states[::-1]:  # collapse first
-            for idl, dmg_state_sim in zip(_idl, _dmg_state_sim):
-                tf_ds[idl, dmg_state_sim[ds]] = True
-
-            idx = np.where(tf_ds)
-            results[ds] = [(id_time, id_sim, id_tower) for id_time, id_tower in zip(*idx)]
-
-        #results['prob_no_tower'] = self.compute_stats_given_timestamp(tf_sim)
-
-        #self.logger.critical(f'Elapsed time: {time.time() - tic}')
-
-        return results
-
-    def compute_stats_given_sim(self, tf_sim):
-        """
-        compute mean and std of no. of ds
-        tf_collapse_sim.shape = (no_towers, no_sim, no_time)
-        :param tf_sim:
-        :return:
-        """
-
-        prob_no_tower = {}
-
-        # (no_towers, 1)
-        x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
-        x2_tower = x_tower ** 2.0
-
-        tf_ds = np.zeros((self.no_towers,
-                          self.no_sims,
-                          self.no_time), dtype=bool)
-
-        # from collapse and minor
-        for ds in self.damage_states[::-1]:
-
-            tf_ds = np.logical_xor(tf_sim[ds], tf_ds)
-
-            # mean and standard deviation
-            # no_ds_across_towers.shape == (no_sims, no_time)
-            no_ds_across_towers = tf_ds.sum(axis=0)
-            freq = np.zeros(shape=(self.no_time, self.no_towers + 1))
-
-            for i in range(self.no_time):
-                _value, _freq = np.unique(no_ds_across_towers[:, i], return_counts=True)  # (value, freq)
-                freq[i, [int(x) for x in _value]] = _freq
-
-            prob = freq / self.no_sims  # (no_time, no_towers)
-
-            exp_no_tower = np.dot(prob, x_tower)
-            std_no_tower = np.sqrt(np.dot(prob, x2_tower) - exp_no_tower ** 2)
-
-            est_no_tower[ds] = pd.DataFrame(
-                np.hstack((exp_no_tower, std_no_tower)),
-                columns=['mean', 'std'],
-                index=self.time)
-
-            prob_no_tower[ds] = pd.DataFrame(
-                prob,
-                columns=[str(x) for x in range(self.no_towers + 1)],
-                index=self.time)
-
-        return est_no_tower, prob_no_tower
-
- 
-    def compute_damage_prob_sim_given_timestamp(self, itime):
-        #tic = time.time()
-
-        results = {'dmg_prob': {}, 'prob_no_tower': {}}
-
-        tf_sim = {ds: None for ds in self.damage_states}
-        tf_ds = np.zeros((self.no_towers, self.no_sims), dtype=bool)
-
-        # collapse by adjacent towers
-        for _, tower in self.towers.items():
-            tf_time = tower.collapse_adj_sim['id_time'].isin([itime])
-            if tf_time.sum():
-                for id_adj, grouped in tower.collapse_adj_sim[tf_time].groupby('id_adj'):
-                    for idl in id_adj:
-                        tf_ds[idl, grouped['id_sim'].values] = True
-
-        # append damage state by direct wind
-        for ds in self.damage_states[::-1]:  # collapse first
-
-            for _, tower in self.towers.items():
-                tf_time = tower.dmg_state_sim[ds]['id_time'].isin([itime])
-                if tf_time.sum():
-                    ids = tower.dmg_state_sim[ds][tf_time]['id_sim'].values
-                    tf_ds[tower.idl, ids] = True
-
-            # PE(DS)
-            results['dmg_prob'][ds] = tf_ds.sum(axis=1) / self.no_sims
-
-            tf_sim[ds] = copy.deepcopy(tf_ds)
-
-        results['prob_no_tower'] = self.compute_stats_given_timestamp(tf_sim)
-
-        #self.logger.critical(f'Elapsed time: {time.time() - tic}')
-
-        return results
-
-    def compute_stats_given_timestamp(self, tf_sim):
-        """
-        compute mean and std of no. of ds
-        tf_collapse_sim.shape = (no_towers, no_sim, no_time)
-        :param tf_sim:
-        :return:
-        """
-
-        prob_no_tower = {}
-
-        # (no_towers, 1)
-        tf_ds = np.zeros((self.no_towers, self.no_sims), dtype=bool)
-
-        # from collapse and minor
-        for ds in self.damage_states[::-1]:
-
-            tf_ds = np.logical_xor(tf_sim[ds], tf_ds)
-
-            # no_ds_across_towers.shape == (no_sims, 1)
-            no_ds_across_towers = tf_ds.sum(axis=0)
-            freq = np.zeros(shape=(self.no_towers + 1))
-
-            _value, _freq = np.unique(no_ds_across_towers, return_counts=True)  # (value, freq)
-            freq[[int(x) for x in _value]] = _freq
-
-            prob = freq / self.no_sims  # (no_time, no_towers)
-
-            prob_no_tower[ds] = prob
-
-        return prob_no_tower
-
-    def compute_damage_prob_sim_by_sim(self):
-
-        tic = time.time()
-        # perfect correlation within a single line
-        self.damage_prob_sim_by_sim = {}
-
-        dump = []
-        for isim in range(self.no_sims):
-            L =  dask.delayed(self.compute_damage_prob_sim_given_sim)(isim)
-            dump.append(L)
-        dump = dask.compute(dump)[0]
-
-        # combine damage_prob_sim, prob_no_damage
-        dmg_prob_sim = {ds: [] for ds in self.damage_states}
-        for ds in self.damage_states:
-            for item in dump:
-                dmg_prob_sim[ds].append(item['dmg_prob'][ds])
-            self.damage_prob_sim_timestamp[ds] = pd.DataFrame(dmg_prob_sim[ds],
-                    columns=self.names, index=self.time)
-
-        #self.est_no_damage, self.prob_no_damage
-        # checking against analytical value
-        for name in self.names:
-            try:
-                np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
-                    self.damage_prob_sim_timestamp['collapse'][name].values, atol=ATOL, rtol=RTOL)
-            except AssertionError:
-                self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
-        #self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
-
-        self.logger.critical(f'Elapsed time: {time.time() - tic}')
-
-
-    def compute_damage_prob_sim_by_timestamp(self):
-        tic = time.time()
-        # perfect correlation within a single line
-        self.damage_prob_sim_timestamp = {}
-
-        dump = []
-        for itime in range(*self.time_idx):
-            L =  dask.delayed(self.compute_damage_prob_sim_given_timestamp)(itime)
-            dump.append(L)
-        dump = dask.compute(dump)[0]
-
-        # combine damage_prob_sim, prob_no_damage
-        dmg_prob_sim = {ds: [] for ds in self.damage_states}
-        for ds in self.damage_states:
-            for item in dump:
-                dmg_prob_sim[ds].append(item['dmg_prob'][ds])
-            self.damage_prob_sim_timestamp[ds] = pd.DataFrame(dmg_prob_sim[ds],
-                    columns=self.names, index=self.time)
-
-        #self.est_no_damage, self.prob_no_damage
-        # checking against analytical value
-        for name in self.names:
-            try:
-                np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
-                    self.damage_prob_sim_timestamp['collapse'][name].values, atol=ATOL, rtol=RTOL)
-            except AssertionError:
-                self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
-        #self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
-
-        self.logger.critical(f'Elapsed time: {time.time() - tic}')
-
     def compute_damage_prob_sim(self):
-        tic = time.time()
+
         # perfect correlation within a single line
         self.damage_prob_sim = {}
-
-        tf_sim = {ds: None for ds in self.damage_states}
-
+        #idx_by_ds = {ds: None for ds in self.damage_states}
+        dic_tf_ds = {ds: None for ds in self.damage_states}
         tf_ds = np.zeros((self.no_towers,
                           self.no_sims,
                           self.no_time), dtype=bool)
 
         # collapse by adjacent towers
         for _, tower in self.towers.items():
-            for id_adj, grouped in tower.collapse_adj_sim.groupby('id_adj'):
+            for id_adj, grp in tower.collapse_adj_sim.groupby('id_adj'):
                 for idl in id_adj:
-                    tf_ds[idl,
-                          grouped['id_sim'].values,
-                          grouped['id_time'].values] = True
+                    tf_ds[idl, grp['id_sim'], grp['id_time']] = True
 
         # append damage state by direct wind
         for ds in self.damage_states[::-1]:  # collapse first
 
             for _, tower in self.towers.items():
                 tf_ds[tower.idl,
-                      tower.dmg_state_sim[ds]['id_sim'].values,
-                      tower.dmg_state_sim[ds]['id_time'].values] = True
+                      tower.dmg_state_sim[ds]['id_sim'],
+                      tower.dmg_state_sim[ds]['id_time']] = True
 
             # PE(DS)
-            self.damage_prob_sim[ds] = pd.DataFrame(
-                tf_ds.sum(axis=1).T / self.no_sims,
-                columns=self.names,
-                index=self.time)
+            self.damage_prob_sim[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / self.no_sims,
+                columns=self.names, index=self.time)
 
-            tf_sim[ds] = copy.deepcopy(tf_ds)
+            dic_tf_ds[ds] = tf_ds.copy()
+            #idx = np.where(tf_ds)
+            #idx_by_ds[ds] = [(id_time, id_sim, id_tower) for
+            #                 id_tower, id_sim, id_time in zip(*idx)]
+
+        # compute mean, std of no. of damaged towers
+        self.no_damage, self.prob_no_damage = self.compute_stats(dic_tf_ds)
 
         # checking against analytical value
         for name in self.names:
@@ -545,15 +281,13 @@ class Line(object):
             except AssertionError:
                 self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
 
-        self.est_no_damage, self.prob_no_damage = self.compute_stats(tf_sim)
-
-        self.logger.critical(f'Elapsed time: {time.time() - tic}')
+        #return idx_by_ds
 
     def compute_damage_prob_sim_no_cascading(self):
 
         self.damage_prob_sim_no_cascading = {}
 
-        tf_sim = {ds: None for ds in self.damage_states}
+        dic_tf_ds = {ds: None for ds in self.damage_states}
 
         tf_ds = np.zeros((self.no_towers,
                           self.no_sims,
@@ -564,8 +298,8 @@ class Line(object):
             for _, tower in self.towers.items():
 
                 tf_ds[tower.idl,
-                      tower.dmg_state_sim[ds]['id_sim'].values,
-                      tower.dmg_state_sim[ds]['id_time'].values] = True
+                      tower.dmg_state_sim[ds]['id_sim'],
+                      tower.dmg_state_sim[ds]['id_time']] = True
 
             # PE(DS)
             self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(
@@ -573,7 +307,10 @@ class Line(object):
                 columns=self.names,
                 index=self.time)
 
-            tf_sim[ds] = tf_ds.copy()
+            dic_tf_ds[ds] = tf_ds.copy()
+
+        self.no_damage_no_cascading, self.prob_no_damage_no_cascading = \
+            self.compute_stats(dic_tf_ds)
 
         # checking against analytical value
         for _id, name in enumerate(self.names):
@@ -584,20 +321,18 @@ class Line(object):
             except AssertionError:
                 self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
 
-        self.est_no_damage_no_cascading, self.prob_no_damage_no_cascading = \
-            self.compute_stats(tf_sim)
 
-
-    def compute_stats(self, tf_sim):
+    def compute_stats(self, dic_tf_ds):
         """
         compute mean and std of no. of ds
         tf_collapse_sim.shape = (no_towers, no_sim, no_time)
         :param tf_sim:
         :return:
         """
-
-        est_no_tower = {}
-        prob_no_tower = {}
+        #tic = time.time()
+        no_damage = {}
+        prob_no_damage = {}
+        columns = [str(x) for x in range(self.no_towers + 1)]
 
         # (no_towers, 1)
         x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
@@ -610,45 +345,82 @@ class Line(object):
         # from collapse and minor
         for ds in self.damage_states[::-1]:
 
-            tf_ds = np.logical_xor(tf_sim[ds], tf_ds)
+            tf_ds = np.logical_xor(dic_tf_ds[ds], tf_ds)
 
             # mean and standard deviation
             # no_ds_across_towers.shape == (no_sims, no_time)
             no_ds_across_towers = tf_ds.sum(axis=0)
-            freq = np.zeros(shape=(self.no_time, self.no_towers + 1))
+            prob = np.zeros(shape=(self.no_time, self.no_towers + 1))
 
             for i in range(self.no_time):
-                _value, _freq = np.unique(no_ds_across_towers[:, i], return_counts=True)  # (value, freq)
-                freq[i, [int(x) for x in _value]] = _freq
+                value, freq = np.unique(no_ds_across_towers[:, i], return_counts=True)  # (value, freq)
+                prob[i, [int(x) for x in value]] = freq
 
-            prob = freq / self.no_sims  # (no_time, no_towers)
+            prob /= self.no_sims  # (no_time, no_towers)
 
-            exp_no_tower = np.dot(prob, x_tower)
-            std_no_tower = np.sqrt(np.dot(prob, x2_tower) - exp_no_tower ** 2)
+            _exp = np.dot(prob, x_tower)
+            _std = np.sqrt(np.dot(prob, x2_tower) - _exp ** 2)
 
-            est_no_tower[ds] = pd.DataFrame(
-                np.hstack((exp_no_tower, std_no_tower)),
-                columns=['mean', 'std'],
-                index=self.time)
+            no_damage[ds] = pd.DataFrame(np.hstack((_exp, _std)),
+                columns=['mean', 'std'], index=self.time)
 
-            prob_no_tower[ds] = pd.DataFrame(
-                prob,
-                columns=[str(x) for x in range(self.no_towers + 1)],
-                index=self.time)
+            prob_no_damage[ds] = pd.DataFrame(prob, columns=columns, index=self.time)
 
-        return est_no_tower, prob_no_tower
+        #print(f'stat: {time.time() - tic}')
+        return no_damage, prob_no_damage
+
+    def compute_stats1(self, idx_by_ds):
+        """
+        compute mean and std of no. of ds
+        idx_by_ds = dict of list of tuples(id_time, id_sim, id_tower)
+        :return:
+        """
+
+        tic = time.time()
+        exp_no_tower = {}
+        prob_no_tower = {}
+        columns = [str(x) for x in range(self.no_towers + 1)]
+
+        # (no_towers, 1)
+        x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
+        x2_tower = x_tower ** 2.0
+
+        # from collapse and minor
+        prev = set()
+        for ds in self.damage_states[::-1]:
+
+            prob = np.zeros((self.no_time, self.no_towers + 1))
+            # mean and standard deviation
+            # no_ds_across_towers.shape == (no_sims, no_time)
+            tmp = list(set(idx_by_ds[ds]).difference(prev))
+            df = pd.DataFrame(tmp, columns=['id_time','id_sim','id_tower'])
+            prev = set(idx_by_ds[ds])
+            for id_time, grp in df.groupby('id_time'):
+                freq = grp.groupby('id_sim').agg({'id_tower': len})['id_tower'].value_counts()
+                freq[0] = self.no_sims - freq.sum()
+                prob[id_time][freq.index] = freq / self.no_sims
+
+            _mean = np.dot(prob, x_tower)
+            _std = np.sqrt(np.dot(prob, x2_tower) - _mean ** 2)
+
+            exp_no_tower[ds] = pd.DataFrame(np.hstack((_mean, _std)),
+                columns=['mean', 'std'], index=self.time)
+            prob_no_tower[ds] = pd.DataFrame(prob, columns=columns, index=self.time)
+        print(f'stat1: {time.time() - tic}')
+        return exp_no_tower, prob_no_tower
+
 
     def write_hdf5(self, output_file):
 
         items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
-                 'est_no_damage', 'est_no_damage_no_cascading',
+                 'no_damage', 'no_damage_no_cascading',
                  'prob_no_damage', 'prob_no_damage_no_cascading']
 
         columns_by_item = {'damage_prob': self.names,
                            'damage_prob_sim': self.names,
                            'damage_prob_sim_no_cascading': self.names,
-                           'est_no_damage': ['mean', 'std'],
-                           'est_no_damage_no_cascading': ['mean', 'std'],
+                           'no_damage': ['mean', 'std'],
+                           'no_damage_no_cascading': ['mean', 'std'],
                            'prob_no_damage': range(self.no_towers + 1),
                            'prob_no_damage_no_cascading': range(self.no_towers + 1)
                            }
