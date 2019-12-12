@@ -11,12 +11,15 @@ import numpy as np
 from scipy import stats
 
 from wistl.config import Config
-from wistl.constants import RTOL, ATOL, PM_THRESHOLD
+#from wistl.constants import RTOL, ATOL
 from wistl.tower import Tower, angle_between_two
 from wistl.tests.test_config import assertDeepAlmostEqual
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
+RTOL = 0.05
+ATOL = 0.001
+PM_THRESHOLD = 1.0e-3
 
 def create_wind_given_bearing(bearing, ratio):
 
@@ -105,6 +108,9 @@ class TestTower1(unittest.TestCase):
             'event_id': 0,
             'scale': 1.0,
             'frag_dic': frag_dic,
+            'rtol': RTOL,
+            'atol': ATOL,
+            'pm_threshold': PM_THRESHOLD,
             'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),
             }
 
@@ -554,6 +560,9 @@ class TestTower3(unittest.TestCase):
             'non_collapse': ['minor'],
             'rnd_state': np.random.RandomState(1),
             'event_id': 0,
+            'rtol': RTOL,
+            'atol': ATOL,
+            'pm_threshold': PM_THRESHOLD,
             'scale': 1.0,
             'frag_dic': frag_dic,
             'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),
@@ -666,6 +675,9 @@ class TestTower2(unittest.TestCase):
             'non_collapse': ['minor'],
             'rnd_state': np.random.RandomState(1),
             'event_id': 0,
+            'rtol': RTOL,
+            'atol': ATOL,
+            'pm_threshold': PM_THRESHOLD,
             'scale': 1.0,
             'frag_dic': frag_dic,
             'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),

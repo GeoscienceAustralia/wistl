@@ -50,7 +50,9 @@ class Config(object):
         self.no_sims = None
         self.strainer = []
         self.selected_lines = []
-
+        self.atol = None
+        self.rtol = None
+        self.pm_threshold = None
         #for item in DIRECTORIES:
         #    setattr(self, f'path_{item}', None)
 
@@ -385,6 +387,9 @@ class Config(object):
             self.strainer.append(x.strip())
         for x in conf.get(key, 'selected_lines').split(','):
             self.selected_lines.append(x.strip())
+        self.atol = conf.getfloat(key, 'atol')
+        self.rtol = conf.getfloat(key, 'rtol')
+        self.pm_threshold = conf.getfloat(key, 'pm_threshold')
 
         # directories: gis_data, wind_event_base, input, output
         key = 'directories'

@@ -14,8 +14,8 @@ from wistl.tests.test_tower import create_wind_given_bearing
 # from wistl.transmission_network import read_shape_file, populate_df_lines, \
 #     populate_df_towers
 
-ATOL = 0.0005
-RTOL = 0.01
+#ATOL = 0.0005
+#RTOL = 0.01
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -33,7 +33,7 @@ class TestLine1(unittest.TestCase):
         event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
-        cls.no_sims = 200000
+        cls.no_sims = 500000
 
         # LineB
         dic_line = cls.cfg.lines['LineB'].copy()
@@ -43,6 +43,9 @@ class TestLine1(unittest.TestCase):
                          'non_collapse': cls.cfg.non_collapse,
                          'event_id': cls.cfg.event_id_format.format(event_name=event_name, scale=event_scale),
                          'scale': event_scale,
+                         'rtol': cls.cfg.rtol,
+                         'atol': cls.cfg.atol,
+                         'pm_threshold': cls.cfg.pm_threshold,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,
                          'dic_towers': cls.cfg.towers_by_line['LineB']})
@@ -151,7 +154,7 @@ class TestLine1(unittest.TestCase):
         self.line.compute_damage_prob_sim()
         try:
             np.testing.assert_allclose(
-                pc, self.line.damage_prob_sim['collapse'][name][0], atol=ATOL, rtol=RTOL)
+                pc, self.line.damage_prob_sim['collapse'][name][0], atol=self.cfg.atol, rtol=self.cfg.rtol)
         except AssertionError:
             self.logger.warning(
                 f'P(C) Theory: {pc:.4f}, '
@@ -162,7 +165,7 @@ class TestLine1(unittest.TestCase):
             name = f'T{_id}'
             try:
                 np.testing.assert_allclose(self.line.damage_prob['collapse'][name][0],
-                        self.line.damage_prob_sim['collapse'][name][0], atol=ATOL, rtol=RTOL)
+                        self.line.damage_prob_sim['collapse'][name][0], atol=self.cfg.atol, rtol=self.cfg.rtol)
             except AssertionError:
                 self.logger.warning(
                     f'Tower: {name}, collapse'
@@ -212,7 +215,7 @@ class TestLine1(unittest.TestCase):
         self.line.compute_damage_prob_sim_no_cascading()
         try:
             np.testing.assert_allclose(
-                pc, self.line.damage_prob_sim_no_cascading['collapse'][name], atol=ATOL, rtol=RTOL)
+                pc, self.line.damage_prob_sim_no_cascading['collapse'][name], atol=self.cfg.atol, rtol=self.cfg.rtol)
         except AssertionError:
             self.logger.warning(
                     f'P(C) Theory: {pc[0]}, '
@@ -224,7 +227,7 @@ class TestLine1(unittest.TestCase):
         pm = tower.dmg['minor']
         try:
            np.testing.assert_allclose(
-                pm, self.line.damage_prob_sim_no_cascading['minor'][name], atol=ATOL, rtol=RTOL)
+                pm, self.line.damage_prob_sim_no_cascading['minor'][name], atol=self.cfg.atol, rtol=self.cfg.rtol)
         except AssertionError:
             self.logger.warning(
                 f'P(m) Theory: {pm.values}, '
@@ -235,7 +238,7 @@ class TestLine1(unittest.TestCase):
             idt0, idt1 = self.line.towers[_id].dmg_time_idx
             try:
                 np.testing.assert_allclose(
-                        self.line.towers[_id].dmg['minor'], self.line.damage_prob_sim_no_cascading['minor'].iloc[idt0:idt1][name], atol=ATOL, rtol=RTOL)
+                        self.line.towers[_id].dmg['minor'], self.line.damage_prob_sim_no_cascading['minor'].iloc[idt0:idt1][name], atol=self.cfg.atol, rtol=self.cfg.rtol)
             except AssertionError:
 
                 self.logger.warning(
@@ -259,6 +262,9 @@ class TestLine1(unittest.TestCase):
                          'non_collapse': self.cfg.non_collapse,
                          'event_name': event_name,
                          'scale': 1.0,
+                         'rtol': self.cfg.rtol,
+                         'atol': self.cfg.atol,
+                         'pm_threshold': self.cfg.pm_threshold,
                          'rnd_state': rnd_state,
                          'path_event': path_event,
                          'dic_towers': self.cfg.towers_by_line['LineB']})
@@ -312,6 +318,9 @@ class TestLine1(unittest.TestCase):
                          'no_sims': no_sims,
                          'damage_states': self.cfg.damage_states,
                          'non_collapse': self.cfg.non_collapse,
+                         'rtol': cls.cfg.rtol,
+                         'atol': cls.cfg.atol,
+                         'pm_threshold': cls.cfg.pm_threshold,
                          'event_name': event_name,
                          'scale': 1.0,
                          'rnd_state': rnd_state,
@@ -428,6 +437,9 @@ class TestLine2(unittest.TestCase):
                          'non_collapse': cls.cfg.non_collapse,
                          'event_name': event_name,
                          'event_id': cls.cfg.event_id_format.format(event_name=event_name, scale=event_scale),
+                         'rtol': cls.cfg.rtol,
+                         'atol': cls.cfg.atol,
+                         'pm_threshold': cls.cfg.pm_threshold,
                          'scale': event_scale,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,

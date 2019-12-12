@@ -9,7 +9,6 @@ import h5py
 import logging
 
 from wistl.tower import Tower
-from wistl.constants import ATOL, RTOL
 
 
 class Line(object):
@@ -31,6 +30,9 @@ class Line(object):
                   'scale',
                   'event_id',
                   'rnd_state',
+                  'rtol',
+                  'atol',
+                  'pm_threshold',
                   'path_event']
 
     def __init__(self, logger=None, **kwargs):
@@ -114,6 +116,9 @@ class Line(object):
                               'no_sims': self.no_sims,
                               'damage_states': self.damage_states,
                               'scale': self.scale,
+                              'rtol': self.rtol,
+                              'atol': self.atol,
+                              'pm_threshold': self.pm_threshold,
                               'rnd_state': self.rnd_state,
                               'path_event': self.path_event})
 
@@ -277,7 +282,7 @@ class Line(object):
         for name in self.names:
             try:
                 np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
-                    self.damage_prob_sim['collapse'][name].values, atol=ATOL, rtol=RTOL)
+                    self.damage_prob_sim['collapse'][name].values, atol=self.atol, rtol=self.rtol)
             except AssertionError:
                 self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
 
@@ -317,7 +322,7 @@ class Line(object):
             idt0, idt1 = self.towers[_id].dmg_time_idx
             try:
                 np.testing.assert_allclose(self.towers[_id].dmg[ds].values,
-                        self.damage_prob_sim_no_cascading[ds].iloc[idt0:idt1][name].values, atol=ATOL, rtol=RTOL)
+                        self.damage_prob_sim_no_cascading[ds].iloc[idt0:idt1][name].values, atol=self.atol, rtol=self.rtol)
             except AssertionError:
                 self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
 
@@ -478,8 +483,7 @@ def compute_damage_per_line(line, cfg):
 
     # save
     if cfg.options['save_output']:
-        output_file = os.path.join(cfg.path_output,
-                                   f'{line.event_id}_{line.name}.h5')
+        output_file = os.path.join(cfg.path_output, f'{line.event_id}_{line.name}.h5')
         #print(f"max: {line.name} - {line.damage_prob_sim['minor'].max()}")
         line.write_hdf5(output_file=output_file)
         logger.info(f'{output_file} is saved')

@@ -7,7 +7,6 @@ import logging
 import scipy.stats as stats
 import bisect
 
-from wistl.constants import ATOL, RTOL, PM_THRESHOLD
 from wistl.config import unit_vector_by_bearing, angle_between_unit_vectors
 
 class Tower(object):
@@ -56,6 +55,9 @@ class Tower(object):
                   'idn',
                   'max_no_adj_towers',
                   'height_z',
+                  'atol',
+                  'rtol',
+                  'pm_threshold',
                   #'point',
                   'terrain_cat',
                   'path_event']
@@ -263,7 +265,7 @@ class Tower(object):
 
             df = self.wind.apply(self.compute_damage_using_directional_vulnerability, axis=1)
             # apply thresholds
-            valid = np.where(df['minor'] > PM_THRESHOLD)[0]
+            valid = np.where(df['minor'] > self.pm_threshold)[0]
             idt0 = min(valid, default=0)
             idt1 = max(valid, default=0) + 1
 
@@ -355,8 +357,8 @@ class Tower(object):
                 # check whether MC simulation is close to analytical
                 idx_not_close, = np.where(~np.isclose(self._dmg_sim[ds],
                                                       self.dmg[ds],
-                                                      atol=ATOL,
-                                                      rtol=RTOL))
+                                                      atol=self.atol,
+                                                      rtol=self.rtol))
                 if len(idx_not_close):
                     idx = idx_not_close[0]
                     self.logger.warning(f'PE of {ds} in isolation: {self._dmg_sim[ds][idx]:.3f} vs {self.dmg[ds].iloc[idx]:.3f}')
@@ -421,7 +423,7 @@ class Tower(object):
                     prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / self.no_sims
                     adj_time = id_time - self.dmg_time_idx[0]
                     idx_not_close, = np.where(~np.isclose(
-                        self.collapse_adj[idl][adj_time], prob, atol=ATOL, rtol=RTOL))
+                        self.collapse_adj[idl][adj_time], prob, atol=self.atol, rtol=self.rtol))
 
                     for idx in idx_not_close:
                         self.logger.warning(

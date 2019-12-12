@@ -57,13 +57,10 @@ class Scenario(object):
     @property
     def lines(self):
         if self._lines is None:
-
             self._lines = {}
 
             for i, name in enumerate(self.cfg.lines):
-                # TODO: check whther copy is enough here
                 dic = self.cfg.lines[name].copy()
-
                 dic.update({'name': name,
                             'no_sims': self.cfg.no_sims,
                             'damage_states': self.cfg.damage_states,
@@ -71,7 +68,9 @@ class Scenario(object):
                             'event_id': self.id,
                             'scale': self.scale,
                             'rnd_state': np.random.RandomState(seed=self.seed + i),
-                            #'rnd_state': da.random.RandomState(seed=self.seed + i),
+                            'rtol': self.cfg.rtol,
+                            'atol': self.cfg.atol,
+                            'pm_threshold': self.cfg.pm_threshold,
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
 
@@ -80,11 +79,39 @@ class Scenario(object):
         return self._lines
 
     # TODO: why list_lines need?
+    #@property
+    #def list_lines(self):
+    #    if self._list_lines is None:
+    #        self._list_lines = [x for _, x in self.lines.items()]
+    #    return self._list_lines
+
     @property
-    def list_lines(self):
-        if self._list_lines is None:
-            self._list_lines = [x for _, x in self.lines.items()]
-        return self._list_lines
+    def time_idx(self):
+        if self._time_idx is None:
+            tmp = []
+            for _, value in self.lines.items():
+                tmp.append(value.time_idx)
+            id0 = list(map(min, zip(*tmp)))[0]
+            id1 = list(map(max, zip(*tmp)))[1] + 1
+            self._time_idx = (id0, id1)
+        return self._time_idx
+
+    @property
+    def time(self):
+        if self._time is None:
+            try:
+                key = [*self.lines][0]
+                self._time = self.lines[key].towers[0].wind.index[
+                        self.time_idx[0]:self.time_idx[1]]
+            except AttributeError:
+                self.logger.error('Can not set time')
+        return self._time
+
+    @property
+    def no_time(self):
+        if self._no_time is None:
+            self._no_time = len(self.time)
+        return self._no_time
 
     @property
     def no_lines(self):
@@ -95,8 +122,7 @@ class Scenario(object):
     @property
     def path_event(self):
         if self._path_event is None:
-            self._path_event = os.path.join(self.cfg.path_wind_event_base,
-                                            self.name)
+            self._path_event = os.path.join(self.cfg.path_wind_event_base, self.name)
         return self._path_event
 
     @property
@@ -111,18 +137,18 @@ class Scenario(object):
         return self._path_output
 
 
-def compute_damage_probability_line_interaction_per_network(network, cfg):
+def compute_damage_probability_line_interaction(lines, cfg):
     """
     compute damage probability due to line interaction
-    :param network: a dictionary of lines
-    :return: network: a dictionary of lines
+    :param lines: a dictionary of lines
+    :return: lines: a dictionary of lines
     """
 
-    for line_name, line in network.items():
+    for line_name, line in lines.items():
 
-        tf_ds = np.zeros((line['no_towers'],
-                          cfg.no_sims,
-                          len(line.time_index)), dtype=bool)
+        tf_ds = np.zeros((line.no_towers,
+                          line.no_sims,
+                          line.time_index), dtype=bool)
 
         tf_ds_itself = np.zeros((line.no_towers,
                                  cfg.no_sims,
@@ -134,7 +160,7 @@ def compute_damage_probability_line_interaction_per_network(network, cfg):
 
                 try:
                     pd_id = np.vstack(
-                        network[trigger_line].damage_index_line_interaction[
+                        lines[trigger_line].damage_index_line_interaction[
                             line_name])
                 except ValueError:
                     print(f'no interaction applied: from {trigger_line} to {line_name}')
@@ -193,4 +219,4 @@ def compute_damage_probability_line_interaction_per_network(network, cfg):
             line.prob_no_damage_line_interaction) = \
             line.compute_damage_stats(tf_sim)
 
-    return network
+    return lines
