@@ -271,6 +271,14 @@ class TestLine1(unittest.TestCase):
 
         line = Line(**dic_line)
 
+        for _, tower in line.towers.items():
+            tower._wind = create_wind_given_bearing(10.0, 1.0)
+            tower.axisaz = 11.0
+            tower._damage_prob = None
+            tower._damage_prob_sim = None
+            tower._dmg_sim = None
+            tower._dmg_id_sim = None
+
         tf_ds = np.zeros((line.no_towers, no_sims, line.no_time))
         tf_ds[:line.no_towers, 0:5, 0] = 1
         tf_ds[:line.no_towers, 0, 1] = 1
@@ -448,7 +456,7 @@ class TestLine2(unittest.TestCase):
         cls.line = Line(**dic_line)
 
         for _, tower in cls.line.towers.items():
-            #tower._wind = create_wind_given_bearing(10.0, 1.0)
+            # tower._wind = create_wind_given_bearing(10.0, 1.0)
             tower.axisaz = 11.0
             tower._damage_prob = None
             tower._damage_prob_sim = None

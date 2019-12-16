@@ -1,5 +1,5 @@
 ---
-file: ./test_cond_collapse_prob.yml
+file: ./test_cond_prob.yml
 probability:
     type:
         Lattice Tower:

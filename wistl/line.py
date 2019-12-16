@@ -145,7 +145,7 @@ class Line(object):
             for _, value in self.towers.items():
                 tmp.append(value.dmg_time_idx)
             id0 = list(map(min, zip(*tmp)))[0]
-            id1 = list(map(max, zip(*tmp)))[1] + 1
+            id1 = list(map(max, zip(*tmp)))[1]
             self._time_idx = (id0, id1)
         return self._time_idx
 
@@ -414,91 +414,6 @@ class Line(object):
         print(f'stat1: {time.time() - tic}')
         return exp_no_tower, prob_no_tower
 
-
-    def write_hdf5(self, output_file):
-
-        items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
-                 'no_damage', 'no_damage_no_cascading',
-                 'prob_no_damage', 'prob_no_damage_no_cascading']
-
-        columns_by_item = {'damage_prob': self.names,
-                           'damage_prob_sim': self.names,
-                           'damage_prob_sim_no_cascading': self.names,
-                           'no_damage': ['mean', 'std'],
-                           'no_damage_no_cascading': ['mean', 'std'],
-                           'prob_no_damage': range(self.no_towers + 1),
-                           'prob_no_damage_no_cascading': range(self.no_towers + 1)
-                           }
-
-        with h5py.File(output_file, 'w') as hf:
-
-            for item in items:
-
-                group = hf.create_group(item)
-
-                for ds in self.damage_states:
-
-                    value = getattr(self, item)[ds]
-                    data = group.create_dataset(ds, data=value)
-
-                    # metadata
-                    data.attrs['nrow'], data.attrs['ncol'] = value.shape
-                    data.attrs['time_start'] = str(self.time[0])
-                    data.attrs['time_freq'] = str(self.time[1]-self.time[0])
-                    data.attrs['time_period'] = self.time.shape[0]
-
-                    if columns_by_item[item]:
-                        data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
-
-
-def compute_damage_per_line(line, cfg):
-    """
-    mc simulation over transmission line
-    :param line: instance of transmission line
-           cfg: instance of config
-    :return: None but update attributes of
-    """
-
-    logger = logging.getLogger(__name__)
-
-    logger.info(f'computing damage of {line.name} for {line.event_id}')
-
-    # compute damage probability analytically
-    line.compute_damage_prob()
-
-    # perfect correlation within a single line
-    line.compute_damage_prob_sim()
-
-    if not cfg.options['skip_no_cascading_collapse']:
-        line.compute_damage_prob_sim_no_cascading()
-
-    # compare simulation against analytical
-    #for ds in cfg.damage_states:
-    #    idx_not_close = np.where(~np.isclose(line.damage_prob_sim[ds].values,
-    #                             line.damage_prob[ds].values,
-    #                             atol=ATOL,
-    #                             rtol=RTOL))
-    #    for idc in idx_not_close[1]:
-    #        logger.warning(f'Simulation not CLOSE {ds}:{line.towers[idc].name}')
-
-    # save
-    if cfg.options['save_output']:
-        output_file = os.path.join(cfg.path_output, f'{line.event_id}_{line.name}.h5')
-        #print(f"max: {line.name} - {line.damage_prob_sim['minor'].max()}")
-        line.write_hdf5(output_file=output_file)
-        logger.info(f'{output_file} is saved')
-
-    #
-    # try:
-    #     line.cfg.line_interaction[line_name]
-    # except (TypeError, KeyError):
-    #     pass
-    # else:
-    #     line.determine_damage_by_interaction_at_line_level(seed)
-
-    return line
-
-'''
     def determine_damage_by_interaction_at_line_level(self, seed=None):
         """
         compute damage probability due to parallel line interaction using MC
@@ -589,6 +504,95 @@ def compute_damage_per_line(line, cfg):
                     msg = 'tower:{}, angle: {}, wind:{}'.format(
                         tower.name, angle[target_line], wind_vector)
                     print(msg)
+
+
+    def write_hdf5(self, output_file):
+
+        items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
+                 'no_damage', 'no_damage_no_cascading',
+                 'prob_no_damage', 'prob_no_damage_no_cascading']
+
+        columns_by_item = {'damage_prob': self.names,
+                           'damage_prob_sim': self.names,
+                           'damage_prob_sim_no_cascading': self.names,
+                           'no_damage': ['mean', 'std'],
+                           'no_damage_no_cascading': ['mean', 'std'],
+                           'prob_no_damage': range(self.no_towers + 1),
+                           'prob_no_damage_no_cascading': range(self.no_towers + 1)
+                           }
+
+        with h5py.File(output_file, 'w') as hf:
+
+            for item in items:
+
+                group = hf.create_group(item)
+
+                for ds in self.damage_states:
+
+                    value = getattr(self, item)[ds]
+                    data = group.create_dataset(ds, data=value)
+
+                    # metadata
+                    data.attrs['nrow'], data.attrs['ncol'] = value.shape
+                    data.attrs['time_start'] = str(self.time[0])
+                    try:
+                        data.attrs['time_freq'] = str(self.time[1]-self.time[0])
+                    except IndexError:
+                        data.attrs['time_freq'] = str(self.time[0])
+                    data.attrs['time_period'] = self.time.shape[0]
+
+                    if columns_by_item[item]:
+                        data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
+
+
+def compute_damage_per_line(line, cfg):
+    """
+    mc simulation over transmission line
+    :param line: instance of transmission line
+           cfg: instance of config
+    :return: None but update attributes of
+    """
+
+    logger = logging.getLogger(__name__)
+
+    logger.info(f'computing damage of {line.name} for {line.event_id}')
+
+    # compute damage probability analytically
+    line.compute_damage_prob()
+
+    # perfect correlation within a single line
+    line.compute_damage_prob_sim()
+
+    if not cfg.options['skip_no_cascading_collapse']:
+        line.compute_damage_prob_sim_no_cascading()
+
+    # compare simulation against analytical
+    #for ds in cfg.damage_states:
+    #    idx_not_close = np.where(~np.isclose(line.damage_prob_sim[ds].values,
+    #                             line.damage_prob[ds].values,
+    #                             atol=ATOL,
+    #                             rtol=RTOL))
+    #    for idc in idx_not_close[1]:
+    #        logger.warning(f'Simulation not CLOSE {ds}:{line.towers[idc].name}')
+
+    # save
+    if cfg.options['save_output']:
+        output_file = os.path.join(cfg.path_output, f'{line.event_id}_{line.name}.h5')
+        #print(f"max: {line.name} - {line.damage_prob_sim['minor'].max()}")
+        line.write_hdf5(output_file=output_file)
+        logger.info(f'{output_file} is saved')
+
+    #
+    # try:
+    #     line.cfg.line_interaction[line_name]
+    # except (TypeError, KeyError):
+    #     pass
+    # else:
+    #     line.determine_damage_by_interaction_at_line_level(seed)
+
+    return line
+
+'''
 '''
 
 

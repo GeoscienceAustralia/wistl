@@ -317,7 +317,7 @@ class TestConfig1(unittest.TestCase):
         _file.close()
         os.unlink(_file.name)
 
-    def test_h_cond_collapse_prob_metadata(self):
+    def test_read_yml_file(self):
         _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
         _file.writelines([
             '---\n',
@@ -340,14 +340,14 @@ class TestConfig1(unittest.TestCase):
                     'path': os.path.dirname(os.path.realpath(_file.name))
                     }
 
-        output = h_cond_collapse_prob_metadata(_file.name)
+        output = read_yml_file(_file.name)
 
         assertDeepAlmostEqual(self, expected, output)
 
         _file.close()
         os.unlink(_file.name)
 
-    def test_h_cond_collapse_prob(self):
+    def test_h_cond_prob(self):
 
         expected = {'Lattice Tower': {
             'Suspension': {40: { (0,1): 0.075, (-1,0): 0.075, (-2, -1, 0, 1, 2): 0.02}},
@@ -370,7 +370,7 @@ class TestConfig1(unittest.TestCase):
 
         _file.seek(0)
 
-        output = h_cond_collapse_prob(_file.name)
+        output = h_cond_prob(_file.name)
         assertDeepAlmostEqual(self, expected, output)
         _file.close()
         os.unlink(_file.name)
@@ -414,6 +414,10 @@ class TestConfig(unittest.TestCase):
                               'design_span': 400.0,
                               'design_speed': 75.0},
                     'LineB': {'terrain_cat': 2,
+                              'design_level': 'low',
+                              'design_span': 400.0,
+                              'design_speed': 51.389},
+                    'LineC': {'terrain_cat': 2,
                               'design_level': 'low',
                               'design_span': 400.0,
                               'design_speed': 51.389}}
@@ -684,22 +688,22 @@ class TestConfig(unittest.TestCase):
         # FIXME
         pass
 
-    def test_assign_cond_collapse_prob_logging(self):
+    def test_assign_cond_prob_logging(self):
 
         # Raise warning for undefined cond_pc
         with self.assertLogs('wistl.config', level='INFO') as cm:
             row = self.cfg.towers_by_line['LineB'][12]
             row['height'] = 55.0   # beyond the height
-            self.cfg.assign_cond_collapse_prob(row)
+            self.cfg.assign_cond_prob(row)
         msg = f'unable to assign cond_pc for tower {row["name"]}'
         self.assertIn(f'CRITICAL:wistl.config:{msg}', cm.output)
 
-    def test_assign_cond_collapse_prob(self):
+    def test_assign_cond_prob(self):
 
         #logger = logging.getLogger(__file__)
         # Tower 1: Terminal
         row = self.cfg.towers_by_line['LineA'][57]
-        out = self.cfg.assign_cond_collapse_prob(row)
+        out = self.cfg.assign_cond_prob(row)
 
         expected = {(0, 1): 0.075,
                     (-1, 0): 0.075,
@@ -712,11 +716,11 @@ class TestConfig(unittest.TestCase):
 
         # Tower 26
         row = self.cfg.towers_by_line['LineB'][58]
-        out = self.cfg.assign_cond_collapse_prob(row)
+        out = self.cfg.assign_cond_prob(row)
         self.assertEqual(out['cond_pc'], expected)
         self.assertEqual(out['max_no_adj_towers'], 2)
 
-    def test_assign_cond_collapse_prob_more(self):
+    def test_assign_cond_prob_more(self):
 
         functions = ['Suspension', 'Terminal']
         heights = [20.0, 35.0]
@@ -733,7 +737,7 @@ class TestConfig(unittest.TestCase):
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['height'] = height
-            out = self.cfg.assign_cond_collapse_prob(row)
+            out = self.cfg.assign_cond_prob(row)
             assertDeepAlmostEqual(self, out['cond_pc'], expected)
 
         functions = ['Strainer'] * 2
@@ -758,7 +762,7 @@ class TestConfig(unittest.TestCase):
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['design_level'] = level
-            out = self.cfg.assign_cond_collapse_prob(row)
+            out = self.cfg.assign_cond_prob(row)
             assertDeepAlmostEqual(self, out['cond_pc'], expected[level])
 
     def test_ratio_z_to_10(self):

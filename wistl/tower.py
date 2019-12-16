@@ -466,46 +466,41 @@ class Tower(object):
         return collapse_adj_sim
 
 
-    # def determine_damage_by_interaction_at_tower_level(self, seed=None):
-    #     """
-    #     determine damage to tower in target line
-    #     :param seed: seed is None if no seed number is provided
-    #     :return:
-    #     """
-    #
-    #     if self.cond_pc_line_sim['cum_prob']:
-    #
-    #         rnd_state = np.random.RandomState(seed + 50)  # replication
-    #
-    #         # generate regardless of time index
-    #         no_sim_collapse = len(
-    #             self.damage_isolation_sim['collapse']['id_time'])
-    #         rv = rnd_state.uniform(size=no_sim_collapse)
-    #
-    #         list_idx_cond = map(lambda rv_: sum(
-    #             rv_ >= self.cond_pc_line_sim['cum_prob']), rv)
-    #         idx_no_adjacent_collapse = len(self.cond_pc_line_sim['cum_prob'])
-    #
-    #         # list of idx of adjacent towers in collapse
-    #         ps_ = pd.Series([self.cond_pc_line_sim['no_collapse'][x]
-    #                          if x < idx_no_adjacent_collapse
-    #                          else None for x in list_idx_cond],
-    #                         index=self.damage_isolation_sim['collapse'].index,
-    #                         name='no_collapse')
-    #
-    #         adj_sim = pd.concat([self.damage_isolation_sim['collapse'], ps_],
-    #                            axis=1)
-    #
-    #         # remove case with no adjacent tower collapse
-    #         adj_sim_null_removed = adj_sim.loc[pd.notnull(ps_)].copy()
-    #         if len(adj_sim_null_removed.index):
-    #             adj_sim_null_removed['no_collapse'] = \
-    #                 adj_sim_null_removed['no_collapse'].astype(np.int64)
-    #             self.damage_interaction_sim = adj_sim_null_removed
+    def determine_damage_by_interaction_at_tower_level(self):
+        """
+        determine damage to tower in target line
+        :param seed: seed is None if no seed number is provided
+        :return:
+        """
 
-    #def compute_directional_wind_speed(self, row):
+        if self.cond_pc_line_sim['cum_prob']:
 
-    #    return self.ratio_z_to_10 * row.Speed
+            # generate regardless of time index
+            no_sim_collapse = len(
+                self.damage_isolation_sim['collapse']['id_time'])
+            rv = rnd_state.uniform(size=no_sim_collapse)
+
+            list_idx_cond = map(lambda rv_: sum(
+                rv_ >= self.cond_pc_line_sim['cum_prob']), rv)
+            idx_no_adjacent_collapse = len(self.cond_pc_line_sim['cum_prob'])
+
+            # list of idx of adjacent towers in collapse
+            ps_ = pd.Series([self.cond_pc_line_sim['no_collapse'][x]
+                             if x < idx_no_adjacent_collapse
+                             else None for x in list_idx_cond],
+                            index=self.damage_isolation_sim['collapse'].index,
+                            name='no_collapse')
+
+            adj_sim = pd.concat([self.damage_isolation_sim['collapse'], ps_],
+                               axis=1)
+
+            # remove case with no adjacent tower collapse
+            adj_sim_null_removed = adj_sim.loc[pd.notnull(ps_)].copy()
+            if len(adj_sim_null_removed.index):
+                adj_sim_null_removed['no_collapse'] = \
+                    adj_sim_null_removed['no_collapse'].astype(np.int64)
+                self.damage_interaction_sim = adj_sim_null_removed
+
 
     def get_directional_vulnerability(self, bearing):
         """

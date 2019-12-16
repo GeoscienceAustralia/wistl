@@ -25,10 +25,10 @@ DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
 GIS_DATA = ['shape_tower', 'shape_line']
 FORMAT = ['wind_file', 'event_id']
 INPUT_FILES = ['design_value', 'fragility_metadata', 'drag_height_by_type',
-              'cond_collapse_prob_metadata',
-              'terrain_multiplier', 'topographic_multiplier',
-              'design_adjustment_factor_by_topography',
-              'line_interaction_metadata']
+               'cond_prob_metadata',
+               'terrain_multiplier', 'topographic_multiplier',
+               'design_adjustment_factor_by_topography',
+               'cond_prob_line_metadata']
 
 #FRAGILITY_ATT = ['section', 'limit_states', 'form', 'param1', 'param2']
 
@@ -61,8 +61,6 @@ class Config(object):
 
         self.events = []  # list of tuples of event_name and scale
         self.line_interaction = {}
-        #for item in FORMAT:
-        #    setattr(self, f'{}_format', None)
 
         self._topographic_multiplier = None
         self._design_value_by_line = None
@@ -70,8 +68,9 @@ class Config(object):
         self._drag_height_by_type = None
         self._design_adjustment_factor_by_topography = None
 
-        self._prob_line_interaction = None
-        self._prob_line_interaction_metadata = None
+        # cond prob wrt line_interaction
+        self._cond_prob_line = None
+        self._cond_prob_line_metadata = None
 
         self._fragility_metadata = None
         self._fragility = None   # pandas.DataFrame
@@ -79,8 +78,8 @@ class Config(object):
         self._no_damage_states = None
         self._non_collapse = None
 
-        self._cond_collapse_prob_metadata = None
-        self._cond_collapse_prob = None  # dict of pd.DataFrame
+        self._cond_prob_metadata = None
+        self._cond_prob = None  # dict of pd.DataFrame
 
         self._towers_by_line = None
         self._lines = None
@@ -92,16 +91,16 @@ class Config(object):
             self.read_config()
             self.process_config()
 
-    def __getstate__(self):
-        d = self.__dict__.copy()
-        if 'logger' in d:
-            d['logger'] = d['logger'].name
-        return d
+    #def __getstate__(self):
+    #    d = self.__dict__.copy()
+    #    if 'logger' in d:
+    #        d['logger'] = d['logger'].name
+    #    return d
 
-    def __setstate__(self, d):
-        if 'logger' in d:
-            d['logger'] = logging.getLogger(d['logger'])
-        self.__dict__.update(d)
+    #def __setstate__(self, d):
+    #    if 'logger' in d:
+    #        d['logger'] = logging.getLogger(d['logger'])
+    #    self.__dict__.update(d)
 
     @property
     def drag_height_by_type(self):
@@ -231,68 +230,59 @@ class Config(object):
         return self._non_collapse
 
     @property
-    def cond_collapse_prob_metadata(self):
+    def cond_prob_metadata(self):
         """
         read condition collapse probability defined by tower function
         """
-        if self._cond_collapse_prob_metadata is None:
+        if self._cond_prob_metadata is None:
 
-            if os.path.exists(self.file_cond_collapse_prob_metadata):
-                self._cond_collapse_prob_metadata = h_cond_collapse_prob_metadata(
-                    self.file_cond_collapse_prob_metadata)
+            if os.path.exists(self.file_cond_prob_metadata):
+                self._cond_prob_metadata = read_yml_file(
+                    self.file_cond_prob_metadata)
             else:
-                msg = f'{self.file_cond_collapse_prob_metadata} not found'
+                msg = f'{self.file_cond_prob_metadata} not found'
                 self.logger.critical(msg)
-        return self._cond_collapse_prob_metadata
+        return self._cond_prob_metadata
 
     @property
-    def cond_collapse_prob(self):
+    def cond_prob(self):
 
-        if self._cond_collapse_prob is None:
+        if self._cond_prob is None:
 
-            _file = os.path.join(self.cond_collapse_prob_metadata['path'],
-                                 self.cond_collapse_prob_metadata['file'])
+            _file = os.path.join(self.cond_prob_metadata['path'],
+                                 self.cond_prob_metadata['file'])
 
-            self._cond_collapse_prob = h_cond_collapse_prob(_file)
+            self._cond_prob = h_cond_prob(_file)
 
-        return self._cond_collapse_prob
+        return self._cond_prob
 
     @property
-    def prob_line_interaction_metadata(self):
+    def cond_prob_line_metadata(self):
         """
-        read conditional parallel line interaction probability
+        read conditional line interaction probability
         """
-        if self.options['apply_line_interaction'] and self._prob_line_interaction_metadata is None:
+        if self._cond_prob_line_metadata is None:
 
-            if not os.path.exists(self.file_line_interaction_metadata):
-                msg = f'{self.file_line_interaction_metadata} not found'
+            if not os.path.exists(self.file_cond_prob_line_metadata):
+                msg = f'{self.file_cond_prob_line_metadata} not found'
                 self.logger.critical(msg)
             else:
-                metadata = configparser.ConfigParser()
-                metadata.read(self.file_line_interaction_metadata)
+                self._cond_prob_line_metadata = read_yml_file(
+                        self.file_cond_prob_line_metadata)
 
-                self._prob_line_interaction_metadata = {}
-                for key, value in metadata.items('main'):
-                    self._prob_line_interaction_metadata[key] = value
-
-        return self._prob_line_interaction_metadata
+        return self._cond_prob_line_metadata
 
     @property
-    def prob_line_interaction(self):
+    def cond_prob_line(self):
 
-        if self.options['apply_line_interaction'] and self._prob_line_interaction is None:
+        if self._cond_prob_line is None:
 
-            path_metadata = os.path.dirname(
-                os.path.realpath(self.file_line_interaction_metadata))
-            _file = os.path.join(path_metadata,
-                                 self.prob_line_interaction_metadata['file'])
-            try:
-                self._prob_line_interaction = pd.read_csv(_file, skipinitialspace=1)
-            except IOError:
-                msg = f'{self.file_line_interaction_metadata} not found'
-                self.logger.critical(msg)
+            _file = os.path.join(self.cond_prob_line_metadata['path'],
+                                 self.cond_prob_line_metadata['file'])
+            with open(_file, 'r') as ymlfile:
+                self._cond_prob_line = yaml.load(ymlfile, Loader=yaml.FullLoader)
 
-        return self._prob_line_interaction
+        return self._cond_prob_line
 
     @property
     def no_towers_by_line(self):
@@ -490,7 +480,7 @@ class Config(object):
                 tower.update(self.assign_collapse_capacity(tower=tower))
 
                 # cond_pc, max_no_adj_towers
-                tower.update(self.assign_cond_collapse_prob(tower=tower))
+                tower.update(self.assign_cond_prob(tower=tower))
 
                 # idl, id_adj
                 tower.update(self.assign_id_adj_towers(tower=tower))
@@ -561,17 +551,17 @@ class Config(object):
 
             # check completeness
             if selected_lines:
-                msg = f'No line interaction info provided for {selected_lines}'
+                msg = f'No line interact info provided for {selected_lines}'
                 self.logger.error(msg)
 
-    def assign_cond_collapse_prob(self, tower):
+    def assign_cond_prob(self, tower):
         """ get dict of conditional collapse probabilities
         :return: cond_pc, max_no_adj_towers
         """
 
         cond_pc = get_value_given_conditions(
-                self.cond_collapse_prob_metadata['probability'],
-                self.cond_collapse_prob, tower)
+                self.cond_prob_metadata['probability'],
+                self.cond_prob, tower)
 
         max_no_adj_towers = sorted(cond_pc.keys(), key=lambda x: len(x))[-1][-1]
         return {'cond_pc': cond_pc, 'max_no_adj_towers': max_no_adj_towers}
@@ -866,9 +856,9 @@ def get_cond_prob_line_interaction(self):
     :return: cond_prob_line
     """
 
-    att = self.cfg.prob_line_interaction_metadata['by']
-    att_type = self.cfg.prob_line_interaction_metadata['type']
-    df_prob = self.cfg.prob_line_interaction
+    att = self.cfg.prob_line_interact_metadata['by']
+    att_type = self.cfg.prob_line_interact_metadata['type']
+    df_prob = self.cfg.prob_line_interact
 
     tf_array = None
     if att_type == 'string':
@@ -998,7 +988,7 @@ def h_drag_height_by_type(_file):
                        skiprows=1)
     return data['value'].to_dict()
 
-def h_cond_collapse_prob_metadata(_file):
+def read_yml_file(_file):
 
     with open(_file, 'r') as ymlfile:
         out = yaml.load(ymlfile, Loader=yaml.FullLoader)
@@ -1007,7 +997,8 @@ def h_cond_collapse_prob_metadata(_file):
 
     return out
 
-def h_cond_collapse_prob(_file):
+
+def h_cond_prob(_file):
 
     def h_dic(d):
         for k, v in list(d.items()):

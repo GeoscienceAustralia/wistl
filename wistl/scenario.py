@@ -30,7 +30,9 @@ class Scenario(object):
         self._list_lines = None
         self._lines = None
         self._no_lines = None
-
+        self._time_idx = None
+        self._time = None
+        self._no_time = None
         # self.set_line_interaction()
 
     def __repr__(self):
@@ -92,7 +94,7 @@ class Scenario(object):
             for _, value in self.lines.items():
                 tmp.append(value.time_idx)
             id0 = list(map(min, zip(*tmp)))[0]
-            id1 = list(map(max, zip(*tmp)))[1] + 1
+            id1 = list(map(max, zip(*tmp)))[1]
             self._time_idx = (id0, id1)
         return self._time_idx
 
@@ -151,16 +153,16 @@ def compute_damage_probability_line_interaction(lines, cfg):
                           line.time_index), dtype=bool)
 
         tf_ds_itself = np.zeros((line.no_towers,
-                                 cfg.no_sims,
-                                 len(line.time_index)), dtype=bool)
+                                 line.no_sims,
+                                 line.time_index), dtype=bool)
 
-        for trigger_line, target_lines in cfg.line_interaction.items():
+        for trigger, target in cfg.line_interaction.items():
 
-            if line_name in target_lines:
+            if line_name in target:
 
                 try:
                     pd_id = np.vstack(
-                        lines[trigger_line].damage_index_line_interaction[
+                        lines[trigger].damage_index_line_interaction[
                             line_name])
                 except ValueError:
                     print(f'no interaction applied: from {trigger_line} to {line_name}')
