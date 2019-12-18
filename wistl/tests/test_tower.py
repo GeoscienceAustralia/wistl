@@ -110,7 +110,7 @@ class TestTower1(unittest.TestCase):
             'frag_dic': frag_dic,
             'rtol': RTOL,
             'atol': ATOL,
-            'pm_threshold': PM_THRESHOLD,
+            'dmg_threshold': PM_THRESHOLD,
             'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),
             }
 
@@ -562,7 +562,7 @@ class TestTower3(unittest.TestCase):
             'event_id': 0,
             'rtol': RTOL,
             'atol': ATOL,
-            'pm_threshold': PM_THRESHOLD,
+            'dmg_threshold': PM_THRESHOLD,
             'scale': 1.0,
             'frag_dic': frag_dic,
             'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),
@@ -677,7 +677,7 @@ class TestTower2(unittest.TestCase):
             'event_id': 0,
             'rtol': RTOL,
             'atol': ATOL,
-            'pm_threshold': PM_THRESHOLD,
+            'dmg_threshold': PM_THRESHOLD,
             'scale': 1.0,
             'frag_dic': frag_dic,
             'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),

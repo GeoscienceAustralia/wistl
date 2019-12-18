@@ -52,7 +52,7 @@ class Config(object):
         self.selected_lines = []
         self.atol = None
         self.rtol = None
-        self.pm_threshold = None
+        self.dmg_threshold = None
         #for item in DIRECTORIES:
         #    setattr(self, f'path_{item}', None)
 
@@ -261,7 +261,7 @@ class Config(object):
         """
         read conditional line interaction probability
         """
-        if self._cond_prob_line_metadata is None:
+        if self.options['apply_line_interaction'] and self._cond_prob_line_metadata is None:
 
             if not os.path.exists(self.file_cond_prob_line_metadata):
                 msg = f'{self.file_cond_prob_line_metadata} not found'
@@ -275,7 +275,7 @@ class Config(object):
     @property
     def cond_prob_line(self):
 
-        if self._cond_prob_line is None:
+        if self._cond_prob_line is None and cond_prob_line_metadata:
 
             _file = os.path.join(self.cond_prob_line_metadata['path'],
                                  self.cond_prob_line_metadata['file'])
@@ -379,7 +379,7 @@ class Config(object):
             self.selected_lines.append(x.strip())
         self.atol = conf.getfloat(key, 'atol')
         self.rtol = conf.getfloat(key, 'rtol')
-        self.pm_threshold = conf.getfloat(key, 'pm_threshold')
+        self.dmg_threshold = conf.getfloat(key, 'dmg_threshold')
 
         # directories: gis_data, wind_event_base, input, output
         key = 'directories'
@@ -488,6 +488,13 @@ class Config(object):
                 # cond_pc_adj, cond_pc_adj_sim_idx, cond_pc_adj_sim_prob
                 tower.update(assign_cond_pc_adj(tower=tower))
 
+                # cond_pc_line, cond_pc_line_prob
+                tower.update(self.assign_cond_prob_line(tower=tower))
+
+        if self.options['apply_line_interaction']:
+            # target_line
+            self.assign_target_line()
+
     def sort_by_location(self, line_name, line):
 
         id_by_line = []
@@ -565,6 +572,22 @@ class Config(object):
 
         max_no_adj_towers = sorted(cond_pc.keys(), key=lambda x: len(x))[-1][-1]
         return {'cond_pc': cond_pc, 'max_no_adj_towers': max_no_adj_towers}
+
+    def assign_cond_prob_line(self, tower):
+        """ get dict of conditional probabilities due to line interaction
+        :return: cond_pc, max_no_adj_towers
+        """
+        try:
+            cond_pc = get_value_given_conditions(
+                    self.cond_prob_line_metadata['probability'],
+                    self.cond_prob_line, tower)
+        except TypeError:
+            return {'cond_pc_line_no': None,
+                    'cond_pc_line_prob': None}
+        else:
+            tmp = [(k, v) for k, v in cond_pc.items()]
+            return {'cond_pc_line_no': [x[0] for x in tmp],
+                    'cond_pc_line_prob': np.cumsum([x[1] for x in tmp])}
 
     def ratio_z_to_10(self, tower):
         """
@@ -649,6 +672,39 @@ class Config(object):
 
         return {'id_adj': id_adj, 'idl': idl}
 
+    def assign_target_line(self):
+
+        for line_name, line in self.lines.items():
+
+            for _, tower in self.towers_by_line[line_name].items():
+
+                target_line = {}
+
+                for target in self.line_interaction[line_name]:
+
+                    line_string = self.lines[target]['line_string']
+                    line_coord = self.lines[target]['coord']
+
+                    closest_pt_on_line = line_string.interpolate(
+                        line_string.project(tower['point']))
+
+                    closest_pt_coord = np.array(closest_pt_on_line.coords)[0, :]
+
+                    closest_pt_lat_lon = closest_pt_coord[::-1]
+
+                    # compute distance
+                    dist_from_line = geodesic(
+                        tower['coord_lat_lon'], closest_pt_lat_lon).meters
+
+                    if dist_from_line < tower['height']:
+
+                        target_line[target] = {
+                            'id': find_id_nearest_pt(closest_pt_coord,
+                                                     line_coord),
+                            'vector': unit_vector(closest_pt_coord -
+                                                  tower['coord'])}
+
+                tower['target_line'] = target_line
 
 def assign_cond_pc_adj(tower):
     """
@@ -812,65 +868,6 @@ def calculate_distance_between_towers(coord_lat_lon):
     actual_span = np.insert(actual_span, 0, [0.5 * dist_forward[0]])
     actual_span = np.append(actual_span, [0.5 * dist_forward[-1]])
     return actual_span
-
-
-# TODO
-def set_line_interaction(self):
-    """maybe moved to config ??"""
-
-    for line_name, line in self.lines.items():
-
-        for _, tower in line.towers.items():
-            id_on_target_line = dict()
-
-            for target_line in self.cfg.line_interaction[line_name]:
-
-                line_string = self.lines[target_line].line_string
-                line_coord = self.lines[target_line].coord
-
-                closest_pt_on_line = line_string.interpolate(
-                    line_string.project(tower.point))
-
-                closest_pt_coord = np.array(closest_pt_on_line.coords)[0, :]
-
-                closest_pt_lat_lon = closest_pt_coord[::-1]
-
-                # compute distance
-                dist_from_line = geodesic(
-                    tower.coord_lat_lon, closest_pt_lat_lon).meters
-
-                if dist_from_line < tower.height:
-
-                    id_on_target_line[target_line] = {
-                        'id': find_id_nearest_pt(closest_pt_coord,
-                                                 line_coord),
-                        'vector': unit_vector(closest_pt_coord -
-                                              tower.coord)}
-
-            if id_on_target_line:
-                tower.id_on_target_line = id_on_target_line
-
-# TODO
-def get_cond_prob_line_interaction(self):
-    """ get dict of conditional collapse probabilities
-    :return: cond_prob_line
-    """
-
-    att = self.cfg.prob_line_interact_metadata['by']
-    att_type = self.cfg.prob_line_interact_metadata['type']
-    df_prob = self.cfg.prob_line_interact
-
-    tf_array = None
-    if att_type == 'string':
-        tf_array = df_prob == getattr(self, att)
-    elif att_type == 'numeric':
-        tf_array = (df_prob[att + '_lower'] <= self.ps_tower[att]) & \
-                   (df_prob[att + '_upper'] > self.ps_tower[att])
-
-    self.cond_pc_line_sim['no_collapse'] = \
-        df_prob.loc[tf_array, 'no_collapse'].tolist()
-    self.cond_pc_line_sim['cum_prob'] = np.cumsum(
-        df_prob.loc[tf_array, 'probability']).tolist()
 
 
 def find_id_nearest_pt(pt_coord, line_coord):

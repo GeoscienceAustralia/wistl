@@ -72,7 +72,7 @@ class Scenario(object):
                             'rnd_state': np.random.RandomState(seed=self.seed + i),
                             'rtol': self.cfg.rtol,
                             'atol': self.cfg.atol,
-                            'pm_threshold': self.cfg.pm_threshold,
+                            'dmg_threshold': self.cfg.dmg_threshold,
                             'path_event': self.path_event,
                             'dic_towers': self.cfg.towers_by_line[name]})
 

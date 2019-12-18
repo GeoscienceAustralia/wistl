@@ -57,7 +57,8 @@ class Tower(object):
                   'height_z',
                   'atol',
                   'rtol',
-                  'pm_threshold',
+                  'dmg_threshold',
+                  'target_line',
                   #'point',
                   'terrain_cat',
                   'path_event']
@@ -104,6 +105,7 @@ class Tower(object):
         self.idn = None  # tower id within network 
         self.id_adj = None
         self.max_no_adj_towers = None
+        self.target_line = None
 
         self.height_z = None
         # self.point = None
@@ -134,23 +136,18 @@ class Tower(object):
 
         # simulation method: determine_damage_isolation_sim,
         # dmg_state_sim -> dmg_sim (just for validation against dmg)
-        # dmg_state_sim -> dmg_id_sim -> collapse_adj_sim
+        # dmg_state_sim -> collapse_adj_sim
         self._dmg_state_sim = None
         self._dmg_sim = None
         self._collapse_adj_sim = None
 
-        # self.damage_adjacent_sim = dict.fromkeys(['id_adj', 'id_time', 'id_sim'])
-        # self.damage_adjacent_sim = pd.DataFrame(None, columns=['id_adj',
-        #                                                       'id_time',
-        #                                                       'id_sim'],
-        #                                        dtype=np.int64)
         # self.damage_interaction_sim = pd.DataFrame(None, columns=['no_collapse',
         #                                                          'id_time',
         #                                                          'id_sim'],
         #                                           dtype=np.int64)
 
         # line interaction
-        # self._id_on_target_line = dict()
+        #self._id_on_target_line = dict()
         # self.cond_pc_line_sim = {key: None for key in ['no_collapse',
         #                                               'cum_prob']}
         # self._sim_parallel_line = None
@@ -265,7 +262,7 @@ class Tower(object):
 
             df = self.wind.apply(self.compute_damage_using_directional_vulnerability, axis=1)
             # apply thresholds
-            valid = np.where(df['minor'] > self.pm_threshold)[0]
+            valid = np.where(df['minor'] > self.dmg_threshold)[0]
             idt0 = min(valid, default=0)
             idt1 = max(valid, default=0) + 1
 
@@ -306,34 +303,34 @@ class Tower(object):
 
         return self._dmg_state_sim
 
-    def compute_dmg_state_sim(self):
-        """
-        determine if adjacent tower collapses or not due to pull by the tower
-        j_time: time index (array)
-        idx: multiprocessing thread id
+    #def compute_dmg_state_sim(self):
+    #    """
+    #    determine if adjacent tower collapses or not due to pull by the tower
+    #    j_time: time index (array)
+    #    idx: multiprocessing thread id
 
-        # PD not PE = 0(non), 1, 2 (collapse)
-        TODO: changed to for loop by no_sims and using delayed?
-        """
-        dmg_state_sim = {}
-        # 1. determine damage state of tower due to wind
-        rv = self.rnd_state.uniform(size=(self.no_time))
+    #    # PD not PE = 0(non), 1, 2 (collapse)
+    #    TODO: changed to for loop by no_sims and using delayed?
+    #    """
+    #    dmg_state_sim = {}
+    #    # 1. determine damage state of tower due to wind
+    #    rv = self.rnd_state.uniform(size=(self.no_time))
 
-        # ds_wind.shape == (no_sims, no_time)
-        # PD not PE = 0(non), 1, 2 (collapse)
-        # dmg_state_sim.shape == (no_time)
-        _array = (rv[:, np.newaxis] < self.dmg.values).sum(axis=1)
+    #    # ds_wind.shape == (no_sims, no_time)
+    #    # PD not PE = 0(non), 1, 2 (collapse)
+    #    # dmg_state_sim.shape == (no_time)
+    #    _array = (rv[:, np.newaxis] < self.dmg.values).sum(axis=1)
 
-        for ids, ds in enumerate(self.damage_states, 1):
+    #    for ids, ds in enumerate(self.damage_states, 1):
 
-            id_time = np.where(_array == ids)[0]
+    #        id_time = np.where(_array == ids)[0]
 
-            # convert to wind time index for aggregation at line level
-            id_time += self.dmg_time_idx[0]
+    #        # convert to wind time index for aggregation at line level
+    #        id_time += self.dmg_time_idx[0]
 
-            dmg_state_sim[ds] = id_time
+    #        dmg_state_sim[ds] = id_time
 
-        return dmg_state_sim
+    #    return dmg_state_sim
 
     @property
     def dmg_sim(self):
@@ -433,37 +430,37 @@ class Tower(object):
 
         return self._collapse_adj_sim
 
-    def compute_collapse_adj_sim(self, dmg_id_sim):
-        """
-        : calls self.dmg_state_sim
-        :param seed: seed is None if no seed number is provided
-        :return:
-        """
+    #def compute_collapse_adj_sim(self, dmg_id_sim):
+    #    """
+    #    : calls self.dmg_state_sim
+    #    :param seed: seed is None if no seed number is provided
+    #    :return:
+    #    """
 
-        collapse_adj_sim = pd.DataFrame(None, columns=['id_time', 'id_adj'])
-        collapse_adj_sim['id_time'] = dmg_id_sim['collapse']
+    #    collapse_adj_sim = pd.DataFrame(None, columns=['id_time', 'id_adj'])
+    #    collapse_adj_sim['id_time'] = dmg_id_sim['collapse']
 
-        rv = self.rnd_state.uniform(size=len(dmg_id_sim['collapse']))
+    #    rv = self.rnd_state.uniform(size=len(dmg_id_sim['collapse']))
 
-        collapse_adj_sim['id_adj'] = (
-            rv[:, np.newaxis] >= self.cond_pc_adj_sim_prob).sum(axis=1)
+    #    collapse_adj_sim['id_adj'] = (
+    #        rv[:, np.newaxis] >= self.cond_pc_adj_sim_prob).sum(axis=1)
 
-        # remove case with no adjacent tower collapse
-        collapse_adj_sim.loc[
-            collapse_adj_sim['id_adj'] == len(self.cond_pc_adj_sim_prob),
-            'id_adj'] = None
-        collapse_adj_sim = collapse_adj_sim.loc[collapse_adj_sim['id_adj'].notnull()]
+    #    # remove case with no adjacent tower collapse
+    #    collapse_adj_sim.loc[
+    #        collapse_adj_sim['id_adj'] == len(self.cond_pc_adj_sim_prob),
+    #        'id_adj'] = None
+    #    collapse_adj_sim = collapse_adj_sim.loc[collapse_adj_sim['id_adj'].notnull()]
 
-        # replace index with tower id
-        collapse_adj_sim['id_adj'] = collapse_adj_sim['id_adj'].apply(
-            lambda x: self.cond_pc_adj_sim_idx[int(x)])
+    #    # replace index with tower id
+    #    collapse_adj_sim['id_adj'] = collapse_adj_sim['id_adj'].apply(
+    #        lambda x: self.cond_pc_adj_sim_idx[int(x)])
 
-        # check whether MC simulation is close to analytical
-        #id_adj_removed = [x for x in self.id_adj if x >= 0]
-        #if self.idl in id_adj_removed:
-        #    id_adj_removed.remove(self.idl)
+    #    # check whether MC simulation is close to analytical
+    #    #id_adj_removed = [x for x in self.id_adj if x >= 0]
+    #    #if self.idl in id_adj_removed:
+    #    #    id_adj_removed.remove(self.idl)
 
-        return collapse_adj_sim
+    #    return collapse_adj_sim
 
 
     def determine_damage_by_interaction_at_tower_level(self):
@@ -473,33 +470,29 @@ class Tower(object):
         :return:
         """
 
-        if self.cond_pc_line_sim['cum_prob']:
+        # generate regardless of time index
+        rv = self.rnd_state.uniform(size=len(dmg_id_sim['collapse']))
 
-            # generate regardless of time index
-            no_sim_collapse = len(
-                self.damage_isolation_sim['collapse']['id_time'])
-            rv = rnd_state.uniform(size=no_sim_collapse)
+        list_idx_cond = map(lambda rv_: sum(
+            rv_ >= self.cond_pc_line_sim['cum_prob']), rv)
+        idx_no_adjacent_collapse = len(self.cond_pc_line_sim['cum_prob'])
 
-            list_idx_cond = map(lambda rv_: sum(
-                rv_ >= self.cond_pc_line_sim['cum_prob']), rv)
-            idx_no_adjacent_collapse = len(self.cond_pc_line_sim['cum_prob'])
+        # list of idx of adjacent towers in collapse
+        ps_ = pd.Series([self.cond_pc_line_sim['no_collapse'][x]
+                         if x < idx_no_adjacent_collapse
+                         else None for x in list_idx_cond],
+                        index=self.damage_isolation_sim['collapse'].index,
+                        name='no_collapse')
 
-            # list of idx of adjacent towers in collapse
-            ps_ = pd.Series([self.cond_pc_line_sim['no_collapse'][x]
-                             if x < idx_no_adjacent_collapse
-                             else None for x in list_idx_cond],
-                            index=self.damage_isolation_sim['collapse'].index,
-                            name='no_collapse')
+        adj_sim = pd.concat([self.damage_isolation_sim['collapse'], ps_],
+                           axis=1)
 
-            adj_sim = pd.concat([self.damage_isolation_sim['collapse'], ps_],
-                               axis=1)
-
-            # remove case with no adjacent tower collapse
-            adj_sim_null_removed = adj_sim.loc[pd.notnull(ps_)].copy()
-            if len(adj_sim_null_removed.index):
-                adj_sim_null_removed['no_collapse'] = \
-                    adj_sim_null_removed['no_collapse'].astype(np.int64)
-                self.damage_interaction_sim = adj_sim_null_removed
+        # remove case with no adjacent tower collapse
+        adj_sim_null_removed = adj_sim.loc[pd.notnull(ps_)].copy()
+        if len(adj_sim_null_removed.index):
+            adj_sim_null_removed['no_collapse'] = \
+                adj_sim_null_removed['no_collapse'].astype(np.int64)
+            self.damage_interaction_sim = adj_sim_null_removed
 
 
     def get_directional_vulnerability(self, bearing):

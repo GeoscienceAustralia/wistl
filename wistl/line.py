@@ -32,7 +32,7 @@ class Line(object):
                   'rnd_state',
                   'rtol',
                   'atol',
-                  'pm_threshold',
+                  'dmg_threshold',
                   'path_event']
 
     def __init__(self, logger=None, **kwargs):
@@ -118,7 +118,7 @@ class Line(object):
                               'scale': self.scale,
                               'rtol': self.rtol,
                               'atol': self.atol,
-                              'pm_threshold': self.pm_threshold,
+                              'dmg_threshold': self.dmg_threshold,
                               'rnd_state': self.rnd_state,
                               'path_event': self.path_event})
 
