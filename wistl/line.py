@@ -422,7 +422,7 @@ class Line(object):
         :return:
         """
 
-        # for target_line in self.cfg.line_interaction[self.name]:
+        #for target_line in self.cfg.line_interaction[self.name]:
         #
         #     damage_index_line_interaction[target_line] = \
 
@@ -592,8 +592,6 @@ def compute_damage_per_line(line, cfg):
 
     return line
 
-'''
-'''
 
 
 

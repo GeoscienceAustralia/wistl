@@ -275,7 +275,7 @@ class Config(object):
     @property
     def cond_prob_line(self):
 
-        if self._cond_prob_line is None and cond_prob_line_metadata:
+        if self._cond_prob_line is None and self.cond_prob_line_metadata:
 
             _file = os.path.join(self.cond_prob_line_metadata['path'],
                                  self.cond_prob_line_metadata['file'])
