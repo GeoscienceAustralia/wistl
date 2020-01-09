@@ -64,6 +64,14 @@ class TestLine1(unittest.TestCase):
             tower._dmg_id_sim = None
             tower._dmg = None
 
+    @classmethod
+    def tearDown(cls):
+        try:
+            os.remove(cls.line.file_output)
+            os.removedirs(cls.line.output_path)
+        except:
+            pass
+
     def test_towers(self):
 
         self.assertEqual(self.line.no_towers, 22)
@@ -469,6 +477,14 @@ class TestLine2(unittest.TestCase):
             tower._dmg_sim = None
             tower._dmg_id_sim = None
 
+    @classmethod
+    def tearDown(cls):
+        try:
+            os.remove(cls.line.file_output)
+            os.removedirs(cls.line.output_path)
+        except:
+            pass
+
     def test_compute_damage_per_line(self):
         compute_damage_per_line(self.line, self.cfg)
 
@@ -506,7 +522,8 @@ class TestLine3(unittest.TestCase):
     @classmethod
     def tearDown(cls):
         try:
-            os.remove(cls.line.output_file)
+            os.remove(cls.line.file_output)
+            os.removedirs(cls.line.path_output)
         except:
             pass
 
@@ -520,9 +537,7 @@ class TestLine3(unittest.TestCase):
         self.assertEqual(set(self.line.dmg_towers), expected)
 
     def test_compute_damage_per_line(self):
-        print(f'xxxx: {self.line.output_file}')
         compute_damage_per_line(self.line, self.cfg)
-
 
 
 if __name__ == '__main__':

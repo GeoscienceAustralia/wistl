@@ -94,7 +94,7 @@ class Line(object):
         self._no_time = None
 
 
-        self._output_file = None
+        self._file_output = None
 
     def __repr__(self):
         return f'Line(name={self.name}, no_towers={self.no_towers}, event_id={self.event_id})'
@@ -124,10 +124,10 @@ class Line(object):
         return self._towers
 
     @property
-    def output_file(self):
-        if self._output_file is None:
-            self._output_file = os.path.join(self.path_output, f'{self.event_id}_{self.name}.h5')
-        return self._output_file
+    def file_output(self):
+        if self._file_output is None:
+            self._file_output = os.path.join(self.path_output, f'{self.event_id}_{self.name}.h5')
+        return self._file_output
 
     @property
     def time(self):
@@ -513,7 +513,7 @@ class Line(object):
                 os.makedirs(self.path_output)
                 self.logger.info(f'{self.path_output} is created')
 
-            with h5py.File(self.output_file, 'w') as hf:
+            with h5py.File(self.file_output, 'w') as hf:
 
                 for item in items:
 
@@ -535,7 +535,7 @@ class Line(object):
 
                         if columns_by_item[item]:
                             data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
-            self.logger.info(f'{self.output_file} is saved')
+            self.logger.info(f'{self.file_output} is saved')
         else:
             self.logger.info(f'No output file for Line:{self.name}')
 

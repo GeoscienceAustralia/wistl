@@ -36,6 +36,17 @@ class TestTransmission(unittest.TestCase):
         #     cls.damaged_networks, _ = sim_towers(cls.cfg)
 
     @classmethod
+    def tearDown(cls):
+
+        for event in cls.cfg.events:
+            try:
+                event_id = cls.cfg.event_id_format.format(event_name=event[0], scale=event[1])
+                output_path = os.path.join(BASE_DIR, 'output', event_id)
+                os.removedirs(output_path)
+            except:
+                pass
+
+    @classmethod
     def h5file_full(cls, line, str_head):
 
         h5file = os.path.join(
