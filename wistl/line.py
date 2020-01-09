@@ -1,7 +1,10 @@
+#!/usr/bin/env python
 
 import copy
 import time
 import dask
+import itertools
+from collections import defaultdict
 import os
 import pandas as pd
 import numpy as np
@@ -9,6 +12,7 @@ import h5py
 import logging
 
 from wistl.tower import Tower
+from wistl.config import create_list_idx, unit_vector_by_bearing, angle_between_unit_vectors
 
 
 class Line(object):
@@ -33,7 +37,9 @@ class Line(object):
                   'rtol',
                   'atol',
                   'dmg_threshold',
-                  'path_event']
+                  'line_interaction',
+                  'path_event',
+                  'path_output']
 
     def __init__(self, logger=None, **kwargs):
 
@@ -54,6 +60,7 @@ class Line(object):
         self.damage_states = None
         self.non_collapse = None
         self.path_event = None
+        self.path_output = None
         self.scale = None
 
         for key, value in kwargs.items():
@@ -61,6 +68,7 @@ class Line(object):
                 setattr(self, key, value)
 
         self._towers = None
+        self._dmg_towers = None
 
         # analytical method
         self.damage_prob = None
@@ -75,19 +83,18 @@ class Line(object):
         self.no_damage_no_cascading = None
         self.prob_no_damage_no_cascading = None
 
-        # parallel line interaction
-        # if self.cfg.line_interaction:
-        #     self.damage_index_line_interaction = {target_line: [] for
-        #         target_line in self.cfg.line_interaction[self.name]}
-        # else:
-        #     self.damage_index_line_interaction = None
-        # self.damage_prob_line_interaction = {}
-        # self.prob_no_damage_line_interaction = None
-        # self.est_no_damage_line_interaction = None
+        # line interaction
+        self._dmg_idx_line = None
+        self.damage_prob_sim_line = None
+        self.prob_no_damage_line = None
+        self.no_damage_line = None
 
         self._time = None
         self._time_idx = None
         self._no_time = None
+
+
+        self._output_file = None
 
     def __repr__(self):
         return f'Line(name={self.name}, no_towers={self.no_towers}, event_id={self.event_id})'
@@ -110,25 +117,21 @@ class Line(object):
 
             self._towers = {}
 
-            for key, value in self.dic_towers.items():
-
-                value.update({'idn': key,
-                              'no_sims': self.no_sims,
-                              'damage_states': self.damage_states,
-                              'scale': self.scale,
-                              'rtol': self.rtol,
-                              'atol': self.atol,
-                              'dmg_threshold': self.dmg_threshold,
-                              'rnd_state': self.rnd_state,
-                              'path_event': self.path_event})
-
-                self._towers[value['idl']] = Tower(**value)
+            for key in self.dic_towers.keys():
+                dic = h_tower(line=self, idn=key)
+                self._towers[dic['idl']] = Tower(**dic)
 
         return self._towers
 
     @property
+    def output_file(self):
+        if self._output_file is None:
+            self._output_file = os.path.join(self.path_output, f'{self.event_id}_{self.name}.h5')
+        return self._output_file
+
+    @property
     def time(self):
-        if self._time is None:
+        if self._time is None and self.dmg_towers:
             try:
                 self._time = self.towers[0].wind.index[
                         self.time_idx[0]:self.time_idx[1]]
@@ -141,19 +144,79 @@ class Line(object):
     def time_idx(self):
         if self._time_idx is None:
             # get min of dmg_time_idx[0], max of dmg_time_idx[1]
-            tmp = []
-            for _, value in self.towers.items():
-                tmp.append(value.dmg_time_idx)
-            id0 = list(map(min, zip(*tmp)))[0]
-            id1 = list(map(max, zip(*tmp)))[1]
-            self._time_idx = (id0, id1)
+            tmp = [self.towers[k].dmg_time_idx for k in self.dmg_towers]
+            try:
+                id0 = list(map(min, zip(*tmp)))[0]
+            except IndexError:
+                self.logger.debug(f'Line:{self.name} sustains no damage')
+            else:
+                id1 = list(map(max, zip(*tmp)))[1]
+                self._time_idx = (id0, id1)
         return self._time_idx
 
     @property
+    def dmg_towers(self):
+        if self._dmg_towers is None:
+            self._dmg_towers = [k for k, v in self.towers.items() if v.dmg_time_idx]
+        return self._dmg_towers
+
+    @property
     def no_time(self):
-        if self._no_time is None:
+        if self._no_time is None and self.dmg_towers:
             self._no_time = len(self.time)
         return self._no_time
+
+    @property
+    def dmg_idx_line(self):
+        """
+        compute damage probability due to parallel line interaction using MC
+        simulation
+        :param seed:
+        :return:
+        """
+        if self._dmg_idx_line is None:
+
+            self._dmg_idx_line = defaultdict(list)
+
+            for _, tower in self.towers.items():
+
+                # determine damage state by line interaction
+                # collapse_line_sim['id_sim', 'id_time', 'no_collapse']
+
+                for id_time, grp in tower.collapse_line_sim.groupby('id_time'):
+
+                    wind_vector = unit_vector_by_bearing(
+                        tower.wind['Bearing'][id_time])
+
+                    angle = {}
+                    for line_name, value in tower.target_line.items():
+                        angle[line_name] = angle_between_unit_vectors(
+                            wind_vector, value['vector'])
+
+                    target_line = min(angle, key=angle.get)
+
+                    if angle[target_line] < 180:
+
+                        target_tower_id = tower.target_line[target_line]['id']
+                        #max_no_towers = self.cfg.no_towers_by_line[target_line]
+
+                        for no_collapse, subgrp in grp.groupby('no_collapse'):
+
+                            no_towers = int(no_collapse / 2)
+
+                            right = create_list_idx(target_tower_id, no_towers, self.no_towers, 1)
+                            left = create_list_idx(target_tower_id, no_towers, self.no_towers, -1)
+
+                            id_towers = [x for x in right + [target_tower_id] + left if x >= 0]
+
+                            list_id = list(itertools.product(id_towers, subgrp['id_sim'], [id_time]))
+
+                            self._dmg_idx_line[target_line] += list_id
+
+                    else:
+                        msg = f'tower:{tower.name}, angle: {angle[target_line]}, wind:{wind_vector}'
+                        self.logger.warning(msg)
+        return self._dmg_idx_line
 
     def compute_damage_prob(self):
         """
@@ -164,54 +227,62 @@ class Line(object):
         pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
         """
         self.damage_prob = {}
-        pc_adj_agg = np.zeros((self.no_towers,
-                               self.no_towers,
-                               self.no_time))
 
-        # prob of collapse
-        for _, tower in self.towers.items():
+        if self.no_time:
+            pc_adj_agg = np.zeros((self.no_towers,
+                                   self.no_towers,
+                                   self.no_time))
 
-            #idt = self.time.intersection(tower.dmg.index)
-            #idt0 = self.time.get_loc(idt[0])
-            #idt1 = self.time.get_loc(idt[-1]) + 1
-            idt0, idt1 = tower.dmg_time_idx
-            idt0 -= self.time_idx[0]
-            idt1 -= self.time_idx[0]
-            for idl, prob in tower.collapse_adj.items():
-                pc_adj_agg[tower.idl, idl, idt0:idt1] = prob
+            # prob of collapse
+            for k in self.dmg_towers:
 
-            pc_adj_agg[tower.idl, tower.idl, idt0:idt1] = tower.dmg['collapse']
+                # reset time index to line
+                idt0, idt1 = self.towers[k].dmg_time_idx
+                idt0 -= self.time_idx[0]
+                idt1 -= self.time_idx[0]
 
-        # pc_collapse.shape == (no_tower, no_time)
-        pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
+                for idl, prob in self.towers[k].collapse_adj.items():
+                    pc_adj_agg[self.towers[k].idl, idl, idt0:idt1] = prob
 
-        self.damage_prob['collapse'] = pd.DataFrame(
-            pc_collapse.T,
-            columns=self.names,
-            index=self.time)
+                pc_adj_agg[self.towers[k].idl, self.towers[k].idl,
+                           idt0:idt1] = self.towers[k].dmg['collapse']
 
-        # non_collapse state
-        for ds in self.non_collapse:
-            temp = np.zeros_like(pc_collapse)
-            for _, tower in self.towers.items():
+            # pc_collapse.shape == (no_tower, no_time)
+            pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
 
-                idt0, idt1 = tower.dmg_time_idx
-
-                # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                try:
-                    value = tower.dmg[ds].values \
-                        - tower.dmg['collapse'].values \
-                        + pc_collapse[tower.idl, idt0:idt1]
-                except ValueError:
-                    print(tower.dmg[ds].values.shape)
-                    print(idt0, idt1)
-                else:
-                    temp[tower.idl, idt0:idt1] = np.where(value > 1.0, [1.0], value)
-
-            self.damage_prob[ds] = pd.DataFrame(
-                temp.T,
+            self.damage_prob['collapse'] = pd.DataFrame(
+                pc_collapse.T,
                 columns=self.names,
                 index=self.time)
+
+            # non_collapse state
+            for ds in self.non_collapse:
+
+                temp = np.zeros_like(pc_collapse)
+
+                for k in self.dmg_towers:
+
+                    idt0, idt1 = self.towers[k].dmg_time_idx
+                    idt0 -= self.time_idx[0]
+                    idt1 -= self.time_idx[0]
+
+                    # P(DS>ds) - P(collapse directly) + P(collapse induced)
+                    try:
+                        value = self.towers[k].dmg[ds].values \
+                            - self.towers[k].dmg['collapse'].values \
+                            + pc_collapse[self.towers[k].idl, idt0:idt1]
+                    except ValueError:
+                        self.logger.warning(f'shape: {self.towers[k].dmg[ds].values.shape} '
+                                            f'shape: {self.towers[k].dmg["collapse"].values.shape} '
+                                            f'shape: {pc_collapse.shape} '
+                                            f'idt0, idt1: {idt0}, {idt1}')
+                    else:
+                        temp[self.towers[k].idl, idt0:idt1] = np.where(value > 1.0, [1.0], value)
+
+                self.damage_prob[ds] = pd.DataFrame(
+                    temp.T,
+                    columns=self.names,
+                    index=self.time)
 
         return self.damage_prob
 
@@ -246,86 +317,92 @@ class Line(object):
 
         # perfect correlation within a single line
         self.damage_prob_sim = {}
-        #idx_by_ds = {ds: None for ds in self.damage_states}
-        dic_tf_ds = {ds: None for ds in self.damage_states}
-        tf_ds = np.zeros((self.no_towers,
-                          self.no_sims,
-                          self.no_time), dtype=bool)
 
-        # collapse by adjacent towers
-        for _, tower in self.towers.items():
-            for id_adj, grp in tower.collapse_adj_sim.groupby('id_adj'):
-                for idl in id_adj:
-                    tf_ds[idl, grp['id_sim'], grp['id_time']] = True
+        if self.no_time:
+            #idx_by_ds = {ds: None for ds in self.damage_states}
+            dic_tf_ds = {ds: None for ds in self.damage_states}
+            tf_ds = np.zeros((self.no_towers,
+                              self.no_sims,
+                              self.no_time), dtype=bool)
 
-        # append damage state by direct wind
-        for ds in self.damage_states[::-1]:  # collapse first
+            # collapse by adjacent towers
+            for k in self.dmg_towers:
+                for id_adj, grp in self.towers[k].collapse_adj_sim.groupby('id_adj'):
+                    # reset time index relative to line
+                    for idl in id_adj:
+                        tf_ds[idl, grp['id_sim'], grp['id_time'] - self.time_idx[0]] = True
 
-            for _, tower in self.towers.items():
-                tf_ds[tower.idl,
-                      tower.dmg_state_sim[ds]['id_sim'],
-                      tower.dmg_state_sim[ds]['id_time']] = True
+            # append damage state by direct wind
+            for ds in self.damage_states[::-1]:  # collapse first
 
-            # PE(DS)
-            self.damage_prob_sim[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / self.no_sims,
-                columns=self.names, index=self.time)
+                for k in self.dmg_towers:
+                    tf_ds[self.towers[k].idl,
+                          self.towers[k].dmg_state_sim[ds]['id_sim'],
+                          self.towers[k].dmg_state_sim[ds]['id_time'] - self.time_idx[0]] = True
 
-            dic_tf_ds[ds] = tf_ds.copy()
-            #idx = np.where(tf_ds)
-            #idx_by_ds[ds] = [(id_time, id_sim, id_tower) for
-            #                 id_tower, id_sim, id_time in zip(*idx)]
+                # PE(DS)
+                self.damage_prob_sim[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / self.no_sims,
+                    columns=self.names, index=self.time)
 
-        # compute mean, std of no. of damaged towers
-        self.no_damage, self.prob_no_damage = self.compute_stats(dic_tf_ds)
+                dic_tf_ds[ds] = tf_ds.copy()
+                #idx = np.where(tf_ds)
+                #idx_by_ds[ds] = [(id_time, id_sim, id_tower) for
+                #                 id_tower, id_sim, id_time in zip(*idx)]
 
-        # checking against analytical value
-        for name in self.names:
-            try:
-                np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
-                    self.damage_prob_sim['collapse'][name].values, atol=self.atol, rtol=self.rtol)
-            except AssertionError:
-                self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
+            # compute mean, std of no. of damaged towers
+            self.no_damage, self.prob_no_damage = self.compute_stats(dic_tf_ds)
 
-        #return idx_by_ds
+            # checking against analytical value
+            for name in self.names:
+                try:
+                    np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
+                        self.damage_prob_sim['collapse'][name].values, atol=self.atol, rtol=self.rtol)
+                except AssertionError:
+                    self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
+        return self.damage_prob_sim
 
     def compute_damage_prob_sim_no_cascading(self):
 
         self.damage_prob_sim_no_cascading = {}
 
-        dic_tf_ds = {ds: None for ds in self.damage_states}
+        if self.no_time:
+            dic_tf_ds = {ds: None for ds in self.damage_states}
 
-        tf_ds = np.zeros((self.no_towers,
-                          self.no_sims,
-                          self.no_time), dtype=bool)
+            tf_ds = np.zeros((self.no_towers,
+                              self.no_sims,
+                              self.no_time), dtype=bool)
 
-        for ds in self.damage_states[::-1]:  # collapse first
+            for ds in self.damage_states[::-1]:  # collapse first
 
-            for _, tower in self.towers.items():
+                for k in self.dmg_towers:
 
-                tf_ds[tower.idl,
-                      tower.dmg_state_sim[ds]['id_sim'],
-                      tower.dmg_state_sim[ds]['id_time']] = True
+                    tf_ds[self.towers[k].idl,
+                          self.towers[k].dmg_state_sim[ds]['id_sim'],
+                          self.towers[k].dmg_state_sim[ds]['id_time'] - self.time_idx[0]] = True
 
-            # PE(DS)
-            self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(
-                tf_ds.sum(axis=1).T / self.no_sims,
-                columns=self.names,
-                index=self.time)
+                # PE(DS)
+                self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(
+                    tf_ds.sum(axis=1).T / self.no_sims,
+                    columns=self.names,
+                    index=self.time)
 
-            dic_tf_ds[ds] = tf_ds.copy()
+                dic_tf_ds[ds] = tf_ds.copy()
 
-        self.no_damage_no_cascading, self.prob_no_damage_no_cascading = \
-            self.compute_stats(dic_tf_ds)
+            self.no_damage_no_cascading, self.prob_no_damage_no_cascading = \
+                self.compute_stats(dic_tf_ds)
 
-        # checking against analytical value
-        for _id, name in enumerate(self.names):
-            idt0, idt1 = self.towers[_id].dmg_time_idx
-            try:
-                np.testing.assert_allclose(self.towers[_id].dmg[ds].values,
-                        self.damage_prob_sim_no_cascading[ds].iloc[idt0:idt1][name].values, atol=self.atol, rtol=self.rtol)
-            except AssertionError:
-                self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
-
+            # checking against analytical value
+            for k in self.dmg_towers:
+                idt0, idt1 = self.towers[k].dmg_time_idx
+                name = self.towers[k].name
+                idt0_ = idt0 - self.time_idx[0]
+                idt1_ = idt1 - self.time_idx[0]
+                try:
+                    np.testing.assert_allclose(self.towers[k].dmg[ds].values,
+                            self.damage_prob_sim_no_cascading[ds].iloc[idt0_:idt1_][name].values, atol=self.atol, rtol=self.rtol)
+                except AssertionError:
+                    self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
+        return self.damage_prob_sim_no_cascading
 
     def compute_stats(self, dic_tf_ds):
         """
@@ -414,99 +491,8 @@ class Line(object):
         print(f'stat1: {time.time() - tic}')
         return exp_no_tower, prob_no_tower
 
-    def determine_damage_by_interaction_at_line_level(self, seed=None):
-        """
-        compute damage probability due to parallel line interaction using MC
-        simulation
-        :param seed:
-        :return:
-        """
 
-        #for target_line in self.cfg.line_interaction[self.name]:
-        #
-        #     damage_index_line_interaction[target_line] = \
-
-        # print('trigger line: {}'.format(self.name))
-        # for target_line in self.cfg.line_interaction[self.name]:
-        #
-        #     damage_index_line_interaction[target_line] = \
-        #         pd.DataFrame(columns=['id_tower', 'id_sim', 'id_time'],
-        #                      dtype=np.int64)
-
-            # self.tf_array_by_line[target_line] = np.zeros((
-            #     self.cfg.no_towers_by_line[target_line],
-            #     self.cfg.no_sims,
-            #     len(self.time)), dtype=bool)
-
-        #print('target in: {}'.format(self.damage_index_line_interaction[target_line].dtypes))
-
-        for _, tower in self.towers.items():
-
-            # determine damage state by line interaction
-            # damage_interaction_sim['id_sim', 'id_time', 'no_collapse']
-            tower.determine_damage_by_interaction_at_tower_level(seed)
-
-            for id_time, grouped \
-                    in tower.damage_interaction_sim.groupby('id_time'):
-
-                wind_vector = unit_vector_by_bearing(
-                    tower.wind['Bearing'][id_time])
-
-                angle = {}
-                for line_name, value in tower.id_on_target_line.items():
-                    angle[line_name] = angle_between_unit_vectors(
-                        wind_vector, value['vector'])
-
-                target_line = min(angle, key=angle.get)
-
-                if angle[target_line] < 180:
-
-                    target_tower_id = tower.id_on_target_line[target_line]['id']
-                    max_no_towers = self.cfg.no_towers_by_line[target_line]
-
-                    for no_collapse, subgroup in grouped.groupby('no_collapse'):
-
-                        no_towers_on_either_side = int(no_collapse / 2)
-
-                        list_one_direction = tower.create_list_idx(
-                            target_tower_id, no_towers_on_either_side,
-                            max_no_towers, +1)
-
-                        list_another_direction = tower.create_list_idx(
-                            target_tower_id, no_towers_on_either_side,
-                            max_no_towers, -1)
-
-                        list_towers = [x for x in list_one_direction
-                                       + [target_tower_id]
-                                       + list_another_direction if x >= 0]
-
-                        list_id = list(itertools.product(list_towers,
-                                                    subgroup['id_sim'].values,
-                                                    [id_time]))
-
-                        # try:
-                        #     df_id = pd.DataFrame(list_id, columns=['id_tower',
-                        #                                        'id_sim',
-                        #                                        'id_time'],
-                        #                          dtype=np.int64)
-                        # except IndexError:
-                        #     print('IndexError')
-
-                        if len(list_id) > 0:
-
-                            self.damage_index_line_interaction[
-                                target_line].append(list_id)
-
-                        # for item in ):
-                        #     self.damage_index_line_interaction[target_line][
-                        #         item[0], item[1], id_time] = True
-                else:
-                    msg = 'tower:{}, angle: {}, wind:{}'.format(
-                        tower.name, angle[target_line], wind_vector)
-                    print(msg)
-
-
-    def write_hdf5(self, output_file):
+    def write_hdf5(self):
 
         items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
                  'no_damage', 'no_damage_no_cascading',
@@ -521,29 +507,37 @@ class Line(object):
                            'prob_no_damage_no_cascading': range(self.no_towers + 1)
                            }
 
-        with h5py.File(output_file, 'w') as hf:
+        if self.no_time:
 
-            for item in items:
+            if not os.path.exists(self.path_output):
+                os.makedirs(self.path_output)
+                self.logger.info(f'{self.path_output} is created')
 
-                group = hf.create_group(item)
+            with h5py.File(self.output_file, 'w') as hf:
 
-                for ds in self.damage_states:
+                for item in items:
 
-                    value = getattr(self, item)[ds]
-                    data = group.create_dataset(ds, data=value)
+                    group = hf.create_group(item)
 
-                    # metadata
-                    data.attrs['nrow'], data.attrs['ncol'] = value.shape
-                    data.attrs['time_start'] = str(self.time[0])
-                    try:
-                        data.attrs['time_freq'] = str(self.time[1]-self.time[0])
-                    except IndexError:
-                        data.attrs['time_freq'] = str(self.time[0])
-                    data.attrs['time_period'] = self.time.shape[0]
+                    for ds in self.damage_states:
 
-                    if columns_by_item[item]:
-                        data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
+                        value = getattr(self, item)[ds]
+                        data = group.create_dataset(ds, data=value)
 
+                        # metadata
+                        data.attrs['nrow'], data.attrs['ncol'] = value.shape
+                        data.attrs['time_start'] = str(self.time[0])
+                        try:
+                            data.attrs['time_freq'] = str(self.time[1]-self.time[0])
+                        except IndexError:
+                            data.attrs['time_freq'] = str(self.time[0])
+                        data.attrs['time_period'] = self.time.shape[0]
+
+                        if columns_by_item[item]:
+                            data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
+            self.logger.info(f'{self.output_file} is saved')
+        else:
+            self.logger.info(f'No output file for Line:{self.name}')
 
 def compute_damage_per_line(line, cfg):
     """
@@ -577,23 +571,22 @@ def compute_damage_per_line(line, cfg):
 
     # save
     if cfg.options['save_output']:
-        output_file = os.path.join(cfg.path_output, f'{line.event_id}_{line.name}.h5')
-        #print(f"max: {line.name} - {line.damage_prob_sim['minor'].max()}")
-        line.write_hdf5(output_file=output_file)
-        logger.info(f'{output_file} is saved')
-
-    #
-    # try:
-    #     line.cfg.line_interaction[line_name]
-    # except (TypeError, KeyError):
-    #     pass
-    # else:
-    #     line.determine_damage_by_interaction_at_line_level(seed)
+        line.write_hdf5()
 
     return line
 
+def h_tower(line, idn):
 
+    dic = line.dic_towers[idn].copy()
+    dic.update({'idn': idn,
+                'no_sims': line.no_sims,
+                'damage_states': line.damage_states,
+                'scale': line.scale,
+                'rtol': line.rtol,
+                'atol': line.atol,
+                'dmg_threshold': line.dmg_threshold,
+                'rnd_state': line.rnd_state,
+                'path_event': line.path_event})
 
-
-
+    return dic
 

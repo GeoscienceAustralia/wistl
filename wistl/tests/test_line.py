@@ -33,6 +33,7 @@ class TestLine1(unittest.TestCase):
         event_scale = 3.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
+        path_output = os.path.join(cls.cfg.path_output, 'test1_s3.0')
         cls.no_sims = 500000
 
         # LineB
@@ -48,6 +49,7 @@ class TestLine1(unittest.TestCase):
                          'dmg_threshold': cls.cfg.dmg_threshold,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,
+                         'path_output': path_output,
                          'dic_towers': cls.cfg.towers_by_line['LineB']})
 
         cls.line = Line(**dic_line)
@@ -57,9 +59,10 @@ class TestLine1(unittest.TestCase):
             tower.axisaz = 11.0
             tower._damage_prob = None
             tower._damage_prob_sim = None
+            tower._dmg_state_sim = None
             tower._dmg_sim = None
             tower._dmg_id_sim = None
-
+            tower._dmg = None
 
     def test_towers(self):
 
@@ -103,7 +106,7 @@ class TestLine1(unittest.TestCase):
         pc = 1 - (1-p0c)*(1-p0gn2)*(1-p0gn1)*(1-p0gp1)*(1-p0gp2)
 
         self.assertAlmostEqual(p0c, tower.dmg['collapse'][0], places=3)
-        self.assertAlmostEqual(p0c, tower.dmg_sim['collapse'][0], places=3)
+        #self.assertAlmostEqual(p0c, tower.dmg_sim['collapse'][0], places=3)
 
         self.assertAlmostEqual(p0c, self.line.towers[1].dmg['collapse'][0], places=3)
         self.assertAlmostEqual(p0c, self.line.towers[2].dmg['collapse'][0], places=3)
@@ -126,7 +129,7 @@ class TestLine1(unittest.TestCase):
         pm = min(p0m - p0c + pc, 1.0)
 
         self.assertAlmostEqual(p0m, tower.dmg['minor'][0], places=3)
-        self.assertAlmostEqual(p0m, tower.dmg_sim['minor'][0], places=3)
+        #self.assertAlmostEqual(p0m, tower.dmg_sim['minor'][0], places=3)
         self.assertAlmostEqual(
             pm, self.line.damage_prob['minor'][name][0], places=3)
 
@@ -234,7 +237,8 @@ class TestLine1(unittest.TestCase):
                 f"Simulation: {self.line.damage_prob_sim_no_cascading['minor'][name].values}")
 
         # except 32, strainer tower
-        for _id, name in enumerate(self.line.names):
+        for _id in self.line.dmg_towers:
+            name = self.line.towers[_id].name
             idt0, idt1 = self.line.towers[_id].dmg_time_idx
             try:
                 np.testing.assert_allclose(
@@ -436,6 +440,7 @@ class TestLine2(unittest.TestCase):
         event_scale = 1.0
         path_event = os.path.join(cls.cfg.path_wind_event_base,
                                   event_name)
+        path_output = os.path.join(cls.cfg.path_output, 'test2_s1.0')
         # LineB
         dic_line = cls.cfg.lines['LineA'].copy()
         cls.no_sims = 10000
@@ -451,6 +456,7 @@ class TestLine2(unittest.TestCase):
                          'scale': event_scale,
                          'rnd_state': np.random.RandomState(0),
                          'path_event': path_event,
+                         'path_output': path_output,
                          'dic_towers': cls.cfg.towers_by_line['LineA']})
 
         cls.line = Line(**dic_line)
@@ -465,6 +471,59 @@ class TestLine2(unittest.TestCase):
 
     def test_compute_damage_per_line(self):
         compute_damage_per_line(self.line, self.cfg)
+
+class TestLine3(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'))
+
+        dic_line = cls.cfg.lines['LineA'].copy()
+        cls.no_sims = 1000
+        event_name = 'test2'
+        event_scale = 2.0
+        path_event = os.path.join(cls.cfg.path_wind_event_base,
+                                  event_name)
+        path_output = os.path.join(cls.cfg.path_output, 'test2_s2.0')
+        dic_line.update({'name': 'LineA',
+                         'no_sims': cls.no_sims,
+                         'damage_states': cls.cfg.damage_states,
+                         'non_collapse': cls.cfg.non_collapse,
+                         'event_name': event_name,
+                         'event_id': cls.cfg.event_id_format.format(event_name=event_name, scale=event_scale),
+                         'rtol': 0.01,
+                         'atol': 0.1,
+                         'dmg_threshold': cls.cfg.dmg_threshold,
+                         'scale': event_scale,
+                         'rnd_state': np.random.RandomState(0),
+                         'path_event': path_event,
+                         'path_output': path_output,
+                         'dic_towers': cls.cfg.towers_by_line['LineA']})
+
+        cls.line = Line(**dic_line)
+
+    @classmethod
+    def tearDown(cls):
+        try:
+            os.remove(cls.line.output_file)
+        except:
+            pass
+
+    def test_time_idx(self):
+        self.assertEqual(self.line.time_idx, (476, 483))
+        #for k, v in self.line.towers.items():
+        #    print(f'{k} -> {v.dmg_time_idx}')
+
+    def test_dmg_towers(self):
+        expected = set([16, 18, 19, 6, 7, 12, 2, 13, 14, 1, 10, 9, 20, 15, 4, 3])
+        self.assertEqual(set(self.line.dmg_towers), expected)
+
+    def test_compute_damage_per_line(self):
+        print(f'xxxx: {self.line.output_file}')
+        compute_damage_per_line(self.line, self.cfg)
+
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

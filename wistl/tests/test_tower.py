@@ -306,8 +306,8 @@ class TestTower1(unittest.TestCase):
         key = self.tower.get_directional_vulnerability(bearing)
         self.assertEqual(key, 90.0)
         self.tower._dmg = None
-        self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'minor'], 0.0)
-        self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'collapse'], 0.0)
+        #self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'minor'], 0.0)
+        #self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'collapse'], 0.0)
 
         bearing, ratio = 110.0, 1.04
         self.tower._wind = create_wind_given_bearing(bearing, ratio)
@@ -670,7 +670,7 @@ class TestTower2(unittest.TestCase):
             'cond_pc_adj': cond_pc_adj,
             'cond_pc_adj_sim_idx': cond_pc_adj_sim_idx,
             'cond_pc_adj_sim_prob': cond_pc_adj_sim_prob,
-            'no_sims': 1000,
+            'no_sims': 10000,
             'damage_states': ['minor', 'collapse'],
             'non_collapse': ['minor'],
             'rnd_state': np.random.RandomState(1),
@@ -751,10 +751,11 @@ class TestTower2(unittest.TestCase):
         key = self.tower.get_directional_vulnerability(bearing)
         self.assertEqual(key, 180)
         self.tower._dmg = None
-        self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'minor'],
-                         stats.lognorm.cdf(1.02, 0.032, scale=1.143))
-        self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'collapse'],
-                         stats.lognorm.cdf(1.02, 0.04, scale=1.18))
+        self.assertEqual(self.tower.dmg, None)
+        #self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'minor'],
+        #                 stats.lognorm.cdf(1.02, 0.032, scale=1.143))
+        #self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'collapse'],
+        #                 stats.lognorm.cdf(1.02, 0.04, scale=1.18))
 
         bearing, ratio = 110.0, 1.04
         self.tower._wind = create_wind_given_bearing(bearing, ratio)
@@ -804,7 +805,7 @@ class TestTower2(unittest.TestCase):
                                stats.lognorm.cdf(1.22816, 0.04, scale=1.18), places=2)
         self.assertAlmostEqual(self.tower.dmg['minor'].values[0],
                                stats.lognorm.cdf(1.22816, 0.032, scale=1.143), places=2)
-        self.tower.dmg_sim
+        self.assertAlmostEqual(self.tower.dmg_sim['collapse'][0], self.tower.dmg['collapse'].values[0], places=2)
 
     def test_dmg_state_sim_old(self):
 
@@ -838,8 +839,23 @@ class TestTower2(unittest.TestCase):
                                     f'simulation {prob_sim:.3f} vs. '
                                     f'analytical {self.tower.dmg[ds].values[1]:.3f}')
 
-    @unittest.skip("skipping ATM")
     def test_dmg_state_sim(self):
+
+        self.tower._wind = create_wind_given_bearing(130.0, 1.22816)  # 1.18*np.exp(0.04)
+        self.tower._dmg = None
+        np.testing.assert_allclose(self.tower.dmg.values,
+                                   np.array([[0.987637, 0.841361],
+                                             [0.987637, 0.841361]]),
+                                   rtol=1.e-4)  # minor, collapse
+        #self.tower._dmg_state_sim = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
+
+        #np.testing.assert_equal(self.tower._dmg_state_sim, np.array([[2, 2], [0, 0], [2, 1]]))
+        self.tower._dmg_state_sim = None
+        self.tower.dmg_state_sim
+
+
+    @unittest.skip("skipping ATM")
+    def test_dmg_state_sim2(self):
 
         self.tower._wind = create_wind_given_bearing(130.0, 1.22816)  # 1.18*np.exp(0.04)
         self.tower._dmg = None

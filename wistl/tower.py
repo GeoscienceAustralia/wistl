@@ -38,6 +38,8 @@ class Tower(object):
                   'cond_pc_adj',
                   'cond_pc_adj_sim_idx',
                   'cond_pc_adj_sim_prob',
+                  'cond_pc_line_no',
+                  'cond_pc_line_prob',
                   'coord',
                   'coord_lat_lon',
                   'design_level',
@@ -140,14 +142,9 @@ class Tower(object):
         self._dmg_state_sim = None
         self._dmg_sim = None
         self._collapse_adj_sim = None
-
-        # self.damage_interaction_sim = pd.DataFrame(None, columns=['no_collapse',
-        #                                                          'id_time',
-        #                                                          'id_sim'],
-        #                                           dtype=np.int64)
+        self._collapse_line_sim = None
 
         # line interaction
-        #self._id_on_target_line = dict()
         # self.cond_pc_line_sim = {key: None for key in ['no_collapse',
         #                                               'cum_prob']}
         # self._sim_parallel_line = None
@@ -185,7 +182,7 @@ class Tower(object):
 
     @property
     def no_time(self):
-        if self._no_time is None:
+        if self._no_time is None and self.dmg is not None:
             self._no_time = len(self.dmg.index)
         return self._no_time
 
@@ -194,7 +191,7 @@ class Tower(object):
         """
         return starting and edning index of dmg against wind
         """
-        if self._dmg_time_idx is None:
+        if self._dmg_time_idx is None and self.dmg is not None:
             idt = self.wind.index.intersection(self.dmg.index)
             idt0 = self.wind.index.get_loc(idt[0])
             idt1 = self.wind.index.get_loc(idt[-1]) + 1
@@ -261,13 +258,20 @@ class Tower(object):
         if self._dmg is None:
 
             df = self.wind.apply(self.compute_damage_using_directional_vulnerability, axis=1)
+
             # apply thresholds
             valid = np.where(df['minor'] > self.dmg_threshold)[0]
-            idt0 = min(valid, default=0)
-            idt1 = max(valid, default=0) + 1
 
-            self._dmg = df.iloc[idt0:idt1]
-            self._dmg.index = self.wind.index[idt0:idt1]
+            try:
+                idt0 = min(valid)
+
+            except ValueError:
+                self.logger.debug(f'tower:{self.name} sustains no damage')
+
+            else:
+                idt1 = max(valid) + 1
+                self._dmg = df.iloc[idt0:idt1]
+                self._dmg.index = self.wind.index[idt0:idt1]
 
         return self._dmg
 
@@ -279,7 +283,7 @@ class Tower(object):
         TODO: changed to for loop by no_sims and using delayed?
         """
 
-        if self._dmg_state_sim is None:
+        if self._dmg_state_sim is None and self.dmg is not None:
 
             self._dmg_state_sim = {}
 
@@ -339,7 +343,7 @@ class Tower(object):
         PE not PD 1, 2 (collapse)
         """
 
-        if self._dmg_sim is None:
+        if self._dmg_sim is None and self.dmg is not None:
 
             self._dmg_sim = {}
 
@@ -369,7 +373,7 @@ class Tower(object):
         Pc(j,i) = P(j|i)*Pc(i)
         """
         # only applicable for tower collapse
-        if self._collapse_adj is None:
+        if self._collapse_adj is None and self.dmg is not None:
 
             self._collapse_adj = {}
 
@@ -387,38 +391,39 @@ class Tower(object):
         :return:
         """
 
-        if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx:
+        if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx and self.dmg is not None:
 
-            self._collapse_adj_sim = self.dmg_state_sim['collapse'].copy()
+            df = self.dmg_state_sim['collapse'].copy()
 
             # generate regardless of time index
-            rv = self.rnd_state.uniform(size=len(self.dmg_state_sim['collapse']['id_sim']))
+            rv = self.rnd_state.uniform(
+                size=len(self.dmg_state_sim['collapse']['id_sim']))
 
-            self._collapse_adj_sim['id_adj'] = (
-                rv[:, np.newaxis] >= self.cond_pc_adj_sim_prob).sum(axis=1)
+            df['id_adj'] = (rv[:, np.newaxis] >= self.cond_pc_adj_sim_prob).sum(axis=1)
 
             # remove case with no adjacent tower collapse
-            self._collapse_adj_sim = self._collapse_adj_sim.loc[
-                self._collapse_adj_sim['id_adj'] < len(self.cond_pc_adj_sim_prob)].copy()
+            df = df[df['id_adj'] < len(self.cond_pc_adj_sim_prob)].copy()
 
             # replace index with tower id
-            self._collapse_adj_sim['id_adj'] = self._collapse_adj_sim['id_adj'].apply(
-                lambda x: self.cond_pc_adj_sim_idx[x])
+            df['id_adj'] = df['id_adj'].apply(lambda x: self.cond_pc_adj_sim_idx[x])
 
-            for id_time, grouped in self._collapse_adj_sim.groupby('id_time'):
+            # check against collapse_adj
+            for id_time, grouped in df.groupby('id_time'):
 
                 for idl in self.cond_pc_adj.keys():
 
                     prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / self.no_sims
                     adj_time = id_time - self.dmg_time_idx[0]
                     idx_not_close, = np.where(~np.isclose(
-                        self.collapse_adj[idl][adj_time], prob, atol=self.atol, rtol=self.rtol))
+                        prob, self.collapse_adj[idl][adj_time], atol=self.atol, rtol=self.rtol))
 
                     for idx in idx_not_close:
                         self.logger.warning(
                             f'Pc({idl}|{self.name}) at {id_time}: '
                             f'simulation {prob:.3f} vs. '
                             f'analytical {self.collapse_adj[idl][adj_time]:.3f}')
+
+            self._collapse_adj_sim = df.copy()
 
         return self._collapse_adj_sim
 
@@ -463,7 +468,7 @@ class Tower(object):
         :return:
         """
 
-        if self._collapse_line_sim is None and self.cond_pc_line_prob:
+        if self._collapse_line_sim is None and self.cond_pc_line_no:
 
             self._collapse_line_sim = self.dmg_state_sim['collapse'].copy()
 
@@ -478,7 +483,7 @@ class Tower(object):
                 self._collapse_line_sim['no_collapse'] < len(self.cond_pc_line_prob)].copy()
 
             # replace index with no_collapse
-            self._collapse_line_sim['no_collapse'] = self._collapse_line_sim['no_collapse'].apply(lambda x: self.cond_pc_line_no[int(x)])
+            self._collapse_line_sim['no_collapse'] = self._collapse_line_sim['no_collapse'].apply(lambda x: self.cond_pc_line_no[x])
 
         return self._collapse_line_sim
 

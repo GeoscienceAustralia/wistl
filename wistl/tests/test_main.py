@@ -86,8 +86,8 @@ class TestTransmission(unittest.TestCase):
     def test_transmission_analytical_vs_simulation_only_isolation(self):
 
         for line in self.lines:
-            for _, tower in line.towers.items():
-                self.compare_analytical_vs_simulation_for_collapse(tower)
+            for k in line.dmg_towers:
+                self.compare_analytical_vs_simulation_for_collapse(line.towers[k])
 
         # if self.cfg.parallel:
         #     for line in self.damaged_lines:
