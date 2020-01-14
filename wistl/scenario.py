@@ -29,6 +29,7 @@ class Scenario(object):
         self._path_output = None
         self._list_lines = None
         self._lines = None
+        self._dmg_lines = None
         self._no_lines = None
         self._time_idx = None
         self._time = None
@@ -67,27 +68,28 @@ class Scenario(object):
 
         return self._lines
 
-    # TODO: why list_lines need?
-    #@property
-    #def list_lines(self):
-    #    if self._list_lines is None:
-    #        self._list_lines = [x for _, x in self.lines.items()]
-    #    return self._list_lines
+    @property
+    def dmg_lines(self):
+        if self._dmg_lines is None:
+            self._dmg_lines = [k for k,v in self.lines.items() if v.no_time]
+        return self._dmg_lines
 
     @property
     def time_idx(self):
         if self._time_idx is None:
-            tmp = []
-            for _, value in self.lines.items():
-                tmp.append(value.time_idx)
-            id0 = list(map(min, zip(*tmp)))[0]
-            id1 = list(map(max, zip(*tmp)))[1]
-            self._time_idx = (id0, id1)
+            tmp = [self.lines[k].time_idx for k in self.dmg_lines]
+            try:
+                id0 = list(map(min, zip(*tmp)))[0]
+            except IndexError:
+                self.logger.debug(f'Scenario:{self.id} sustains no damage')
+            else:
+                id1 = list(map(max, zip(*tmp)))[1]
+                self._time_idx = (id0, id1)
         return self._time_idx
 
     @property
     def time(self):
-        if self._time is None:
+        if self._time is None and self.dmg_lines:
             try:
                 key = [*self.lines][0]
                 self._time = self.lines[key].towers[0].wind.index[
@@ -98,7 +100,7 @@ class Scenario(object):
 
     @property
     def no_time(self):
-        if self._no_time is None:
+        if self._no_time is None and self.dmg_lines:
             self._no_time = len(self.time)
         return self._no_time
 

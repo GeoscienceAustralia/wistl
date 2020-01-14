@@ -260,24 +260,29 @@ class Line(object):
 
                 temp = np.zeros_like(pc_collapse)
 
-                for k in self.dmg_towers:
+                for k, tower in self.towers.items():
 
-                    idt0, idt1 = self.towers[k].dmg_time_idx
-                    idt0 -= self.time_idx[0]
-                    idt1 -= self.time_idx[0]
+                    if tower.dmg_time_idx:
 
-                    # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                    try:
-                        value = self.towers[k].dmg[ds].values \
-                            - self.towers[k].dmg['collapse'].values \
-                            + pc_collapse[self.towers[k].idl, idt0:idt1]
-                    except ValueError:
-                        self.logger.warning(f'shape: {self.towers[k].dmg[ds].values.shape} '
-                                            f'shape: {self.towers[k].dmg["collapse"].values.shape} '
-                                            f'shape: {pc_collapse.shape} '
-                                            f'idt0, idt1: {idt0}, {idt1}')
+                        idt0, idt1 = tower.dmg_time_idx
+                        idt0 -= self.time_idx[0]
+                        idt1 -= self.time_idx[0]
+
+                        # P(DS>ds) - P(collapse directly) + P(collapse induced)
+                        try:
+                            value = tower.dmg[ds].values \
+                                - tower.dmg['collapse'].values \
+                                + pc_collapse[tower.idl, idt0:idt1]
+                        except ValueError:
+                            self.logger.critical(f'shape: {tower.dmg[ds].values.shape} '
+                                                f'shape: {tower.dmg["collapse"].values.shape} '
+                                                f'shape: {pc_collapse.shape} '
+                                                f'idt0, idt1: {idt0}, {idt1}')
+                        else:
+                            temp[tower.idl, idt0:idt1] = np.where(value > 1.0, [1.0], value)
+
                     else:
-                        temp[self.towers[k].idl, idt0:idt1] = np.where(value > 1.0, [1.0], value)
+                        temp[tower.idl, :] = pc_collapse[tower.idl, :]
 
                 self.damage_prob[ds] = pd.DataFrame(
                     temp.T,

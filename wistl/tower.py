@@ -2,6 +2,10 @@
 
 import numpy as np
 import pandas as pd
+import time
+import dask
+import dask.dataframe as dd
+import multiprocessing
 import os
 import logging
 import scipy.stats as stats
@@ -133,6 +137,7 @@ class Tower(object):
         # analytical method
         # dmg, dmg_time_idx, collapse_adj
         self._dmg = None
+        self._dmg1 = None
         self._dmg_time_idx = None
         self._collapse_adj = None
 
@@ -274,6 +279,33 @@ class Tower(object):
                 self._dmg.index = self.wind.index[idt0:idt1]
 
         return self._dmg
+
+    @property
+    def dmg1(self):
+        """
+        compute probability exceedance of damage of tower in isolation (Pc)
+        Note: dmg index is not identical to wind index
+        """
+        if self._dmg1 is None:
+
+            wind = dd.from_pandas(self.wind, npartitions=4*multiprocessing.cpu_count())
+            #df = self.wind1.apply(self.compute_damage_using_directional_vulnerability, axis=1)
+            df = wind.map_partitions(lambda x: x.apply(self.compute_damage_using_directional_vulnerability, axis=1)).compute(scheduler='processes')
+            # apply thresholds
+            valid = np.where(df['minor'] > self.dmg_threshold)[0]
+
+            try:
+                idt0 = min(valid)
+
+            except ValueError:
+                self.logger.debug(f'tower:{self.name} sustains no damage')
+
+            else:
+                idt1 = max(valid) + 1
+                self._dmg1 = df.iloc[idt0:idt1]
+                self._dmg1.index = self.wind.index[idt0:idt1]
+
+        return self._dmg1
 
     @property
     def dmg_state_sim(self):
@@ -510,9 +542,10 @@ class Tower(object):
             except AssertionError:
                 self.logger.error(f'Angle should be within (0, 90), but {angle} ',
                                    'when axisaz: {self.axisaz}, bearing: {bearing}')
-            # choose fragility given angle 
-            loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
-                      len(self.sorted_frag_dic_keys) - 1)
+            else:
+                # choose fragility given angle 
+                loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
+                          len(self.sorted_frag_dic_keys) - 1)
         else:
             loc = 0
 
