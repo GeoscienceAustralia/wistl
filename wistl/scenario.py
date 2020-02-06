@@ -31,7 +31,7 @@ class Scenario(object):
         self._lines = None
         self._dmg_lines = None
         self._no_lines = None
-        self._time_idx = None
+        self._dmg_time_idx = None
         self._time = None
         self._no_time = None
         # self.set_line_interaction()
@@ -60,10 +60,12 @@ class Scenario(object):
     @property
     def lines(self):
         if self._lines is None:
+
             self._lines = {}
 
             for i, name in enumerate(self.cfg.lines):
-                dic = h_line(scenario=self, name=name, seed=self.seed + i)
+
+                dic = h_line(scenario=self, name=name, seed = self.seed + i)
                 self._lines[name] = Line(**dic)
 
         return self._lines
@@ -75,17 +77,17 @@ class Scenario(object):
         return self._dmg_lines
 
     @property
-    def time_idx(self):
-        if self._time_idx is None:
-            tmp = [self.lines[k].time_idx for k in self.dmg_lines]
+    def dmg_time_idx(self):
+        if self._dmg_time_idx is None:
+            tmp = [self.lines[k].dmg_time_idx for k in self.dmg_lines]
             try:
                 id0 = list(map(min, zip(*tmp)))[0]
             except IndexError:
                 self.logger.debug(f'Scenario:{self.id} sustains no damage')
             else:
                 id1 = list(map(max, zip(*tmp)))[1]
-                self._time_idx = (id0, id1)
-        return self._time_idx
+                self._dmg_time_idx = (id0, id1)
+        return self._dmg_time_idx
 
     @property
     def time(self):
@@ -93,9 +95,9 @@ class Scenario(object):
             try:
                 key = [*self.lines][0]
                 self._time = self.lines[key].towers[0].wind.index[
-                        self.time_idx[0]:self.time_idx[1]]
+                        self.dmg_time_idx[0]:self.dmg_time_idx[1]]
             except AttributeError:
-                self.logger.error('Can not set time')
+                self.logger.error('Can not set time for Scenario:{self.id}')
         return self._time
 
     @property
@@ -136,83 +138,76 @@ class Scenario(object):
         """
         for line_name, line in self.lines.items():
 
+            dic_tf_ds = {}
             tf_ds = np.zeros((line.no_towers,
                               line.no_sims,
                               self.no_time), dtype=bool)
 
-            tf_ds_itself = np.zeros((line.no_towers,
-                                     line.no_sims,
-                                     self.no_time), dtype=bool)
-
-            for trigger, target in cfg.line_interaction.items():
+            for trigger, target in self.cfg.line_interaction.items():
 
                 if line_name in target:
 
                     try:
-                        id_tower, id_sim, id_time = zip(*lines[trigger].dmg_idx_line[line_name])
-                        #pd_id = np.vstack(
-                        #    lines[trigger].dmg_idx_line[line_name])
+                        id_tower, id_sim, id_time = zip(
+                            *self.lines[trigger].dmg_idx_interaction[line_name])
                     except ValueError:
-                        print(f'no interaction applied: from {trigger_line} to {line_name}')
+                        self.logger.info(f'no interaction applied: from {trigger} to {line_name}')
                     else:
-                        print(f'interaction applied: from {trigger_line} to {line_name}')
-                        tf_ds[id_tower, id_sim, id_time] = True
+                        dt = line.dmg_time_idx[0] - self.dmg_time_idx[0]
+                        tf_ds[id_tower, id_sim, id_time + dt] = True
+                        self.logger.info(f'interaction applied: from {trigger} to {line_name}')
 
             # append damage state by line itself
             # due to either direct wind and adjacent towers
             # also need to override non-collapse damage states
 
-            cds_list = cfg.damage_states[:]  # to avoid effect
-            cds_list.reverse()  # [collapse, minor]
-
-            tf_sim = dict()
+            if tf_ds.sum():
+                print(f'tf_ds is not empty for {line.name}')
+            else:
+                print(f'tf_ds is empty for {line.name}')
 
             # append damage state by either direct wind or adjacent towers
-            for ds in cds_list:
+            for ds in self.cfg.damage_states[::-1]:
 
-                tf_ds[line.damage_index_simulation[ds]['id_tower'],
-                      line.damage_index_simulation[ds]['id_sim'],
-                      line.damage_index_simulation[ds]['id_time']] = True
+                line.damage_prob_interaction = {}
 
-                tf_sim[ds] = np.copy(tf_ds)
+                try:
+                    id_tower, id_sim, id_time = line.dmg_idx[ds]
+                except ValueError:
+                    self.logger.info(f'no damage {ds} for {line_name}')
+                else:
+                    dt = line.dmg_time_idx[0] - self.dmg_time_idx[0]
+                    tf_ds[id_tower, id_sim, id_time + dt] = True
 
-                line.damage_prob_line_interaction[ds] = \
-                    pd.DataFrame(np.sum(tf_ds, axis=1).T / float(cfg.no_sims),
-                                 columns=line.name_by_line,
-                                 index=line.time_index)
+                    line.damage_prob_interaction[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / line.no_sims,
+                        columns=line.names, index=self.time)
 
-            # check whether collapse induced by line interaction
-            tf_ds_itself[line.damage_index_simulation['collapse']['id_tower'],
-                         line.damage_index_simulation['collapse']['id_sim'],
-                         line.damage_index_simulation['collapse']['id_time']] = True
+                    dic_tf_ds[ds] = np.copy(tf_ds)
 
-            collapse_by_interaction = np.logical_xor(tf_sim['collapse'],
-                                                     tf_ds_itself)
+                # check whether collapse induced by line interaction
+                #tf_ds_itself[id_tower, id_sim, id_time] = True
 
-            if np.any(collapse_by_interaction):
-                print(f'{line_name} is affected by line interaction')
+                #collapse_by_interaction = np.logical_xor(tf_sim['collapse'],
+                #                                         tf_ds_itself)
+
+                #if np.any(collapse_by_interaction):
+                #    print(f'{line_name} is affected by line interaction')
+
 
             # compute mean and std of no. of towers for each of damage states
-            (line.est_no_damage_line_interaction,
-                line.prob_no_damage_line_interaction) = \
-                line.compute_damage_stats(tf_sim)
-
-        return lines
+            try:
+                line.no_damage_interaction, line.prob_no_damage_interaction = line.compute_stats(dic_tf_ds)
+            except KeyError:
+                print(dic_tf_ds)
 
 def h_line(scenario, name, seed):
 
     dic = scenario.cfg.lines[name].copy()
     dic.update({'name': name,
-                'no_sims': scenario.cfg.no_sims,
-                'damage_states': scenario.cfg.damage_states,
-                'non_collapse': scenario.cfg.non_collapse,
                 'event_id': scenario.id,
                 'line_interaction': scenario.cfg.line_interaction.get(name),
                 'scale': scenario.scale,
                 'rnd_state': np.random.RandomState(seed=seed),
-                'rtol': scenario.cfg.rtol,
-                'atol': scenario.cfg.atol,
-                'dmg_threshold': scenario.cfg.dmg_threshold,
                 'path_event': scenario.path_event,
                 'path_output': scenario.path_output,
                 'dic_towers': scenario.cfg.towers_by_line[name]})

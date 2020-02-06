@@ -42,8 +42,9 @@ class Tower(object):
                   'cond_pc_adj',
                   'cond_pc_adj_sim_idx',
                   'cond_pc_adj_sim_prob',
-                  'cond_pc_line_no',
-                  'cond_pc_line_prob',
+                  'cond_pc_interaction_no',
+                  'cond_pc_interaction_prob',
+                  'cond_pc_interaction_cprob',
                   'coord',
                   'coord_lat_lon',
                   'design_level',
@@ -111,12 +112,17 @@ class Tower(object):
         self.idn = None  # tower id within network 
         self.id_adj = None
         self.max_no_adj_towers = None
-        self.target_line = None
 
         self.height_z = None
         # self.point = None
         self.terrain_cat = None  # Terrain Category
         self.scale = None
+
+        # line interaction
+        self.cond_pc_interaction_no = None
+        self.cond_pc_interaction_prob = None
+        self.cond_pc_interaction_cprob = None
+        self.target_line = None
 
         for key, value in kwargs.items():
             if key in self.registered:
@@ -147,7 +153,7 @@ class Tower(object):
         self._dmg_state_sim = None
         self._dmg_sim = None
         self._collapse_adj_sim = None
-        self._collapse_line_sim = None
+        self._collapse_interaction = None
 
         # line interaction
         # self.cond_pc_line_sim = {key: None for key in ['no_collapse',
@@ -187,16 +193,16 @@ class Tower(object):
 
     @property
     def no_time(self):
-        if self._no_time is None and self.dmg is not None:
+        if self._no_time is None and not self.dmg.empty:
             self._no_time = len(self.dmg.index)
         return self._no_time
 
     @property
     def dmg_time_idx(self):
         """
-        return starting and edning index of dmg against wind
+        return starting and edning index of dmg relative to wind time index
         """
-        if self._dmg_time_idx is None and self.dmg is not None:
+        if self._dmg_time_idx is None and not self.dmg.empty:
             idt = self.wind.index.intersection(self.dmg.index)
             idt0 = self.wind.index.get_loc(idt[0])
             idt1 = self.wind.index.get_loc(idt[-1]) + 1
@@ -207,11 +213,12 @@ class Tower(object):
     def file_wind(self):
         if self._file_wind is None:
             try:
-                self._file_wind = os.path.join(
-                    self.path_event, self.file_wind_base_name)
-            except AttributeError:
+                assert os.path.exists(self.path_event)
+            except AssertionError:
                 self.logger.error(f'Invalid path_event {self.path_event}')
             else:
+                self._file_wind = os.path.join(
+                    self.path_event, self.file_wind_base_name)
                 try:
                     assert os.path.exists(self._file_wind)
                 except AssertionError:
@@ -266,13 +273,12 @@ class Tower(object):
 
             # apply thresholds
             valid = np.where(df['minor'] > self.dmg_threshold)[0]
-
             try:
                 idt0 = min(valid)
 
             except ValueError:
-                self.logger.debug(f'tower:{self.name} sustains no damage')
-
+                self.logger.info(f'tower:{self.name} sustains no damage')
+                self._dmg = pd.DataFrame()
             else:
                 idt1 = max(valid) + 1
                 self._dmg = df.iloc[idt0:idt1]
@@ -298,7 +304,7 @@ class Tower(object):
                 idt0 = min(valid)
 
             except ValueError:
-                self.logger.debug(f'tower:{self.name} sustains no damage')
+                self.logger.debug(f'tower:{self.name} sustains no damage1')
 
             else:
                 idt1 = max(valid) + 1
@@ -315,7 +321,7 @@ class Tower(object):
         TODO: changed to for loop by no_sims and using delayed?
         """
 
-        if self._dmg_state_sim is None and self.dmg is not None:
+        if self._dmg_state_sim is None and not self.dmg.empty:
 
             self._dmg_state_sim = {}
 
@@ -329,10 +335,11 @@ class Tower(object):
 
             for ids, ds in enumerate(self.damage_states, 1):
 
+                # Note that id_time always starts from 0, irrespective of dmg_time_idx 
                 id_sim, id_time = np.where(_array == ids)
 
                 # convert to wind time index for aggregation at line level
-                id_time += self.dmg_time_idx[0]
+                #id_time += self.dmg_time_idx[0]
 
                 self._dmg_state_sim[ds] = pd.DataFrame(
                     np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
@@ -375,7 +382,7 @@ class Tower(object):
         PE not PD 1, 2 (collapse)
         """
 
-        if self._dmg_sim is None and self.dmg is not None:
+        if self._dmg_sim is None and not self.dmg.empty:
 
             self._dmg_sim = {}
 
@@ -394,7 +401,7 @@ class Tower(object):
                                                       rtol=self.rtol))
                 if len(idx_not_close):
                     idx = idx_not_close[0]
-                    self.logger.warning(f'PE of {ds} in isolation: {self._dmg_sim[ds][idx]:.3f} vs {self.dmg[ds].iloc[idx]:.3f}')
+                    self.logger.warning(f'PE of {ds}: {self._dmg_sim[ds][idx]:.3f} vs {self.dmg[ds].iloc[idx]:.3f}')
         return self._dmg_sim
 
     @property
@@ -405,7 +412,7 @@ class Tower(object):
         Pc(j,i) = P(j|i)*Pc(i)
         """
         # only applicable for tower collapse
-        if self._collapse_adj is None and self.dmg is not None:
+        if self._collapse_adj is None and not self.dmg.empty:
 
             self._collapse_adj = {}
 
@@ -423,7 +430,7 @@ class Tower(object):
         :return:
         """
 
-        if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx and self.dmg is not None:
+        if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx and not self.dmg.empty:
 
             df = self.dmg_state_sim['collapse'].copy()
 
@@ -434,26 +441,25 @@ class Tower(object):
             df['id_adj'] = (rv[:, np.newaxis] >= self.cond_pc_adj_sim_prob).sum(axis=1)
 
             # remove case with no adjacent tower collapse
+            # copy to avoid warning 
             df = df[df['id_adj'] < len(self.cond_pc_adj_sim_prob)].copy()
 
             # replace index with tower id
             df['id_adj'] = df['id_adj'].apply(lambda x: self.cond_pc_adj_sim_idx[x])
 
             # check against collapse_adj
-            for id_time, grouped in df.groupby('id_time'):
+            tmp = df.groupby(['id_time', 'id_adj']).apply(len).reset_index()
 
-                for idl in self.cond_pc_adj.keys():
+            for idl in self.cond_pc_adj.keys():
 
-                    prob = grouped['id_adj'].apply(lambda x: idl in x).sum() / self.no_sims
-                    adj_time = id_time - self.dmg_time_idx[0]
-                    idx_not_close, = np.where(~np.isclose(
-                        prob, self.collapse_adj[idl][adj_time], atol=self.atol, rtol=self.rtol))
-
-                    for idx in idx_not_close:
-                        self.logger.warning(
-                            f'Pc({idl}|{self.name}) at {id_time}: '
-                            f'simulation {prob:.3f} vs. '
-                            f'analytical {self.collapse_adj[idl][adj_time]:.3f}')
+                prob = tmp.loc[tmp['id_adj'].apply(lambda x: idl in x)].groupby('id_time').sum() / self.no_sims
+                try:
+                    np.testing.assert_allclose(prob[0], self.collapse_adj[idl], atol=self.atol, rtol=self.rtol)
+                except AssertionError:
+                    self.logger.warning(
+                            f'Pc({idl}|{self.name}): '
+                            f'simulation {prob[0].values} vs. '
+                            f'analytical {self.collapse_adj[idl]}')
 
             self._collapse_adj_sim = df.copy()
 
@@ -493,31 +499,62 @@ class Tower(object):
 
 
     @property
-    def collapse_line_sim(self):
+    def collapse_interaction(self):
         """
         determine damage to tower in target line
         :param seed: seed is None if no seed number is provided
         :return:
         """
 
-        if self._collapse_line_sim is None and self.cond_pc_line_no:
+        if self._collapse_interaction is None and not self.dmg.empty and self.cond_pc_interaction_no:
 
-            self._collapse_line_sim = self.dmg_state_sim['collapse'].copy()
+            self._collapse_interaction = self.dmg_state_sim['collapse'].copy()
 
             # generate regardless of time index
             rv = self.rnd_state.uniform(size=len(self.dmg_state_sim['collapse']['id_sim']))
 
-            self._collapse_line_sim['no_collapse'] = (
-                rv[:, np.newaxis] >= self.cond_pc_line_prob).sum(axis=1)
+            self._collapse_interaction['no_collapse'] = (
+                rv[:, np.newaxis] >= self.cond_pc_interaction_cprob).sum(axis=1)
 
             # remove case with no tower collapse
-            self._collapse_line_sim = self._collapse_line_sim.loc[
-                self._collapse_line_sim['no_collapse'] < len(self.cond_pc_line_prob)].copy()
+            self._collapse_interaction = self._collapse_interaction.loc[
+                self._collapse_interaction['no_collapse'] < len(self.cond_pc_interaction_cprob)].copy()
 
             # replace index with no_collapse
-            self._collapse_line_sim['no_collapse'] = self._collapse_line_sim['no_collapse'].apply(lambda x: self.cond_pc_line_no[x])
+            self._collapse_interaction['no_collapse'] = self._collapse_interaction['no_collapse'].apply(lambda x: self.cond_pc_interaction_no[x])
 
-        return self._collapse_line_sim
+            # check simulation vs. 
+            df = self._collapse_interaction.groupby(['id_time', 'no_collapse']).apply(len).reset_index()
+            for _, row in df.iterrows():
+                analytical = self.dmg['collapse'].iloc[row['id_time']] * self.cond_pc_interaction_prob[row['no_collapse']]
+                simulation = row[0] / self.no_sims
+                try:
+                    np.testing.assert_allclose(analytical, simulation, atol=self.atol, rtol=self.rtol)
+                except AssertionError:
+                    self.logger.warning(
+                            f'Pc_interaction({self.name}): '
+                            f'simulation {simulation} vs. '
+                            f'analytical {analytical}')
+
+        return self._collapse_interaction
+
+    def init(self):
+        """
+        init properties
+        """
+
+        self._no_time = None
+        self._dmg_time_idx = None
+        self._file_wind = None
+        self._wind = None
+        self._dmg = None
+        self._dmg_state_sim = None
+        self._dmg_sim = None
+        self._collapse_adj = None
+        self._collapse_adj_sim = None
+        self._collapse_interaction = None
+
+        self.logger.debug(f'{self.name} is initialized')
 
     def get_directional_vulnerability(self, bearing):
         """
@@ -537,15 +574,15 @@ class Tower(object):
         if len(self.sorted_frag_dic_keys) > 1:
 
             angle = angle_between_two(bearing, self.axisaz)
-            try:
-                assert (angle <= 90) & (angle >= 0)
-            except AssertionError:
-                self.logger.error(f'Angle should be within (0, 90), but {angle} ',
-                                   'when axisaz: {self.axisaz}, bearing: {bearing}')
-            else:
-                # choose fragility given angle 
-                loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
-                          len(self.sorted_frag_dic_keys) - 1)
+            #try:
+            #    assert (angle <= 90) & (angle >= 0)
+            #except AssertionError:
+            #    self.logger.error(f'Angle should be within (0, 90), but {angle} ',
+            #                       'when axisaz: {self.axisaz}, bearing: {bearing}')
+            #else:
+            # choose fragility given angle 
+            loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
+                      len(self.sorted_frag_dic_keys) - 1)
         else:
             loc = 0
 

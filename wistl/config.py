@@ -24,11 +24,11 @@ OPTIONS = ['run_parallel', 'save_output', 'save_figure',
 DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
 GIS_DATA = ['shape_tower', 'shape_line']
 FORMAT = ['wind_file', 'event_id']
-INPUT_FILES = ['design_value', 'fragility_metadata', 'drag_height_by_type',
+INPUT_FILES = ['design_value_by_line', 'fragility_metadata', 'drag_height_by_type',
                'cond_prob_metadata',
                'terrain_multiplier', 'topographic_multiplier',
                'design_adjustment_factor_by_topography',
-               'cond_prob_line_metadata']
+               'cond_prob_interaction_metadata']
 
 #FRAGILITY_ATT = ['section', 'limit_states', 'form', 'param1', 'param2']
 
@@ -69,8 +69,8 @@ class Config(object):
         self._design_adjustment_factor_by_topography = None
 
         # cond prob wrt line_interaction
-        self._cond_prob_line = None
-        self._cond_prob_line_metadata = None
+        self._cond_prob_interaction = None
+        self._cond_prob_interaction_metadata = None
 
         self._fragility_metadata = None
         self._fragility = None   # pandas.DataFrame
@@ -130,7 +130,7 @@ class Config(object):
                     self.file_topographic_multiplier)
             else:
                 msg = f'{self.file_topographic_multiplier} not found'
-                self.logger.error(msg)
+                self.logger.critical(msg)
 
         return self._topographic_multiplier
 
@@ -148,7 +148,7 @@ class Config(object):
                         self.file_design_adjustment_factor_by_topography)
             else:
                 msg = f'{self.file_design_adjustment_factor_by_topography} not found'
-                self.logger.error(msg)
+                self.logger.critical(msg)
 
         return self._design_adjustment_factor_by_topography
 
@@ -172,10 +172,10 @@ class Config(object):
         """read design values by line
         """
         if self._design_value_by_line is None:
-            if os.path.exists(self.file_design_value):
-                self._design_value_by_line = h_design_value_by_line(self.file_design_value)
+            if os.path.exists(self.file_design_value_by_line):
+                self._design_value_by_line = h_design_value_by_line(self.file_design_value_by_line)
             else:
-                msg = f'{self.file_design_value} not found'
+                msg = f'{self.file_design_value_by_line} not found'
                 self.logger.critical(msg)
 
         return self._design_value_by_line
@@ -257,32 +257,32 @@ class Config(object):
         return self._cond_prob
 
     @property
-    def cond_prob_line_metadata(self):
+    def cond_prob_interaction_metadata(self):
         """
         read conditional line interaction probability
         """
-        if self.options['apply_line_interaction'] and self._cond_prob_line_metadata is None:
+        if self.options['apply_line_interaction'] and self._cond_prob_interaction_metadata is None:
 
-            if not os.path.exists(self.file_cond_prob_line_metadata):
-                msg = f'{self.file_cond_prob_line_metadata} not found'
+            if not os.path.exists(self.file_cond_prob_interaction_metadata):
+                msg = f'{self.file_cond_prob_interaction_metadata} not found'
                 self.logger.critical(msg)
             else:
-                self._cond_prob_line_metadata = read_yml_file(
-                        self.file_cond_prob_line_metadata)
+                self._cond_prob_interaction_metadata = read_yml_file(
+                        self.file_cond_prob_interaction_metadata)
 
-        return self._cond_prob_line_metadata
+        return self._cond_prob_interaction_metadata
 
     @property
-    def cond_prob_line(self):
+    def cond_prob_interaction(self):
 
-        if self._cond_prob_line is None and self.cond_prob_line_metadata:
+        if self._cond_prob_interaction is None and self.cond_prob_interaction_metadata:
 
-            _file = os.path.join(self.cond_prob_line_metadata['path'],
-                                 self.cond_prob_line_metadata['file'])
+            _file = os.path.join(self.cond_prob_interaction_metadata['path'],
+                                 self.cond_prob_interaction_metadata['file'])
             with open(_file, 'r') as ymlfile:
-                self._cond_prob_line = yaml.load(ymlfile, Loader=yaml.FullLoader)
+                self._cond_prob_interaction = yaml.load(ymlfile, Loader=yaml.FullLoader)
 
-        return self._cond_prob_line
+        return self._cond_prob_interaction
 
     @property
     def no_towers_by_line(self):
@@ -428,7 +428,14 @@ class Config(object):
                 setattr(self, f'file_{item}',
                         os.path.join(self.path_input, conf.get(key, item)))
             except configparser.NoOptionError:
-                self.logger.warning(f'{item} is not set in [{key}] in {self.file_cfg}')
+                if item == 'cond_prob_interaction_metadata':
+                    if self.options['apply_line_interaction']:
+                        self.logger.warning(f'{item} is not seg in [{key}] in {self.file_cfg}')
+                elif 'topograph' in item:
+                    if self.options['adjust_design_by_topography']:
+                        self.logger.warning(f'{item} is not set in [{key}] in {self.file_cfg}')
+                else:
+                    self.logger.warning(f'{item} is not set in [{key}] in {self.file_cfg}')
 
         # line_interaction
         self.read_line_interaction(conf)
@@ -471,6 +478,15 @@ class Config(object):
         for line_name, line in self.lines.items():
             line.update(self.sort_by_location(line=line, line_name=line_name))
 
+            # no_sims, damage_states, rtol, atol, dmg_threshold
+            line.update({'no_sims': self.no_sims,
+                         'damage_states': self.damage_states,
+                         'non_collapse': self.non_collapse,
+                         'rtol': self.rtol,
+                         'atol': self.atol,
+                         'dmg_threshold': self.dmg_threshold,
+                        })
+
         # actual_span, collapse_capacity
         for line_name, grp in self.towers_by_line.items():
 
@@ -480,16 +496,13 @@ class Config(object):
                 tower.update(self.assign_collapse_capacity(tower=tower))
 
                 # cond_pc, max_no_adj_towers
-                tower.update(self.assign_cond_prob(tower=tower))
+                tower.update(self.assign_cond_pc(tower=tower))
 
                 # idl, id_adj
                 tower.update(self.assign_id_adj_towers(tower=tower))
 
                 # cond_pc_adj, cond_pc_adj_sim_idx, cond_pc_adj_sim_prob
                 tower.update(assign_cond_pc_adj(tower=tower))
-
-                # cond_pc_line, cond_pc_line_prob
-                tower.update(self.assign_cond_prob_line(tower=tower))
 
         if self.options['apply_line_interaction']:
             # target_line
@@ -558,10 +571,10 @@ class Config(object):
 
             # check completeness
             if selected_lines:
-                msg = f'No line interact info provided for {selected_lines}'
+                msg = f'missing line_interactation for {selected_lines}'
                 self.logger.error(msg)
 
-    def assign_cond_prob(self, tower):
+    def assign_cond_pc(self, tower):
         """ get dict of conditional collapse probabilities
         :return: cond_pc, max_no_adj_towers
         """
@@ -573,21 +586,23 @@ class Config(object):
         max_no_adj_towers = sorted(cond_pc.keys(), key=lambda x: len(x))[-1][-1]
         return {'cond_pc': cond_pc, 'max_no_adj_towers': max_no_adj_towers}
 
-    def assign_cond_prob_line(self, tower):
+    def assign_cond_pc_interaction(self, tower):
         """ get dict of conditional probabilities due to line interaction
         :return: cond_pc, max_no_adj_towers
         """
         try:
             cond_pc = get_value_given_conditions(
-                    self.cond_prob_line_metadata['probability'],
-                    self.cond_prob_line, tower)
+                    self.cond_prob_interaction_metadata['probability'],
+                    self.cond_prob_interaction, tower)
         except TypeError:
-            return {'cond_pc_line_no': None,
-                    'cond_pc_line_prob': None}
+            return {'cond_pc_interaction_no': None,
+                    'cond_pc_interaction_cprob': None,
+                    'cond_pc_interaction_prob': None}
         else:
             tmp = [(k, v) for k, v in cond_pc.items()]
-            return {'cond_pc_line_no': [x[0] for x in tmp],
-                    'cond_pc_line_prob': np.cumsum([x[1] for x in tmp])}
+            return {'cond_pc_interaction_no': [x[0] for x in tmp],
+                    'cond_pc_interaction_cprob': np.cumsum([x[1] for x in tmp]),
+                    'cond_pc_interaction_prob': {x[0]:x[1] for x in tmp}}
 
     def ratio_z_to_10(self, tower):
         """
@@ -676,7 +691,13 @@ class Config(object):
 
         for line_name, line in self.lines.items():
 
+            line['target_no_towers'] = {x: self.lines[x]['no_towers']
+                                        for x in self.line_interaction[line_name]}
+
             for _, tower in self.towers_by_line[line_name].items():
+
+                # cond_pc_interaction, cond_pc_interaction_prob
+                tower.update(self.assign_cond_pc_interaction(tower=tower))
 
                 target_line = {}
 

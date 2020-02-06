@@ -28,7 +28,8 @@ class TestTransmission(unittest.TestCase):
         cls.cfg.save = False
         cls.cfg.figure = False
 
-        cls.lines = run_simulation(cls.cfg)
+        with cls.assertLogs('wistl', level='INFO') as cm:
+            cls.lines = run_simulation(cls.cfg)
         # if cls.cfg.parallel:
         #     cls.damaged_networks, cls.damaged_lines = \
         #         sim_towers(cls.cfg)

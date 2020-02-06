@@ -4,6 +4,7 @@ __author__ = 'Hyeuk Ryu'
 
 import unittest
 import logging
+import copy
 import pandas as pd
 import os
 import tempfile
@@ -23,8 +24,15 @@ PM_THRESHOLD = 1.0e-3
 
 def create_wind_given_bearing(bearing, ratio):
 
-    df = pd.DataFrame([[ratio, bearing], [ratio, bearing]], columns=['ratio', 'Bearing'])
-    df['time'] = pd.date_range(start='01/01/2011', end='01/02/2011', freq='D')
+    if isinstance(bearing, list):
+        assert len(bearing) == len(ratio)
+        df = pd.DataFrame(np.array([ratio, bearing]).T, columns=['ratio', 'Bearing'])
+        nperiods = len(bearing)
+    else:
+        df = pd.DataFrame([[ratio, bearing], [ratio, bearing]], columns=['ratio', 'Bearing'])
+        nperiods = 2
+
+    df['time'] = pd.date_range(start='01/01/2011', periods=nperiods, freq='D')
     df.set_index('time', inplace=True)
 
     return df
@@ -132,6 +140,91 @@ class TestTower1(unittest.TestCase):
         # cls.tower.compute_dmg_isolated_isolation()
         #cls.tower.compute_pc_adj()
 
+    def test_repr(self):
+        expected = 'Tower(name=T14, function=Suspension, idl=13, idn=0)'
+        self.assertEqual(repr(self.tower), expected)
+
+    def test_logger_file_wind1(self):
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            self.tower._file_wind = None
+            self.tower.path_event = 'dummy_path'
+            #self.tower.file_wind_base_name = 'dummy'
+            self.tower.file_wind
+        msg = f'Invalid path_event dummy_path'
+        self.assertIn(f'ERROR:wistl.tower:{msg}', cm.output)
+
+    def test_logger_file_wind2(self):
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            self.tower._file_wind = None
+            self.tower.path_event = BASE_DIR
+            self.tower.file_wind_base_name = 'dummy'
+            self.tower.file_wind
+        msg = f'Invalid file_wind {BASE_DIR}/dummy'
+        self.assertIn(f'ERROR:wistl.tower:{msg}', cm.output)
+
+    def test_logger_wind(self):
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            self.tower._wind = None
+            self.tower._file_wind = 'dummy'
+            self.tower.wind
+        msg = f'Invalid file_wind dummy'
+        self.assertIn(f'CRITICAL:wistl.tower:{msg}', cm.output)
+
+    def test_logger_init(self):
+
+        with self.assertLogs('wistl.tower', level='DEBUG') as cm:
+            self.tower.init()
+        msg = f'{self.tower.name} is initialized'
+        self.assertIn(f'DEBUG:wistl.tower:{msg}', cm.output)
+
+    def test_logger_dmg_sim(self):
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+
+            tower_dic = self.tower_dic.copy()
+            tower = Tower(**tower_dic)
+            tower.init()
+            tower.no_sims = 10
+            # 1. determine damage state of tower due to wind
+            tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
+            tower.dmg_sim
+
+        msg = 'WARNING:wistl.tower'
+        self.assertEqual(msg, ':'.join(cm.output[0].split(':')[:2]))
+
+    def test_logger_collapse_adj_sim(self):
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            # tower14 (idl: 13,
+            tower_dic = self.tower_dic.copy()
+            tower = Tower(**tower_dic)
+            tower.init()
+            tower.no_sims = 10
+            tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
+            tower.collapse_adj_sim
+
+        msg = 'WARNING:wistl.tower'
+        self.assertEqual(msg, ':'.join(cm.output[0].split(':')[:2]))
+
+    def test_logger_collapse_interaction(self):
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            tower_dic = self.tower_dic.copy()
+            tower_dic.update({'axisaz': 91, 'no_sims': 50, 'cond_pc_interaction_no': [1, 3, 5, 7],
+                              'cond_pc_interaction_cprob': [0.2, 0.3, 0.31, 0.311],
+                              'cond_pc_interaction_prob': {1:0.2, 3:0.1, 5:0.01, 7:0.001}})
+            tower = Tower(**tower_dic)
+            tower.init()
+            prob_dic = {1: 0.2, 3: 0.1, 5: 0.01, 7: 0.001}
+            tower._wind = create_wind_given_bearing(130.0, 1.072)
+            tower.collapse_interaction
+
+        msg = f'WARNING:wistl.tower:Pc_interaction({tower.name})'
+        self.assertEqual(msg, ':'.join(cm.output[0].split(':')[:3]))
+
     def test_damage_states(self):
 
         self.assertEqual(self.tower.damage_states, ['minor', 'collapse'])
@@ -139,19 +232,15 @@ class TestTower1(unittest.TestCase):
     def test_no_time(self):
 
         file_wind = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
-
         # read file_wind
         file_wind.writelines([
         'Time,Longitude,Latitude,Speed,UU,VV,Bearing,Pressure\n',
-        '2014-07-13 09:00,120.79,13.93,3.68,-0.18,-5.6,1.84,100780.97\n',
-        '2014-07-13 09:05,120.80,13.93,3.68,-0.18,-5.6,1.89,100780.92\n'
+        '2014-07-13 09:00,120.79,13.93,68.8,-0.18,-5.6,130.84,100780.97\n',
+        '2014-07-13 09:05,120.80,13.93,68.8,-0.18,-5.6,130.89,100780.92\n'
         ])
-
         file_wind.seek(0)
-
+        self.tower.init()
         self.tower._file_wind = file_wind.name
-
-        self.tower._wind = None
         self.assertEqual(self.tower.no_time, 2)
 
         os.unlink(file_wind.name)
@@ -346,11 +435,8 @@ class TestTower1(unittest.TestCase):
     def test_dmg_sim(self):
 
         # 1. determine damage state of tower due to wind
+        self.tower.init()
         self.tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
-        self.tower._dmg = None
-        self.tower._dmg_state_sim = None
-        self.tower._dmg_sim = None
-
         self.assertAlmostEqual(self.tower.dmg['collapse'].values[0],
                                stats.lognorm.cdf(1.0712, 0.02, scale=1.05), places=2)
         self.assertAlmostEqual(self.tower.dmg['minor'].values[0],
@@ -359,10 +445,8 @@ class TestTower1(unittest.TestCase):
 
     def test_dmg_state_sim_old(self):
 
+        self.tower.init()
         self.tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
-        self.tower._dmg = None
-        self.tower._dmg_state_sim = None
-        self.tower._dmg_sim = None
 
         rv = stats.uniform.rvs(size=(self.tower.no_sims, self.tower.no_time))
 
@@ -391,12 +475,10 @@ class TestTower1(unittest.TestCase):
         df['time'] = pd.date_range(start='01/01/2011', end='01/04/2011', freq='D')
         df.set_index('time', inplace=True)
 
+        self.tower.init()
         self.tower._wind = df
-        self.tower._dmg = None
-        self.tower._dmg_time_idx = None
         # checking index
         self.assertEqual((1,4), self.tower.dmg_time_idx)
-
 
     def test_compare_dmg_with_dmg_sim(self):
 
@@ -413,58 +495,50 @@ class TestTower1(unittest.TestCase):
                 self.logger.warning(f'PE of {ds}: '
                                     f'simulation {prob_sim:.3f} vs. '
                                     f'analytical {self.tower.dmg[ds].values[1]:.3f}')
-    @unittest.skip("skipping ATM")
+    #@unittest.skip("skipping ATM")
     def test_dmg_state_sim(self):
 
-        self.tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
-        self.tower._dmg = None
-
         rv = np.array([[0, 0], [1, 1], [0.5, 0.9]])   # no_sims, no_time
-        np.testing.assert_allclose(self.tower.dmg.values,
-                                   np.array([[0.9928, 0.8412],
-                                             [0.9928, 0.8412]]),
-                                   rtol=1.e-4)  # minor, collapse
-        self.tower._dmg_state_sim = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
+        dmg = pd.DataFrame(np.array([[0.9928, 0.8412],
+                                     [0.9928, 0.8412]]), columns=['minor', 'collapse'])
+        _array = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
 
-        np.testing.assert_equal(self.tower._dmg_state_sim, np.array([[2, 2], [0, 0], [2, 1]]))
+        np.testing.assert_equal(_array, np.array([[2, 2], [0, 0], [2, 1]]))
 
-        np.testing.assert_equal(self.tower.dmg_state_sim['minor']['id_sim'].values, np.array([2]))
-        np.testing.assert_equal(self.tower.dmg_state_sim['minor']['id_time'].values, np.array([1]))
+        dmg_state_sim = {}
+        for ids, ds in enumerate(self.tower.damage_states, 1):
+            id_sim, id_time = np.where(_array == ids)
+            dmg_state_sim[ds] = pd.DataFrame(np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
 
-        np.testing.assert_equal(self.tower.dmg_state_sim['collapse']['id_sim'].values, np.array([0, 0, 2]))
-        np.testing.assert_equal(self.tower.dmg_state_sim['collapse']['id_time'].values, np.array([0, 1, 0]))
+        np.testing.assert_equal(dmg_state_sim['minor']['id_sim'].values, np.array([2]))
+        np.testing.assert_equal(dmg_state_sim['minor']['id_time'].values, np.array([1]))
 
-    @unittest.skip("skip ATM")
+        np.testing.assert_equal(dmg_state_sim['collapse']['id_sim'].values, np.array([0, 0, 2]))
+        np.testing.assert_equal(dmg_state_sim['collapse']['id_time'].values, np.array([0, 1, 0]))
+
+    #@unittest.skip("skip ATM")
     def test_dmg_state_sim_threshold(self):
-
-        # 1.05*np.exp(0.02)
-        df = pd.DataFrame([[0.1, 130.0], [1.0712, 130.0], [0.1, 130.0], [1.0712, 130.0]], columns=['ratio', 'Bearing'])
-        df['time'] = pd.date_range(start='01/01/2011', end='01/04/2011', freq='D')
-        df.set_index('time', inplace=True)
-
-        self.tower._wind = df
-        self.tower._dmg = None
-        self.tower._dmg_time_idx = None
-        self.tower._dmg_state_sim = None
 
         rv = np.array([[0.9, 0.5, 0],
                       [0.1, 0.5, 0.9],
                       [0.5, 0.9, 0.7]])   # no_sims, no_time
-        np.testing.assert_allclose(self.tower.dmg.values,
-                                   np.array([[0.9928, 0.8412],
-                                             [0.0, 0.0],
-                                             [0.9928, 0.8412]]),
-                                   rtol=1.e-4)  # minor, collapse
-        #self.tower._dmg_state_sim = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
+        dmg = pd.DataFrame(np.array([[0.9928, 0.8412],
+                                     [0.0, 0.0],
+                                     [0.9928, 0.8412]]), columns=['minor', 'collapse'])
+        _array = (rv[:, :, np.newaxis] < dmg.values).sum(axis=2)
 
-        #np.testing.assert_equal(self.tower._dmg_state_sim,
-        #    np.array([[1, 0, 2], [2, 0, 1], [2, 0, 2]]))  # no_sims, no_time
+        np.testing.assert_equal(_array, np.array([[1, 0, 2], [2, 0, 1], [2, 0, 2]]))  # no_sims, no_time
 
-        np.testing.assert_equal(self.tower.dmg_state_sim['minor']['id_sim'].values, np.array([0, 1]))
-        np.testing.assert_equal(self.tower.dmg_state_sim['minor']['id_time'].values, np.array([1, 3]))
+        dmg_state_sim = {}
+        for ids, ds in enumerate(self.tower.damage_states, 1):
+            id_sim, id_time = np.where(_array == ids)
+            dmg_state_sim[ds] = pd.DataFrame(np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
 
-        np.testing.assert_equal(self.tower.dmg_state_sim['collapse']['id_sim'].values, np.array([0, 1, 2, 2]))
-        np.testing.assert_equal(self.tower.dmg_state_sim['collapse']['id_time'].values, np.array([3, 1, 1, 3]))
+        np.testing.assert_equal(dmg_state_sim['minor']['id_sim'].values, np.array([0, 1]))
+        np.testing.assert_equal(dmg_state_sim['minor']['id_time'].values, np.array([0, 2]))
+
+        np.testing.assert_equal(dmg_state_sim['collapse']['id_sim'].values, np.array([0, 1, 2, 2]))
+        np.testing.assert_equal(dmg_state_sim['collapse']['id_time'].values, np.array([2, 0, 0, 2]))
 
 
     def test_collapse_adj_sim(self):
@@ -472,121 +546,33 @@ class TestTower1(unittest.TestCase):
         # tower14 (idl: 13,
         tower_dic = self.tower_dic.copy()
         tower_dic.update({'axisaz': 90,
-                          'no_sims': 10000})
+                          'no_sims': 6000})
 
         tower = Tower(**tower_dic)
+        tower.init()
+        tower._wind = create_wind_given_bearing([130, 130, 120, 130],[0.0712, 1.0712, 1.0712, 0.0712])  # 1.05*np.exp(0.02)
+        df = tower.collapse_adj_sim.groupby(['id_time','id_adj']).apply(len).reset_index()
+        for idl in tower.cond_pc_adj.keys():
+            x = df.loc[df['id_adj'].apply(lambda x: idl in x)].groupby('id_time').sum()/tower.no_sims
+            np.testing.assert_allclose(x[0].values, tower.collapse_adj[idl], atol=ATOL, rtol=RTOL)
 
-        tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
-        tower._dmg = None
-        tower._dmg_state_sim = None
-        tower._dmg_sim = None
-        tower._collapse_adj = None
-        tower._collapse_adj_sim = None
+    def test_collapse_interaction(self):
 
-        tower.collapse_adj_sim
-
-
-class TestTower3(unittest.TestCase):
-    # suspension tower neighboring strainer
-    @classmethod
-    def setUpClass(cls):
-
-        cls.logger = logging.getLogger(__name__)
-
-        frag_dic = {11.5: {'minor': ['lognorm', '1.02', '0.02'],
-                           'collapse': ['lognorm', '1.05', '0.02']},
-                    28.75: {'minor': ['lognorm', '1.0', '0.02'],
-                            'collapse': ['lognorm', '1.02', '0.02']},
-                    41.25: {'minor': ['lognorm', '1.04', '0.02'],
-                            'collapse': ['lognorm', '1.07', '0.02']},
-                    90: {'minor': ['lognorm', '-1.05', '0.02'],
-                         'collapse': ['lognorm', '-1.05', '0.02']},
-                    }
-
-        cond_pc = {
-            (0, 1): 0.075,
-            (-1, 0): 0.075,
-            (-1, 0, 1): 0.35,
-            (-1, 0, 1, 2): 0.025,
-            (-2, -1, 0, 1): 0.025,
-            (-2, -1, 0, 1, 2): 0.1}
-
-        cond_pc_adj = {
-            11: 0.575,
-            12: 0.125}
-
-        cond_pc_adj_sim_idx = [(11, 12,), (11, )]
-
-        cond_pc_adj_sim_prob = np.array([0.125, 0.575 ])
-
-        cls.tower_dic = {
-            'type': 'Lattice Tower',
-            'name': 'T33',
-            'latitude': 0.0,
-            'longitude': 149.0,
-            'comment': 'Test',
-            'function': 'Suspension',
-            'devangle': 0,
-            'axisaz': 134,
-            'constcost': 0.0,
-            'height': 17.0,
-            'yrbuilt': 1980,
-            'locsource': 'Fake',
-            'lineroute': 'LineB',
-            #'shapes': <shapefile.Shape object at 0x7ff06908ec50>,
-            'coord': np.array([149.065,   0.   ]),
-            'coord_lat_lon': np.array([  0.   , 149.065]),
-            #'point': <shapely.geometry.point.Point object at 0x7ff06908e320>,
-            'design_span': 400.0,
-            'design_level': 'low',
-            'design_speed': 75.0,
-            'terrain_cat': 2,
-            'file_wind_base_name': 'ts.T33.csv',
-            'height_z': 15.4,
-            'ratio_z_to_10': 1.0524,
-            'actual_span': 556.5974539658616,
-            'u_factor': 1.0,
-            'collapse_capacity': 75.0,
-            'cond_pc': cond_pc,
-            'max_no_adj_towers': 2,
-            'id_adj': [8, -1, 10, 11, 12],
-            'idl': 10,
-            'idn': 33,
-            'cond_pc_adj': cond_pc_adj,
-            'cond_pc_adj_sim_idx': cond_pc_adj_sim_idx,
-            'cond_pc_adj_sim_prob': cond_pc_adj_sim_prob,
-            'no_sims': 1000,
-            'damage_states': ['minor', 'collapse'],
-            'non_collapse': ['minor'],
-            'rnd_state': np.random.RandomState(1),
-            'event_id': 0,
-            'rtol': RTOL,
-            'atol': ATOL,
-            'dmg_threshold': PM_THRESHOLD,
-            'scale': 1.0,
-            'frag_dic': frag_dic,
-            'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),
-            }
-
-        cls.tower = Tower(**cls.tower_dic)
-
-    def test_collapse_adj_sim(self):
-
-        # tower14 (idl: 13,
         tower_dic = self.tower_dic.copy()
-        tower_dic.update({'axisaz': 90,
-                          'no_sims': 5000})
-
+        tower_dic.update({'axisaz': 91, 'no_sims': 5000, 'cond_pc_interaction_no': [1, 3, 5, 7],
+                          'cond_pc_interaction_cprob': [0.2, 0.3, 0.31, 0.311],
+                          'cond_pc_interaction_prob': {1:0.2, 3:0.1, 5:0.01, 7:0.001}})
         tower = Tower(**tower_dic)
+        tower.init()
+        tower._wind = create_wind_given_bearing(130.0, 1.072)
 
-        tower._wind = create_wind_given_bearing(130.0, 1.0712)  # 1.05*np.exp(0.02)
-        tower._dmg = None
-        tower._dmg_state_sim = None
-        tower._dmg_sim = None
-        tower._collapse_adj = None
-        tower._collapse_adj_sim = None
+        #tower.collapse_interaction
+        x = tower.collapse_interaction.groupby(['id_time', 'no_collapse']).apply(len).reset_index()
+        for _, row in x.iterrows():
+            expected = tower.dmg['collapse'].iloc[row['id_time']] * tower.cond_pc_interaction_prob[row['no_collapse']]
+            result = row[0] / tower.no_sims
+            np.testing.assert_allclose(expected, result, atol=ATOL, rtol=RTOL)
 
-        tower.collapse_adj_sim
 
 
 
@@ -751,7 +737,9 @@ class TestTower2(unittest.TestCase):
         key = self.tower.get_directional_vulnerability(bearing)
         self.assertEqual(key, 180)
         self.tower._dmg = None
-        self.assertEqual(self.tower.dmg, None)
+
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            self.assertTrue(self.tower.dmg.empty)
         #self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'minor'],
         #                 stats.lognorm.cdf(1.02, 0.032, scale=1.143))
         #self.assertAlmostEqual(self.tower.dmg.loc['01/01/2011', 'collapse'],
@@ -809,10 +797,8 @@ class TestTower2(unittest.TestCase):
 
     def test_dmg_state_sim_old(self):
 
+        self.tower.init()
         self.tower._wind = create_wind_given_bearing(130.0, 1.22816)  # 1.18*np.exp(0.04)
-        self.tower._dmg = None
-        self.tower._dmg_state_sim = None
-        self.tower._dmg_sim = None
 
         rv = stats.uniform.rvs(size=(self.tower.no_sims, self.tower.no_time))
 
@@ -841,8 +827,9 @@ class TestTower2(unittest.TestCase):
 
     def test_dmg_state_sim(self):
 
+        self.tower.init()
         self.tower._wind = create_wind_given_bearing(130.0, 1.22816)  # 1.18*np.exp(0.04)
-        self.tower._dmg = None
+
         np.testing.assert_allclose(self.tower.dmg.values,
                                    np.array([[0.987637, 0.841361],
                                              [0.987637, 0.841361]]),
@@ -850,29 +837,27 @@ class TestTower2(unittest.TestCase):
         #self.tower._dmg_state_sim = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
 
         #np.testing.assert_equal(self.tower._dmg_state_sim, np.array([[2, 2], [0, 0], [2, 1]]))
-        self.tower._dmg_state_sim = None
         self.tower.dmg_state_sim
 
-
-    @unittest.skip("skipping ATM")
     def test_dmg_state_sim2(self):
 
-        self.tower._wind = create_wind_given_bearing(130.0, 1.22816)  # 1.18*np.exp(0.04)
-        self.tower._dmg = None
         rv = np.array([[0, 0], [1, 1], [0.5, 0.9]])   # no_sims, no_time
-        np.testing.assert_allclose(self.tower.dmg.values,
-                                   np.array([[0.987637, 0.841361],
-                                             [0.987637, 0.841361]]),
-                                   rtol=1.e-4)  # minor, collapse
-        #self.tower._dmg_state_sim = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
+        dmg = pd.DataFrame(np.array([[0.987637, 0.841361],
+                                    [0.987637, 0.841361]]), columns=['minor', 'collapse'])
+        _array = (rv[:, :, np.newaxis] < self.tower.dmg.values).sum(axis=2)
 
-        #np.testing.assert_equal(self.tower._dmg_state_sim, np.array([[2, 2], [0, 0], [2, 1]]))
+        np.testing.assert_equal(_array, np.array([[2, 2], [0, 0], [2, 1]]))
 
-        np.testing.assert_equal(self.tower.dmg_state_sim['minor']['id_sim'].values, np.array([2]))
-        np.testing.assert_equal(self.tower.dmg_state_sim['minor']['id_time'].values, np.array([1]))
+        dmg_state_sim = {}
+        for ids, ds in enumerate(self.tower.damage_states, 1):
+            id_sim, id_time = np.where(_array == ids)
+            dmg_state_sim[ds] = pd.DataFrame(np.vstack((id_sim, id_time)).T, columns=['id_sim', 'id_time'])
 
-        np.testing.assert_equal(self.tower.dmg_state_sim['collapse']['id_sim'].values, np.array([0, 0, 2]))
-        np.testing.assert_equal(self.tower.dmg_state_sim['collapse']['id_time'].values, np.array([0, 1, 0]))
+        np.testing.assert_equal(dmg_state_sim['minor']['id_sim'].values, np.array([2]))
+        np.testing.assert_equal(dmg_state_sim['minor']['id_time'].values, np.array([1]))
+
+        np.testing.assert_equal(dmg_state_sim['collapse']['id_sim'].values, np.array([0, 0, 2]))
+        np.testing.assert_equal(dmg_state_sim['collapse']['id_time'].values, np.array([0, 1, 0]))
 
 
     def test_collapse_adj_sim(self):
@@ -884,16 +869,109 @@ class TestTower2(unittest.TestCase):
                           'function': 'strainer'})
 
         tower = Tower(**tower_dic)
-
+        tower.init()
         tower._wind = create_wind_given_bearing(130.0, 1.2282)  # 1.18*np.exp(0.04)
-        tower._dmg = None
-        tower._dmg_state_sim = None
-        tower._dmg_sim = None
-        tower._collapse_adj = None
-        tower._collapse_adj_sim = None
-
         tower.collapse_adj_sim
 
+
+class TestTower3(unittest.TestCase):
+    # suspension tower neighboring strainer
+    @classmethod
+    def setUpClass(cls):
+
+        cls.logger = logging.getLogger(__name__)
+
+        frag_dic = {11.5: {'minor': ['lognorm', '1.02', '0.02'],
+                           'collapse': ['lognorm', '1.05', '0.02']},
+                    28.75: {'minor': ['lognorm', '1.0', '0.02'],
+                            'collapse': ['lognorm', '1.02', '0.02']},
+                    41.25: {'minor': ['lognorm', '1.04', '0.02'],
+                            'collapse': ['lognorm', '1.07', '0.02']},
+                    90: {'minor': ['lognorm', '-1.05', '0.02'],
+                         'collapse': ['lognorm', '-1.05', '0.02']},
+                    }
+
+        cond_pc = {
+            (0, 1): 0.075,
+            (-1, 0): 0.075,
+            (-1, 0, 1): 0.35,
+            (-1, 0, 1, 2): 0.025,
+            (-2, -1, 0, 1): 0.025,
+            (-2, -1, 0, 1, 2): 0.1}
+
+        cond_pc_adj = {
+            11: 0.575,
+            12: 0.125}
+
+        cond_pc_adj_sim_idx = [(11, 12,), (11, )]
+
+        cond_pc_adj_sim_prob = np.array([0.125, 0.575 ])
+
+        cls.tower_dic = {
+            'type': 'Lattice Tower',
+            'name': 'T33',
+            'latitude': 0.0,
+            'longitude': 149.0,
+            'comment': 'Test',
+            'function': 'Suspension',
+            'devangle': 0,
+            'axisaz': 134,
+            'constcost': 0.0,
+            'height': 17.0,
+            'yrbuilt': 1980,
+            'locsource': 'Fake',
+            'lineroute': 'LineB',
+            #'shapes': <shapefile.Shape object at 0x7ff06908ec50>,
+            'coord': np.array([149.065,   0.   ]),
+            'coord_lat_lon': np.array([  0.   , 149.065]),
+            #'point': <shapely.geometry.point.Point object at 0x7ff06908e320>,
+            'design_span': 400.0,
+            'design_level': 'low',
+            'design_speed': 75.0,
+            'terrain_cat': 2,
+            'file_wind_base_name': 'ts.T33.csv',
+            'height_z': 15.4,
+            'ratio_z_to_10': 1.0524,
+            'actual_span': 556.5974539658616,
+            'u_factor': 1.0,
+            'collapse_capacity': 75.0,
+            'cond_pc': cond_pc,
+            'max_no_adj_towers': 2,
+            'id_adj': [8, -1, 10, 11, 12],
+            'idl': 10,
+            'idn': 33,
+            'cond_pc_adj': cond_pc_adj,
+            'cond_pc_adj_sim_idx': cond_pc_adj_sim_idx,
+            'cond_pc_adj_sim_prob': cond_pc_adj_sim_prob,
+            'no_sims': 1000,
+            'damage_states': ['minor', 'collapse'],
+            'non_collapse': ['minor'],
+            'rnd_state': np.random.RandomState(1),
+            'event_id': 0,
+            'rtol': RTOL,
+            'atol': ATOL,
+            'dmg_threshold': PM_THRESHOLD,
+            'scale': 1.0,
+            'frag_dic': frag_dic,
+            'path_event': os.path.join(BASE_DIR, 'wind_event/test1'),
+            }
+
+        cls.tower = Tower(**cls.tower_dic)
+
+    def test_collapse_adj_sim(self):
+
+        # tower14 (idl: 13,
+        tower_dic = self.tower_dic.copy()
+        tower_dic.update({'axisaz': 90,
+                          'no_sims': 5000})
+
+        tower = Tower(**tower_dic)
+        tower.init()
+        tower._wind = create_wind_given_bearing([130, 130, 130, 130],[0.0712, 1.0712, 1.0712, 0.0712])  # 1.05*np.exp(0.02)
+        df = tower.collapse_adj_sim.groupby(['id_time','id_adj']).apply(len).reset_index()
+        for idl in tower.cond_pc_adj.keys():
+            x = df.loc[df['id_adj'].apply(lambda x: idl in x)].groupby('id_time').sum()/tower.no_sims
+            np.testing.assert_allclose(x[0].values, tower.collapse_adj[idl], atol=ATOL, rtol=RTOL)
 
 
 if __name__ == '__main__':

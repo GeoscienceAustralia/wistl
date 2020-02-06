@@ -33,14 +33,16 @@ class EventTest1(unittest.TestCase):
 
     def test_time(self):
         # compare time_index
-        for name, line in self.scenario.lines.items():
-            self.assertTrue(line.time.equals(self.scenario.lines[name].time))
+        with self.assertLogs('wistl.tower', level='INFO') as cm:
+            for name, line in self.scenario.lines.items():
+                self.assertTrue(line.time.equals(self.scenario.lines[name].time))
 
     def test_number_of_lines(self):
         self.assertEqual(len(self.scenario.lines), len(self.cfg.lines))
 
     def test_dmg_lines(self):
-        self.assertEqual(len(self.scenario.lines), len(self.cfg.lines))
+        with self.assertLogs('wistl.tests', level='INFO') as cm:
+            self.assertEqual(len(self.scenario.lines), len(self.cfg.lines))
 
     def test_no_lines(self):
         self.assertEqual(self.scenario.no_lines, 2)
@@ -87,13 +89,15 @@ class EventTest2(unittest.TestCase):
         self.assertEqual(self.scenario.lines['LineB'].no_time, 13)
 
     def test_dmg_lines(self):
-        self.assertEqual(self.scenario.dmg_lines, ['LineB'])
+        with self.assertLogs('wistl', level='INFO') as cm:
+            self.assertEqual(self.scenario.dmg_lines, ['LineB'])
 
-    def test_time_idx(self):
-        self.assertEqual(self.scenario.time_idx, (471, 484))
+    def test_dmg_time_idx(self):
+        self.assertEqual(self.scenario.dmg_time_idx, (471, 484))
 
-        self.assertEqual(self.scenario.lines['LineA'].time_idx, None)
-        self.assertEqual(self.scenario.lines['LineB'].time_idx, (471, 484))
+        with self.assertLogs('wistl', level='INFO') as cm:
+            self.assertEqual(self.scenario.lines['LineA'].dmg_time_idx, None)
+        self.assertEqual(self.scenario.lines['LineB'].dmg_time_idx, (471, 484))
 
 
 if __name__ == '__main__':

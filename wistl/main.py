@@ -60,12 +60,10 @@ def run_simulation(cfg, client_ip=None):
 
             for _, line in scenario.lines.items():
 
-                lines.append(line)
-
                 _ = compute_damage_per_line(line=line, cfg=cfg)
 
             if cfg.line_interaction:
-                _ = compute_damage_by_line_interaction(lines=scenario.lines, cfg=cfg)
+                _ = scenario.compute_damage_probability_line_interaction()
 
     logger.info(f'MC simulation took {time.time() - tic} seconds')
 

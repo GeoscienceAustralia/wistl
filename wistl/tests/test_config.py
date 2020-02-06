@@ -156,8 +156,44 @@ def create_shapefiles():
     w_ln.close()
 
 
-class TestConfig1(unittest.TestCase):
+class TestLogger(unittest.TestCase):
 
+    def test_cfg_not_found(self):
+
+        # Raise error for undefined 
+        with self.assertLogs('wistl.config', level='INFO') as cm:
+            file_cfg = 'dummy.cfg'
+            cfg = Config(file_cfg)
+        msg = f'{file_cfg} not found'
+        self.assertIn(f'ERROR:wistl.config:{msg}', cm.output)
+
+    def test_file_not_found(self):
+
+        for item in INPUT_FILES:
+            # Raise error for undefined 
+            with self.assertLogs('wistl.config', level='INFO') as cm:
+                file_cfg = os.path.join(BASE_DIR, 'test_interaction.cfg')
+                cfg = Config(file_cfg)
+                cfg.options['adjust_design_by_topography'] = True
+                setattr(cfg, f'_{item}', None)
+                setattr(cfg, f'file_{item}', 'dummy.file')
+                getattr(cfg, item)
+            msg = f'dummy.file not found'
+            self.assertIn(f'CRITICAL:wistl.config:{msg}', cm.output)
+
+    def test_logger_fragility(self):
+        with self.assertLogs('wistl.config', level='CRITICAL') as cm:
+            file_cfg = os.path.join(BASE_DIR, 'test.cfg')
+            cfg = Config(file_cfg)
+            cfg._fragility = None
+            cfg.fragility_metadata['main']['file'] = 'dummy.file'
+            cfg.fragility
+            path_metadata = os.path.dirname(os.path.realpath(cfg.file_fragility_metadata))
+        msg = f'{path_metadata}/dummy.file not found'
+        self.assertIn(f'CRITICAL:wistl.config:{msg}', cm.output)
+
+
+class TestConfig1(unittest.TestCase):
 
     def test_nested_dic(self):
 
@@ -404,7 +440,7 @@ class TestConfig(unittest.TestCase):
         cls.cfg = Config(os.path.join(BASE_DIR, 'test.cfg'), cls.logger)
 
         # for testing purpose
-        cls.cfg.options['adjust_design_by_topography'] = True
+        #cls.cfg.options['adjust_design_by_topography'] = True
 
 
     def test_design_value(self):
@@ -684,26 +720,22 @@ class TestConfig(unittest.TestCase):
             self.assertAlmostEqual(results['collapse_capacity'], expected,
                                    places=4)
 
-    def test_line_interaction(self):
-        # FIXME
-        pass
-
-    def test_assign_cond_prob_logging(self):
+    def test_assign_cond_pc_logging(self):
 
         # Raise warning for undefined cond_pc
         with self.assertLogs('wistl.config', level='INFO') as cm:
             row = self.cfg.towers_by_line['LineB'][12]
             row['height'] = 55.0   # beyond the height
-            self.cfg.assign_cond_prob(row)
+            self.cfg.assign_cond_pc(row)
         msg = f'unable to assign cond_pc for tower {row["name"]}'
         self.assertIn(f'CRITICAL:wistl.config:{msg}', cm.output)
 
-    def test_assign_cond_prob(self):
+    def test_assign_cond_pc(self):
 
         #logger = logging.getLogger(__file__)
         # Tower 1: Terminal
         row = self.cfg.towers_by_line['LineA'][57]
-        out = self.cfg.assign_cond_prob(row)
+        out = self.cfg.assign_cond_pc(row)
 
         expected = {(0, 1): 0.075,
                     (-1, 0): 0.075,
@@ -716,11 +748,11 @@ class TestConfig(unittest.TestCase):
 
         # Tower 26
         row = self.cfg.towers_by_line['LineB'][58]
-        out = self.cfg.assign_cond_prob(row)
+        out = self.cfg.assign_cond_pc(row)
         self.assertEqual(out['cond_pc'], expected)
         self.assertEqual(out['max_no_adj_towers'], 2)
 
-    def test_assign_cond_prob_more(self):
+    def test_assign_cond_pc_more(self):
 
         functions = ['Suspension', 'Terminal']
         heights = [20.0, 35.0]
@@ -737,7 +769,7 @@ class TestConfig(unittest.TestCase):
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['height'] = height
-            out = self.cfg.assign_cond_prob(row)
+            out = self.cfg.assign_cond_pc(row)
             assertDeepAlmostEqual(self, out['cond_pc'], expected)
 
         functions = ['Strainer'] * 2
@@ -762,7 +794,7 @@ class TestConfig(unittest.TestCase):
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['design_level'] = level
-            out = self.cfg.assign_cond_prob(row)
+            out = self.cfg.assign_cond_pc(row)
             assertDeepAlmostEqual(self, out['cond_pc'], expected[level])
 
     def test_ratio_z_to_10(self):
@@ -995,7 +1027,6 @@ class TestConfig(unittest.TestCase):
         np.testing.assert_allclose(row['cond_pc_adj_sim_prob'],
                                    expected['cond_pc_adj_sim_prob'])
 
-
     def test_create_list_idx(self):
 
         result = create_list_idx(idx=3, no_towers=2, max_no_towers=7,
@@ -1072,14 +1103,6 @@ class TestConfig(unittest.TestCase):
         except AssertionError:
             print('{} is expected but {}'.format(expected, results))
 
-    def test_set_line_interaction(self):
-        # FIXME
-        pass
-
-    def test_get_cond_prob_line_interaction(self):
-        # FIXME
-        pass
-
     def test_read_wind_scenario(self):
 
         self.assertEqual(self.cfg.events[0], ('test1', 3.0, 1))
@@ -1133,48 +1156,6 @@ class TestConfig(unittest.TestCase):
         expected = 45.0
         np.allclose(expected, result)
 
-#     def test_line_interaction(self):
-#
-#         cfg = Config(os.path.join(BASE_DIR, 'test_line_interaction.cfg'))
-#
-#         expected = {'Calaca - Amadeo': ['Calaca - Santa Rosa',
-#                                         'Amadeox - Calacax'],
-#                     'Calaca - Santa Rosa': ['Calaca - Amadeo'],
-#                     'Amadeox - Calacax': ['Calaca - Amadeo']}
-#
-#         assertDeepAlmostEqual(self, expected, cfg.line_interaction)
-#
-#         expected = {'by': 'Height', 'type': 'numeric',
-#                     'file': './prob_line_interaction.csv'}
-#
-#         assertDeepAlmostEqual(self, expected,
-#                               cfg.prob_line_interaction_metadata)
-#
-#         file_ = StringIO.StringIO("""\
-# Height_lower, Height_upper, no_collapse, probability
-# 0,40,1,0.2
-# 0,40,3,0.1
-# 0,40,5,0.01
-# 0,40,7,0.001
-# 40,1000,1,0.3
-# 40,1000,3,0.15
-# 40,1000,5,0.02
-# 40,1000,7,0.002""")
-#
-#         path_input = os.path.dirname(os.path.realpath(
-#             cfg.file_line_interaction_metadata))
-#
-#         file_line_interaction = os.path.join(
-#             path_input, cfg.prob_line_interaction_metadata['file'])
-#
-#         with open(file_line_interaction, 'r') as file1:
-#             for line1, line2 in zip(file1, file_):
-#                 self.assertEqual(line1, line2)
-#
-#         file_.seek(0)
-#         expected = pd.read_csv(file_, skipinitialspace=1)
-#
-#         pd.util.testing.assert_frame_equal(expected, cfg.prob_line_interaction)
 
 class TestConfig2(unittest.TestCase):
 
@@ -1192,6 +1173,161 @@ class TestConfig2(unittest.TestCase):
         #self.assertEqual(self.cfg.events[1], ('test2', 2.5, 1))
         #self.assertEqual(self.cfg.events[2], ('test2', 3.5, 2))
 
+class TestConfig3(unittest.TestCase):
+    """
+    testing line interaction
+    """
+
+    @classmethod
+    def setUpClass(cls):
+
+        logging.basicConfig(level=logging.INFO)
+        cls.logger = logging.getLogger(__name__)
+
+        cls.cfg = Config(os.path.join(BASE_DIR, 'test_interaction.cfg'), cls.logger)
+
+        # for testing purpose
+        #cls.cfg.options['adjust_design_by_topography'] = True
+
+    def test_read_yml_file2(self):
+        # test read_yml_file against cond_prob_interaction
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            '---\n',
+            'file: ./cond_prob_interaction.yml\n',
+            'probability:\n',
+            '    type:\n',
+            '        Lattice Tower:\n',
+            '            function:\n',
+            '                Suspension: height\n',
+            '                Terminal: height\n',
+            '                Strainer: height\n',
+            ])
+        _file.seek(0)
+
+        expected = {'file': './cond_prob_interaction.yml',
+                    'probability': {'type': {'Lattice Tower':
+                        {'function': {'Suspension': 'height',
+                                      'Terminal': 'height',
+                                      'Strainer': 'height'}}}},
+                    'path': os.path.dirname(os.path.realpath(_file.name))
+                    }
+
+        output = read_yml_file(_file.name)
+
+        assertDeepAlmostEqual(self, expected, output)
+
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_cond_prob_interaction(self):
+
+        expected = {'Lattice Tower': {
+            'Suspension': {40: { 1: 0.2, 3: 0.1, 5: 0.01, 7: 0.001}},
+            }}
+
+        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+        _file.writelines([
+            'Lattice Tower:\n',
+            '    Suspension:\n',
+            '        40:\n',
+            '            1: 0.2\n',
+            '            3: 0.1\n',
+            '            5: 0.01\n',
+            '            7: 0.001\n',
+            ])
+
+        _file.seek(0)
+        with open(_file.name, 'r') as ymlfile:
+            output = yaml.load(ymlfile, Loader=yaml.FullLoader)
+        assertDeepAlmostEqual(self, expected, output)
+        _file.close()
+        os.unlink(_file.name)
+
+    def test_read_line_interaction(self):
+
+        self.assertEqual(self.cfg.line_interaction['LineB'], ['LineA'])
+        self.assertEqual(self.cfg.line_interaction['LineA'], ['LineB', 'LineC'])
+        self.assertEqual(self.cfg.line_interaction['LineC'], ['LineA'])
+
+    def test_assign_cond_pc_interaction(self):
+
+        # Tower 1: Terminal
+        row = self.cfg.towers_by_line['LineA'][57]
+        row.pop('cond_pc_interaction_no')
+        row.pop('cond_pc_interaction_prob')
+        row.pop('cond_pc_interaction_cprob')
+        out = self.cfg.assign_cond_pc_interaction(row)
+
+        self.assertTrue(row['height'] < 40)
+        self.assertEqual(out['cond_pc_interaction_no'], [1, 3, 5, 7])
+        np.testing.assert_allclose(out['cond_pc_interaction_cprob'], np.array([0.2, 0.3, 0.31, 0.311]))
+        self.assertDictEqual(out['cond_pc_interaction_prob'], {1:0.2, 3:0.1, 5:0.01, 7:0.001})
+
+    def test_assign_cond_pc_interaction_more(self):
+
+        functions = ['Suspension', 'Terminal', 'Strainer']
+        heights = [35.0] * 3
+        expected = {'no': [1, 3, 5, 7], 'prob': [0.2, 0.3, 0.31, 0.311]}
+
+        for func, height in zip(functions, heights):
+
+            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row['type'] = 'Lattice Tower'
+            row['function'] = func
+            row['height'] = height
+            row.pop('cond_pc_interaction_no')
+            row.pop('cond_pc_interaction_prob')
+            row.pop('cond_pc_interaction_cprob')
+            out = self.cfg.assign_cond_pc_interaction(row)
+            self.assertEqual(out['cond_pc_interaction_no'], expected['no'])
+            np.testing.assert_allclose(out['cond_pc_interaction_cprob'], expected['prob'])
+            self.assertDictEqual(out['cond_pc_interaction_prob'], {1:0.2, 3:0.1, 5:0.01, 7:0.001})
+
+        functions = ['Suspension', 'Terminal', 'Strainer']
+        heights = [75.0] *3
+        expected = {'no': [1, 3, 5, 7], 'prob': [0.3, 0.45, 0.47, 0.472]}
+
+        for func, height in zip(functions, heights):
+
+            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row['type'] = 'Lattice Tower'
+            row['function'] = func
+            row['height'] = height
+            row.pop('cond_pc_interaction_no')
+            row.pop('cond_pc_interaction_prob')
+            row.pop('cond_pc_interaction_cprob')
+            out = self.cfg.assign_cond_pc_interaction(row)
+            self.assertEqual(out['cond_pc_interaction_no'], expected['no'])
+            np.testing.assert_allclose(out['cond_pc_interaction_cprob'], expected['prob'])
+            self.assertDictEqual(out['cond_pc_interaction_prob'], {1:0.3, 3:0.15, 5:0.02, 7:0.002})
+
+    def test_assign_target_line(self):
+
+        """
+        LineC: 30(T45), 15(T46)
+        LineA: 57(T1), 44(T2)
+        LineB: 41(T23), 10(T24)
+        """
+
+        # LineB -> LineA
+        for idl, idn in enumerate(self.cfg.lines['LineB']['ids']):
+            t = self.cfg.towers_by_line['LineB'][idn]
+            assertDeepAlmostEqual(self, t['target_line'],
+                                  {'LineA': {'id': idl, 'vector': np.array([0.0, 1.0])}})
+
+        # LineC -> LineA
+        for idl, idn in enumerate(self.cfg.lines['LineC']['ids']):
+            t = self.cfg.towers_by_line['LineC'][idn]
+            assertDeepAlmostEqual(self, t['target_line'],
+                                  {'LineA': {'id': idl, 'vector': np.array([0.0, -1.0])}})
+
+        # LineA -> LineB and LineA
+        for idl, idn in enumerate(self.cfg.lines['LineA']['ids']):
+            t = self.cfg.towers_by_line['LineA'][idn]
+            assertDeepAlmostEqual(self, t['target_line'],
+                                  {'LineB': {'id': idl, 'vector': np.array([0.0, -1.0])},
+                                   'LineC': {'id': idl, 'vector': np.array([0.0, 1.0])}})
 
 if __name__ == '__main__':
     #suite = unittest.TestLoader().loadTestsFromTestCase(TestConfig)
