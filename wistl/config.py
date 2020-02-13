@@ -298,7 +298,9 @@ class Config(object):
     def towers_by_line(self):
         if self._towers_by_line is None:
 
-            df = read_shape_file(self.file_shape_tower)
+            df = pd.DataFrame(None)
+            for _file in self.file_shape_tower:
+                df = df.append(read_shape_file(_file))
 
             # only selected lines
             df = df.loc[df['lineroute'].isin(self.selected_lines)]
@@ -333,7 +335,9 @@ class Config(object):
 
         if self._lines is None:
 
-            df = read_shape_file(self.file_shape_line)
+            df = pd.DataFrame(None)
+            for _file in self.file_shape_line:
+                df = df.append(read_shape_file(_file))
 
             # only selected lines
             df = df.loc[df.lineroute.isin(self.selected_lines)]
@@ -403,8 +407,9 @@ class Config(object):
         key = 'gis_data'
         for item in GIS_DATA:
             try:
-                setattr(self, f'file_{item}',
-                        os.path.join(self.path_gis_data, conf.get(key, item)))
+                tmp = [os.path.join(self.path_gis_data, x.strip())
+                       for x in conf.get(key, item).split(',')]
+                setattr(self, f'file_{item}', tmp)
             except configparser.NoOptionError:
                 msg = f'{item} not set in [{key}] in {self.file_cfg}'
                 self.logger.critical(msg)
