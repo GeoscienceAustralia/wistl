@@ -838,6 +838,11 @@ def read_shape_file(file_shape):
         dic_type = {'C': object, 'F': np.float64, 'N': np.int64}
         df = pd.DataFrame(records, columns=fields)
 
+        # assert dic_type of lan, long should be float rather than integer
+        if ['latitude'] in fields:
+            for x in ['latitude', 'longitude']:
+                fields_type[fields.index(x)] = 'F'
+
         for name, _type in zip(df.columns, fields_type):
             if df[name].dtype != dic_type[_type]:
                 df[name] = df[name].astype(dic_type[_type])

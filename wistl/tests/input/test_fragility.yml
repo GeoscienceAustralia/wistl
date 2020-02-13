@@ -58,5 +58,5 @@ Lattice Tower:
         180:
             180: 
                 minor: lognorm,1.243,0.032
-                collape: lognorm,1.28,0.04
+                collapse: lognorm,1.28,0.04
 

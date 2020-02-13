@@ -336,12 +336,14 @@ class Line(object):
 
             # collapse by adjacent towers
             for k in self.dmg_towers:
-                for id_adj, grp in self.towers[k].collapse_adj_sim.groupby('id_adj'):
+                if self.towers[k].collapse_adj_sim is not None:
+                    for id_adj, grp in self.towers[k].collapse_adj_sim.groupby('id_adj'):
                     # reset time index relative to line
-                    dt = self.towers[k].dmg_time_idx[0] - self.dmg_time_idx[0]
-                    for idl in id_adj:
-                        tf_ds[idl, grp['id_sim'], grp['id_time'] + dt] = True
-
+                        dt = self.towers[k].dmg_time_idx[0] - self.dmg_time_idx[0]
+                        for idl in id_adj:
+                            tf_ds[idl, grp['id_sim'], grp['id_time'] + dt] = True
+                #else:
+                #    print(f'collapse_adj_sim of {self.name} for {self.towers[k].name},{self.towers[k].idl} is None')
             # append damage state by direct wind
             for ds in self.damage_states[::-1]:  # collapse first
 

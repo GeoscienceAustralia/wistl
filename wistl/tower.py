@@ -430,7 +430,7 @@ class Tower(object):
         :return:
         """
 
-        if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx and not self.dmg.empty:
+        if self._collapse_adj_sim is None and self.cond_pc_adj_sim_idx and not self.dmg_state_sim['collapse'].empty:
 
             df = self.dmg_state_sim['collapse'].copy()
 
@@ -457,9 +457,9 @@ class Tower(object):
                     np.testing.assert_allclose(prob[0], self.collapse_adj[idl], atol=self.atol, rtol=self.rtol)
                 except AssertionError:
                     self.logger.warning(
-                            f'Pc({idl}|{self.name}): '
-                            f'simulation {prob[0].values} vs. '
-                            f'analytical {self.collapse_adj[idl]}')
+                        f'Pc({idl}|{self.name}): '
+                        f'simulation {prob[0].values} vs. '
+                        f'analytical {self.collapse_adj[idl]}')
 
             self._collapse_adj_sim = df.copy()
 
