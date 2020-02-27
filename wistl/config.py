@@ -29,9 +29,10 @@ INPUT_FILES = ['design_value_by_line', 'fragility_metadata', 'drag_height_by_typ
                'terrain_multiplier', 'topographic_multiplier',
                'design_adjustment_factor_by_topography',
                'cond_prob_interaction_metadata']
-
-#FRAGILITY_ATT = ['section', 'limit_states', 'form', 'param1', 'param2']
-
+FIELDS_TOWER = ['name', 'type', 'latitude', 'longitude', 'function', 'devangle',
+                'axisaz', 'height' , 'lineroute', 'design_span', 'design_speed',
+                'terrain_cat', 'height_z', 'shape', 'design_level']
+SHAPEFILE_TYPE = {'C': object, 'F': np.float64, 'N': np.int64}
 
 # scenario -> damage scenario
 # event -> wind event
@@ -300,18 +301,22 @@ class Config(object):
 
             df = pd.DataFrame(None)
             for _file in self.file_shape_tower:
-                df = df.append(read_shape_file(_file))
+                if '.shp' in _file:
+                    df = df.append(read_shape_file(_file))
+                else:
+                    tmp = pd.read_csv(_file, skipinitialspace=True, usecols=FIELDS_TOWER)
+                    df = df.append(tmp)
 
             # only selected lines
             df = df.loc[df['lineroute'].isin(self.selected_lines)]
 
             # coord, coord_lat_lon, point
-            df = df.merge(df['shapes'].apply(assign_shapely_point),
+            df = df.merge(df.apply(assign_shapely_point, axis=1),
                           left_index=True, right_index=True)
 
             # design_span, design_level, design_speed, terrain_cat
-            df = df.merge(df.apply(self.assign_design_values, axis=1),
-                          left_index=True, right_index=True)
+            #df = df.merge(df.apply(self.assign_design_values, axis=1),
+            #              left_index=True, right_index=True)
 
             # frag_dic
             df = df.merge(df.apply(self.assign_fragility_parameters, axis=1),
@@ -320,7 +325,7 @@ class Config(object):
             df['file_wind_base_name'] = df['name'].apply(
                 lambda x: self.wind_file_format.format(tower_name=x))
 
-            df['height_z'] = df['function'].apply(lambda x: self.drag_height_by_type[x])
+            #df['height_z'] = df['function'].apply(lambda x: self.drag_height_by_type[x])
 
             df['ratio_z_to_10'] = df.apply(self.ratio_z_to_10, axis=1)
 
@@ -542,7 +547,7 @@ class Config(object):
         Vc = Vd(h=z)/sqrt(u)
         where u = 1-k(1-Sw/Sd)
         Sw: actual wind span
-        Sd: design wind span (defined by line route)
+        Sd: design wind span (defined by tower)
         k: 0.33 for a single, 0.5 for double circuit
         :rtype: float
         """
@@ -627,31 +632,31 @@ class Config(object):
             mzcat_10 = self.terrain_multiplier[tc_str][idx_10]
             return mzcat_z / mzcat_10
 
-    def assign_design_values(self, row):
-        """
-        create pandas series of design level related values
-        row: pandas series of tower
-        :return: pandas series of design_span, design_level, design_speed, and
-                 terrain cat
-        """
+    #def assign_design_values(self, row):
+    #    """
+    #    create pandas series of design level related values
+    #    row: pandas series of tower
+    #    :return: pandas series of design_span, design_level, design_speed, and
+    #             terrain cat
+    #    """
 
-        try:
-            design_value = self.design_value_by_line[row['lineroute']]
-        except KeyError:
-            msg = f"{row['lineroute']} is undefined in {self.file_design_value}"
-            self.logger.critical(msg)
-        else:
-            design_speed = design_value['design_speed']
+    #    try:
+    #        design_value = self.design_value_by_line[row['lineroute']]
+    #    except KeyError:
+    #        msg = f"{row['lineroute']} is undefined in {self.file_design_value}"
+    #        self.logger.critical(msg)
+    #    else:
+    #        design_speed = design_value['design_speed']
 
-            if self.options['adjust_design_by_topography']:
-                idx = (self.topographic_multiplier[row['name']] >=
-                       self.design_adjustment_factor_by_topography['threshold']).sum()
-                design_speed *= self.design_adjustment_factor_by_topography[idx]
+    #        if self.options['adjust_design_by_topography']:
+    #            idx = (self.topographic_multiplier[row['name']] >=
+    #                   self.design_adjustment_factor_by_topography['threshold']).sum()
+    #            design_speed *= self.design_adjustment_factor_by_topography[idx]
 
-            return pd.Series({'design_span': design_value['design_span'],
-                              'design_level': design_value['design_level'],
-                              'design_speed': design_speed,
-                              'terrain_cat': design_value['terrain_cat']})
+    #        return pd.Series({'design_span': design_value['design_span'],
+    #                          'design_level': design_value['design_level'],
+    #                          'design_speed': design_speed,
+    #                          'terrain_cat': design_value['terrain_cat']})
 
     def assign_fragility_parameters(self, tower):
         """
@@ -840,17 +845,16 @@ def read_shape_file(file_shape):
         msg = f'{file_shape} is not a valid shapefile'
         raise shapefile.ShapefileException(msg)
     else:
-        dic_type = {'C': object, 'F': np.float64, 'N': np.int64}
         df = pd.DataFrame(records, columns=fields)
 
         # assert dic_type of lan, long should be float rather than integer
-        if ['latitude'] in fields:
+        if 'latitude' in fields:
             for x in ['latitude', 'longitude']:
                 fields_type[fields.index(x)] = 'F'
 
         for name, _type in zip(df.columns, fields_type):
-            if df[name].dtype != dic_type[_type]:
-                df[name] = df[name].astype(dic_type[_type])
+            if df[name].dtype != SHAPEFILE_TYPE[_type]:
+                df[name] = df[name].astype(SHAPEFILE_TYPE[_type])
 
         if 'shapes' in fields:
             raise KeyError('shapes is already in the fields')
@@ -860,13 +864,13 @@ def read_shape_file(file_shape):
     return df
 
 
-def assign_shapely_point(shape):
+def assign_shapely_point(row):
     """
     create pandas series of coord, coord_lat_lon, and Point
     :param shape: Shapefile instance
     :return: pandas series of coord, coord_lat_lon, and Point
     """
-    coord = np.array(shape.points[0])
+    coord = [row['longitude'], row['latitude']]
     return pd.Series({'coord': coord,
                       'coord_lat_lon': coord[::-1],
                       'point': geometry.Point(coord)})
@@ -1000,21 +1004,21 @@ def h_terrain_multiplier(_file):
                        skiprows=1)
     return data.to_dict('list')
 
-def h_design_value_by_line(_file):
-    data = pd.read_csv(_file, index_col=0, skipinitialspace=True)
-    return data.transpose().to_dict()
+#def h_design_value_by_line(_file):
+#    data = pd.read_csv(_file, index_col=0, skipinitialspace=True)
+#    return data.transpose().to_dict()
 
 def h_topographic_multiplier(_file):
     data = pd.read_csv(_file, index_col=0)
     return data.max(axis=1).to_dict()
 
-def h_drag_height_by_type(_file):
-    data = pd.read_csv(_file,
-                       skipinitialspace=True,
-                       index_col=0,
-                       names=['value'],
-                       skiprows=1)
-    return data['value'].to_dict()
+#def h_drag_height_by_type(_file):
+#    data = pd.read_csv(_file,
+#                       skipinitialspace=True,
+#                       index_col=0,
+#                       names=['value'],
+#                       skiprows=1)
+#    return data['value'].to_dict()
 
 def read_yml_file(_file):
 

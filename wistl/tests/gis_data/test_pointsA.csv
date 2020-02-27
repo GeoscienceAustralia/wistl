@@ -1,0 +1,23 @@
+name,type,latitude,longitude,function,devangle,axisaz,height,lineroute,design_span,design_speed,terrain_cat,height_z,shape,design_level
+T17,Lattice Tower,0.0,149.08,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T19,Lattice Tower,0.0,149.09,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T20,Lattice Tower,0.0,149.095,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T22,Lattice Tower,0.0,149.105,Terminal,0,11,17,LineA,400.0,75.0,2,12.2,rectangle,low
+T7,Lattice Tower,0.0,149.03,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T9,Lattice Tower,0.0,149.04,Strainer,0,11,17,LineA,400.0,75.0,2,12.2,rectangle,low
+T8,Lattice Tower,0.0,149.035,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T18,Lattice Tower,0.0,149.085,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T13,Lattice Tower,0.0,149.06,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T3,Lattice Tower,0.0,149.01,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T14,Lattice Tower,0.0,149.065,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T15,Lattice Tower,0.0,149.07,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T6,Lattice Tower,0.0,149.025,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T2,Lattice Tower,0.0,149.005,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T11,Lattice Tower,0.0,149.05,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T10,Lattice Tower,0.0,149.045,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T12,Lattice Tower,0.0,149.055,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T21,Lattice Tower,0.0,149.1,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T1,Lattice Tower,0.0,149.0,Terminal,0,11,17,LineA,400.0,75.0,2,12.2,rectangle,low
+T16,Lattice Tower,0.0,149.075,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T5,Lattice Tower,0.0,149.02,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low
+T4,Lattice Tower,0.0,149.015,Suspension,0,11,17,LineA,400.0,75.0,2,15.4,rectangle,low

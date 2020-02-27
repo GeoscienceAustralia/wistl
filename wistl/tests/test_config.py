@@ -283,31 +283,31 @@ class TestConfig1(unittest.TestCase):
         _file.close()
         os.unlink(_file.name)
 
-    def test_h_design_value_by_line(self):
-        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
-        _file.writelines([
-            'lineroute, design_speed, design_span, terrain_cat, design_level\n',
-            'LineA, 75.0, 400.0, 2, low\n',
-            'LineB, 51.389, 400.0, 2, low\n',
-                          ])
-        _file.seek(0)
+    #def test_h_design_value_by_line(self):
+    #    _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+    #    _file.writelines([
+    #        'lineroute, design_speed, design_span, terrain_cat, design_level\n',
+    #        'LineA, 75.0, 400.0, 2, low\n',
+    #        'LineB, 51.389, 400.0, 2, low\n',
+    #                      ])
+    #    _file.seek(0)
 
-        expected = {'LineA': {'design_speed': 75.0,
-                              'design_span': 400.0,
-                              'terrain_cat': 2,
-                              'design_level': 'low'},
-                    'LineB': {'design_speed': 51.389,
-                              'design_span': 400.0,
-                              'terrain_cat': 2,
-                              'design_level': 'low'},
-                    }
+    #    expected = {'LineA': {'design_speed': 75.0,
+    #                          'design_span': 400.0,
+    #                          'terrain_cat': 2,
+    #                          'design_level': 'low'},
+    #                'LineB': {'design_speed': 51.389,
+    #                          'design_span': 400.0,
+    #                          'terrain_cat': 2,
+    #                          'design_level': 'low'},
+    #                }
 
-        output = h_design_value_by_line(_file.name)
+    #    output = h_design_value_by_line(_file.name)
 
-        assertDeepAlmostEqual(self, expected, output)
+    #    assertDeepAlmostEqual(self, expected, output)
 
-        _file.close()
-        os.unlink(_file.name)
+    #    _file.close()
+    #    os.unlink(_file.name)
 
     def test_h_topographic_multiplier(self):
         _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
@@ -332,26 +332,26 @@ class TestConfig1(unittest.TestCase):
         _file.close()
         os.unlink(_file.name)
 
-    def test_h_drag_height_by_type(self):
-        _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
-        _file.writelines([
-            '# typical drag height by tower type\n',
-            'Suspension,15.4\n',
-            'Strainer,12.2\n',
-            'Terminal,12.2\n',
-                          ])
-        _file.seek(0)
+    #def test_h_drag_height_by_type(self):
+    #    _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+    #    _file.writelines([
+    #        '# typical drag height by tower type\n',
+    #        'Suspension,15.4\n',
+    #        'Strainer,12.2\n',
+    #        'Terminal,12.2\n',
+    #                      ])
+    #    _file.seek(0)
 
-        expected = {'Suspension': 15.4,
-                    'Strainer': 12.2,
-                    'Terminal': 12.2}
+    #    expected = {'Suspension': 15.4,
+    #                'Strainer': 12.2,
+    #                'Terminal': 12.2}
 
-        output = h_drag_height_by_type(_file.name)
+    #    output = h_drag_height_by_type(_file.name)
 
-        assertDeepAlmostEqual(self, expected, output)
+    #    assertDeepAlmostEqual(self, expected, output)
 
-        _file.close()
-        os.unlink(_file.name)
+    #    _file.close()
+    #    os.unlink(_file.name)
 
     def test_read_yml_file(self):
         _file = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
@@ -443,22 +443,22 @@ class TestConfig(unittest.TestCase):
         #cls.cfg.options['adjust_design_by_topography'] = True
 
 
-    def test_design_value(self):
+    #def test_design_value(self):
 
-        expected = {'LineA': {'terrain_cat': 2,
-                              'design_level': 'low',
-                              'design_span': 400.0,
-                              'design_speed': 75.0},
-                    'LineB': {'terrain_cat': 2,
-                              'design_level': 'low',
-                              'design_span': 400.0,
-                              'design_speed': 51.389},
-                    'LineC': {'terrain_cat': 2,
-                              'design_level': 'low',
-                              'design_span': 400.0,
-                              'design_speed': 51.389}}
+    #    expected = {'LineA': {'terrain_cat': 2,
+    #                          'design_level': 'low',
+    #                          'design_span': 400.0,
+    #                          'design_speed': 75.0},
+    #                'LineB': {'terrain_cat': 2,
+    #                          'design_level': 'low',
+    #                          'design_span': 400.0,
+    #                          'design_speed': 51.389},
+    #                'LineC': {'terrain_cat': 2,
+    #                          'design_level': 'low',
+    #                          'design_span': 400.0,
+    #                          'design_speed': 51.389}}
 
-        assertDeepAlmostEqual(self, expected, self.cfg.design_value_by_line)
+    #    assertDeepAlmostEqual(self, expected, self.cfg.design_value_by_line)
 
     def test_fragility_metadata(self):
         expected = {'main': {'limit_states': ['minor', 'collapse'],
@@ -566,14 +566,14 @@ class TestConfig(unittest.TestCase):
         assertDeepAlmostEqual(self, expected,
                               self.cfg.terrain_multiplier['tc1'])
 
-    def test_read_drag_height_by_type(self):
+    #def test_read_drag_height_by_type(self):
 
-        expected = {'Strainer': 12.199999999999999,
-                    'Suspension': 15.4,
-                    'Terminal': 12.199999999999999}
+    #    expected = {'Strainer': 12.199999999999999,
+    #                'Suspension': 15.4,
+    #                'Terminal': 12.199999999999999}
 
-        assertDeepAlmostEqual(self, expected,
-                              self.cfg.drag_height_by_type)
+    #    assertDeepAlmostEqual(self, expected,
+    #                          self.cfg.drag_height_by_type)
 
     def test_topographic_multiplier(self):
 
@@ -833,70 +833,70 @@ class TestConfig(unittest.TestCase):
                                  self.cfg.terrain_multiplier['tc' + str(cat)]) / mzcat10
             self.assertEqual(self.cfg.ratio_z_to_10(row), expected)
 
-    def test_assign_design_values(self):
+    #def test_assign_design_values(self):
 
-        self.assertEqual(self.cfg.options['adjust_design_by_topography'],
-                         True)
+    #    self.assertEqual(self.cfg.options['adjust_design_by_topography'],
+    #                     True)
 
-        # Tower 14
-        row = self.cfg.towers_by_line['LineA'][39]
-        line = row['lineroute']
-        self.assertEqual(line, 'LineA')
-        out = self.cfg.assign_design_values(row)
+    #    # Tower 14
+    #    row = self.cfg.towers_by_line['LineA'][39]
+    #    line = row['lineroute']
+    #    self.assertEqual(line, 'LineA')
+    #    out = self.cfg.assign_design_values(row)
 
-        self.assertEqual(out.design_span,
-                         self.cfg.design_value_by_line[line]['design_span'])
-        self.assertEqual(out.design_level,
-                         self.cfg.design_value_by_line[line]['design_level'])
-        self.assertEqual(out.terrain_cat,
-                         self.cfg.design_value_by_line[line]['terrain_cat'])
-        self.assertEqual(out.design_speed,
-                         self.cfg.design_value_by_line[line]['design_speed'])
+    #    self.assertEqual(out.design_span,
+    #                     self.cfg.design_value_by_line[line]['design_span'])
+    #    self.assertEqual(out.design_level,
+    #                     self.cfg.design_value_by_line[line]['design_level'])
+    #    self.assertEqual(out.terrain_cat,
+    #                     self.cfg.design_value_by_line[line]['terrain_cat'])
+    #    self.assertEqual(out.design_speed,
+    #                     self.cfg.design_value_by_line[line]['design_speed'])
 
-        # Tower 26
-        row = self.cfg.towers_by_line['LineB'][58]
-        line = row['lineroute']
-        self.assertEqual(line, 'LineB')
-        out = self.cfg.assign_design_values(row)
+    #    # Tower 26
+    #    row = self.cfg.towers_by_line['LineB'][58]
+    #    line = row['lineroute']
+    #    self.assertEqual(line, 'LineB')
+    #    out = self.cfg.assign_design_values(row)
 
-        self.assertEqual(out.design_span,
-                         self.cfg.design_value_by_line[line]['design_span'])
-        self.assertEqual(out.design_level,
-                         self.cfg.design_value_by_line[line]['design_level'])
-        self.assertEqual(out.terrain_cat,
-                         self.cfg.design_value_by_line[line]['terrain_cat'])
-        self.assertEqual(out.design_speed,
-                         self.cfg.design_value_by_line[line]['design_speed'])
+    #    self.assertEqual(out.design_span,
+    #                     self.cfg.design_value_by_line[line]['design_span'])
+    #    self.assertEqual(out.design_level,
+    #                     self.cfg.design_value_by_line[line]['design_level'])
+    #    self.assertEqual(out.terrain_cat,
+    #                     self.cfg.design_value_by_line[line]['terrain_cat'])
+    #    self.assertEqual(out.design_speed,
+    #                     self.cfg.design_value_by_line[line]['design_speed'])
 
-        # Tower 34
-        row = self.cfg.towers_by_line['LineB'][55]
-        self.assertEqual(row['name'], 'T34')
-        out = self.cfg.assign_design_values(row)
+    #    # Tower 34
+    #    row = self.cfg.towers_by_line['LineB'][55]
+    #    self.assertEqual(row['name'], 'T34')
+    #    out = self.cfg.assign_design_values(row)
 
-        self.assertEqual(out.design_span,
-                         self.cfg.design_value_by_line[line]['design_span'])
-        self.assertEqual(out.design_level,
-                         self.cfg.design_value_by_line[line]['design_level'])
-        self.assertEqual(out.terrain_cat,
-                         self.cfg.design_value_by_line[line]['terrain_cat'])
-        # design speed adjusted by topography
-        self.assertEqual(out.design_speed,
-                         1.6 * self.cfg.design_value_by_line[line]['design_speed'])
+    #    self.assertEqual(out.design_span,
+    #                     self.cfg.design_value_by_line[line]['design_span'])
+    #    self.assertEqual(out.design_level,
+    #                     self.cfg.design_value_by_line[line]['design_level'])
+    #    self.assertEqual(out.terrain_cat,
+    #                     self.cfg.design_value_by_line[line]['terrain_cat'])
+    #    # design speed adjusted by topography
+    #    self.assertEqual(out.design_speed,
+    #                     1.6 * self.cfg.design_value_by_line[line]['design_speed'])
 
-        # Tower 42
-        row = self.cfg.towers_by_line['LineB'][26]
-        self.assertEqual(row['name'], 'T42')
-        out = self.cfg.assign_design_values(row)
+    #    # Tower 42
+    #    row = self.cfg.towers_by_line['LineB'][26]
+    #    self.assertEqual(row['name'], 'T42')
+    #    out = self.cfg.assign_design_values(row)
 
-        self.assertEqual(out.design_span,
-                         self.cfg.design_value_by_line[line]['design_span'])
-        self.assertEqual(out.design_level,
-                         self.cfg.design_value_by_line[line]['design_level'])
-        self.assertEqual(out.terrain_cat,
-                         self.cfg.design_value_by_line[line]['terrain_cat'])
-        # design speed adjusted by topography
-        self.assertEqual(out.design_speed,
-                         1.3 * self.cfg.design_value_by_line[line]['design_speed'])
+    #    self.assertEqual(out.design_span,
+    #                     self.cfg.design_value_by_line[line]['design_span'])
+    #    self.assertEqual(out.design_level,
+    #                     self.cfg.design_value_by_line[line]['design_level'])
+    #    self.assertEqual(out.terrain_cat,
+    #                     self.cfg.design_value_by_line[line]['terrain_cat'])
+    #    # design speed adjusted by topography
+    #    self.assertEqual(out.design_speed,
+    #                     1.3 * self.cfg.design_value_by_line[line]['design_speed'])
 
    # def test_assign_fragility_parameters(self):
 
@@ -1049,7 +1049,7 @@ class TestConfig(unittest.TestCase):
 
         # T1: terminal tower
         tower = self.cfg.towers_by_line['LineA'][57]
-        row = assign_shapely_point(tower['shapes'])
+        row = assign_shapely_point(tower)
         expected = {'coord': [149.0, 0.0],
                     'coord_lat_lon': [0.0, 149.0]}
 
