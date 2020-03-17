@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import logging.config
+import pandas as pd
 from optparse import OptionParser
 import dask
 from dask.distributed import Client
@@ -58,9 +59,27 @@ def run_simulation(cfg, client_ip=None):
 
             scenario = Scenario(event=event, cfg=cfg)
 
+            damage_prob_max = pd.DataFrame(None, columns=cfg.damage_states)
+
             for _, line in scenario.lines.items():
 
                 _ = compute_damage_per_line(line=line, cfg=cfg)
+
+                df = pd.DataFrame(None, columns=cfg.damage_states)
+
+                for ds in cfg.damage_states:
+                    try:
+                        tmp = line.damage_prob[ds].max(axis=0)
+                    except KeyError:
+                        pass
+                    else:
+                        df[ds] = tmp
+
+                damage_prob_max = damage_prob_max.append(df)
+
+            if not damage_prob_max.empty:
+                damage_prob_max.to_csv(scenario.file_output)
+                logger.info(f'{scenario.file_output} is saved')
 
             if cfg.line_interaction:
                 _ = scenario.compute_damage_probability_line_interaction()

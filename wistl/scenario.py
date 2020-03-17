@@ -27,6 +27,7 @@ class Scenario(object):
         self._id = None
         self._path_event = None
         self._path_output = None
+        self._file_output = None
         self._list_lines = None
         self._lines = None
         self._dmg_lines = None
@@ -129,6 +130,11 @@ class Scenario(object):
 
         return self._path_output
 
+    @property
+    def file_output(self):
+        if self._file_output is None:
+            self._file_output = os.path.join(self.path_output, f'{self.id}.csv')
+        return self._file_output
 
     def compute_damage_probability_line_interaction(self):
         """

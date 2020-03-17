@@ -24,8 +24,7 @@ OPTIONS = ['run_parallel', 'save_output', 'save_figure',
 DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
 GIS_DATA = ['shape_tower', 'shape_line']
 FORMAT = ['wind_file', 'event_id']
-INPUT_FILES = ['design_value_by_line', 'fragility_metadata', 'drag_height_by_type',
-               'cond_prob_metadata',
+INPUT_FILES = ['fragility_metadata', 'cond_prob_metadata',
                'terrain_multiplier', 'topographic_multiplier',
                'design_adjustment_factor_by_topography',
                'cond_prob_interaction_metadata']
@@ -307,6 +306,11 @@ class Config(object):
                     tmp = pd.read_csv(_file, skipinitialspace=True, usecols=FIELDS_TOWER)
                     df = df.append(tmp)
 
+            df.set_index('name', inplace=True, drop=False)
+
+            # set dtype of lineroute chr
+            df['lineroute'] = df['lineroute'].astype(str)
+
             # only selected lines
             df = df.loc[df['lineroute'].isin(self.selected_lines)]
 
@@ -343,9 +347,10 @@ class Config(object):
             df = pd.DataFrame(None)
             for _file in self.file_shape_line:
                 df = df.append(read_shape_file(_file))
+            df.set_index('lineroute', inplace=True, drop=False)
 
             # only selected lines
-            df = df.loc[df.lineroute.isin(self.selected_lines)]
+            df = df.loc[df['lineroute'].isin(self.selected_lines)].copy()
 
             # add coord, coord_lat_lon, line_string
             df = df.merge(df['shapes'].apply(assign_shapely_line),
@@ -533,7 +538,7 @@ class Config(object):
             id_closest = np.argmin(temp)
             ok = abs(temp[id_closest]) < 1.0e-4
             if not ok:
-                msg = f"Can not locate {tower:tower['name']} in {line:line_name}"
+                msg = f"Can not locate tower:{tower['name']} in line:{line_name}"
                 self.logger.error(msg)
             idx_sorted.append(id_closest)
 

@@ -537,23 +537,26 @@ class Line(object):
 
                     for ds in self.damage_states:
 
-                        value = getattr(self, item)[ds]
-                        data = group.create_dataset(ds, data=value)
-
-                        # metadata
-                        data.attrs['nrow'], data.attrs['ncol'] = value.shape
-                        data.attrs['time_start'] = str(self.time[0])
                         try:
-                            data.attrs['time_freq'] = str(self.time[1]-self.time[0])
-                        except IndexError:
-                            data.attrs['time_freq'] = str(self.time[0])
-                        data.attrs['time_period'] = self.time.shape[0]
+                            value = getattr(self, item)[ds]
+                        except TypeError:
+                            self.logger.debug(f'cannot get {item}{ds}')
+                        else:
+                            data = group.create_dataset(ds, data=value)
+                            data.attrs['columns'] = ','.join(f'{x}' for x in columns_by_item[item])
 
-                        if columns_by_item[item]:
-                            data.attrs['columns'] = ','.join('{}'.format(x) for x in columns_by_item[item])
+                # metadata
+                #hf.attrs['nrow'], data.attrs['ncol'] = value.shape
+                hf.attrs['time_start'] = str(self.time[0])
+                try:
+                    hf.attrs['time_freq'] = str(self.time[1]-self.time[0])
+                except IndexError:
+                    hf.attrs['time_freq'] = str(self.time[0])
+                hf.attrs['time_period'] = self.time.shape[0]
+
             self.logger.info(f'{self.file_output} is saved')
         else:
-            self.logger.info(f'No output file for Line:{self.name}')
+            self.logger.info(f'No output for {self.name} by {self.event_id}')
 
 def compute_damage_per_line(line, cfg):
     """
@@ -571,10 +574,11 @@ def compute_damage_per_line(line, cfg):
     line.compute_damage_prob()
 
     # perfect correlation within a single line
-    line.compute_damage_prob_sim()
+    if cfg.options['run_simulation']:
+        line.compute_damage_prob_sim()
 
-    if not cfg.options['skip_no_cascading_collapse']:
-        line.compute_damage_prob_sim_no_cascading()
+        if not cfg.options['skip_no_cascading_collapse']:
+            line.compute_damage_prob_sim_no_cascading()
 
     # compare simulation against analytical
     #for ds in cfg.damage_states:

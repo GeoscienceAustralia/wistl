@@ -248,14 +248,15 @@ class Tower(object):
         if self._wind is None:
 
             try:
-                self._wind = pd.read_csv(self.file_wind,
-                                         parse_dates=[0],
-                                         index_col=['Time'],
-                                         usecols=['Time', 'Speed', 'Bearing'])
+                tmp = pd.read_csv(self.file_wind,
+                                  parse_dates=[0],
+                                  index_col=['Time'],
+                                  usecols=['Time', 'Speed', 'Bearing'])
             except IOError:
                 msg = f'Invalid file_wind {self.file_wind}'
                 self.logger.critical(msg)
             else:
+                self._wind = tmp.loc[tmp.isnull().sum(axis=1) == 0].copy()
                 self._wind['Speed'] *= self.scale * self.ratio_z_to_10
                 self._wind['ratio'] = self._wind['Speed'] / self.collapse_capacity
 
@@ -277,7 +278,7 @@ class Tower(object):
                 idt0 = min(valid)
 
             except ValueError:
-                self.logger.info(f'tower:{self.name} sustains no damage')
+                self.logger.info(f'{self.name} sustains no damage')
                 self._dmg = pd.DataFrame()
             else:
                 idt1 = max(valid) + 1
@@ -573,15 +574,13 @@ class Tower(object):
 
         if len(self.sorted_frag_dic_keys) > 1:
 
-            angle = angle_between_two(bearing, self.axisaz)
-            #try:
-            #    assert (angle <= 90) & (angle >= 0)
-            #except AssertionError:
-            #    self.logger.error(f'Angle should be within (0, 90), but {angle} ',
-            #                       'when axisaz: {self.axisaz}, bearing: {bearing}')
-            #else:
-            # choose fragility given angle 
-            loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
+            try:
+                angle = angle_between_two(bearing, self.axisaz)
+            except AssertionError:
+                self.logger.error(f'Something wrong in bearing: {bearing}, axisaz: {self.axisaz} of {self.name}')
+            else:
+                # choose fragility given angle
+                loc = min(bisect.bisect_right(self.sorted_frag_dic_keys, angle),
                       len(self.sorted_frag_dic_keys) - 1)
         else:
             loc = 0
