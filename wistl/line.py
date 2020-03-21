@@ -508,7 +508,7 @@ class Line(object):
         return exp_no_tower, prob_no_tower
 
 
-    def write_hdf5(self):
+    def write_output(self):
 
         items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
                  'no_damage', 'no_damage_no_cascading',
@@ -591,7 +591,7 @@ def compute_damage_per_line(line, cfg):
 
     # save
     if cfg.options['save_output']:
-        line.write_hdf5()
+        line.write_output()
 
     return line
 

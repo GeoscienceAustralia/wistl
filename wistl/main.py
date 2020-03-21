@@ -78,6 +78,7 @@ def run_simulation(cfg, client_ip=None):
                 damage_prob_max = damage_prob_max.append(df)
 
             if not damage_prob_max.empty:
+                damage_prob_max.index.name = 'name'
                 damage_prob_max.to_csv(scenario.file_output)
                 logger.info(f'{scenario.file_output} is saved')
 

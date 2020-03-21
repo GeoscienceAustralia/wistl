@@ -374,7 +374,7 @@ class TestLine1(unittest.TestCase):
         np.testing.assert_almost_equal(prob_no_tower['minor'], prob)
 
 
-    def test_write_hdf5(self):
+    def test_write_output(self):
         pass
 
 
