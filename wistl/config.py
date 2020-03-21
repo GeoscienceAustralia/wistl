@@ -306,7 +306,7 @@ class Config(object):
                     tmp = pd.read_csv(_file, skipinitialspace=True, usecols=FIELDS_TOWER)
                     df = df.append(tmp)
 
-            df.set_index('name', inplace=True, drop=False)
+            #df.set_index('name', inplace=True, drop=False)
 
             # set dtype of lineroute chr
             df['lineroute'] = df['lineroute'].astype(str)
