@@ -599,18 +599,18 @@ class TestConfig(unittest.TestCase):
 
     def test_towers(self):
         # file_wind_base_name
-        self.assertEqual(self.cfg.towers_by_line['LineA'][57]['file_wind_base_name'],
+        self.assertEqual(self.cfg.towers_by_line['LineA']['T1']['file_wind_base_name'],
                          'ts.T1.csv')
 
         # height_z
         # terminal
-        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][57]['height_z'],
+        self.assertAlmostEqual(self.cfg.towers_by_line['LineA']['T1']['height_z'],
                                12.2)
         # suspension
-        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][46]['height_z'],
+        self.assertAlmostEqual(self.cfg.towers_by_line['LineA']['T11']['height_z'],
                                15.4)
         # strainer
-        self.assertAlmostEqual(self.cfg.towers_by_line['LineA'][23]['height_z'],
+        self.assertAlmostEqual(self.cfg.towers_by_line['LineA']['T9']['height_z'],
                                12.2)
 
     def test_lines(self):
@@ -638,30 +638,32 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(self.cfg.lines[line]['names'],
                              expected_names[line])
 
-        expected_ids = {
-            'LineA': [57, 44, 33, 64, 63, 43, 20, 24, 23, 48, 46, 50, 32, 39, 40, 62, 2, 29, 6, 8, 56, 19]
-,
-            'LineB': [41, 10, 21, 58, 12, 14, 54, 47, 59, 27, 49, 55, 65, 11, 4, 13, 5, 22, 25, 26, 34, 1]
-             }
-
-        for line in ['LineA', 'LineB']:
-            self.assertEqual(self.cfg.lines[line]['ids'], expected_ids[line])
-
         expected_id2name = {
             'LineA': {2: 'T17', 6: 'T19', 8: 'T20', 19: 'T22', 20: 'T7', 23: 'T9', 24: 'T8', 29: 'T18', 32: 'T13', 33: 'T3', 39: 'T14', 40: 'T15', 43: 'T6', 44: 'T2', 46: 'T11', 48: 'T10', 50: 'T12', 56: 'T21', 57: 'T1', 62: 'T16', 63: 'T5', 64: 'T4'},
             'LineB': {1: 'T44', 4: 'T37', 5: 'T39', 10: 'T24', 11: 'T36', 12: 'T27', 13: 'T38', 14: 'T28', 21: 'T25', 22: 'T40', 25: 'T41', 26: 'T42', 27: 'T32', 34: 'T43', 41: 'T23', 47: 'T30', 49: 'T33', 54: 'T29', 55: 'T34', 58: 'T26', 59: 'T31', 65: 'T35'}
             }
 
-        expected_name2id = {key: {v: k for k, v in value.items()}
-                            for key, value in expected_id2name.items()}
+        expected_ids_old = {
+            'LineA': [57, 44, 33, 64, 63, 43, 20, 24, 23, 48, 46, 50, 32, 39, 40, 62, 2, 29, 6, 8, 56, 19]
+,
+            'LineB': [41, 10, 21, 58, 12, 14, 54, 47, 59, 27, 49, 55, 65, 11, 4, 13, 5, 22, 25, 26, 34, 1]
+             }
+
+        expected_ids = {x: [expected_id2name[x][k] for k in expected_ids_old[x]] for x in ['LineA', 'LineB']}
 
         for line in ['LineA', 'LineB']:
-            self.assertEqual(self.cfg.lines[line]['id2name'],
-                             expected_id2name[line])
+            self.assertEqual(self.cfg.lines[line]['ids'], expected_ids[line])
 
-        for line in ['LineA', 'LineB']:
-            self.assertEqual(self.cfg.lines[line]['name2id'],
-                             expected_name2id[line])
+        #expected_name2id = {key: {v: k for k, v in value.items()}
+        #                    for key, value in expected_id2name.items()}
+
+        #for line in ['LineA', 'LineB']:
+        #    self.assertEqual(self.cfg.lines[line]['id2name'],
+        #                     expected_id2name[line])
+
+        #for line in ['LineA', 'LineB']:
+        #    self.assertEqual(self.cfg.lines[line]['name2id'],
+        #                     expected_name2id[line])
 
     def test_assign_collapse_capacity(self):
         # TODO
@@ -724,7 +726,7 @@ class TestConfig(unittest.TestCase):
 
         # Raise warning for undefined cond_pc
         with self.assertLogs('wistl.config', level='INFO') as cm:
-            row = self.cfg.towers_by_line['LineB'][12]
+            row = self.cfg.towers_by_line['LineB']['T27']
             row['height'] = 55.0   # beyond the height
             self.cfg.assign_cond_pc(row)
         msg = f'unable to assign cond_pc for tower {row["name"]}'
@@ -734,7 +736,7 @@ class TestConfig(unittest.TestCase):
 
         #logger = logging.getLogger(__file__)
         # Tower 1: Terminal
-        row = self.cfg.towers_by_line['LineA'][57]
+        row = self.cfg.towers_by_line['LineA']['T1']
         out = self.cfg.assign_cond_pc(row)
 
         expected = {(0, 1): 0.075,
@@ -747,7 +749,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(out['max_no_adj_towers'], 2)
 
         # Tower 26
-        row = self.cfg.towers_by_line['LineB'][58]
+        row = self.cfg.towers_by_line['LineB']['T26']
         out = self.cfg.assign_cond_pc(row)
         self.assertEqual(out['cond_pc'], expected)
         self.assertEqual(out['max_no_adj_towers'], 2)
@@ -765,7 +767,7 @@ class TestConfig(unittest.TestCase):
                     (-2, -1, 0, 1, 2): 0.1}
         for func, height in zip(functions, heights):
 
-            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row = self.cfg.towers_by_line['LineA']['T12'].copy()
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['height'] = height
@@ -790,7 +792,7 @@ class TestConfig(unittest.TestCase):
 
 
         for func, level in zip(functions, levels):
-            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row = self.cfg.towers_by_line['LineA']['T12'].copy()
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['design_level'] = level
@@ -799,7 +801,7 @@ class TestConfig(unittest.TestCase):
 
     def test_ratio_z_to_10(self):
         # Tower 14
-        row = self.cfg.towers_by_line['LineA'][39]
+        row = self.cfg.towers_by_line['LineA']['T14']
         assert row['terrain_cat'] == 2
         result = self.cfg.ratio_z_to_10(row)
         self.assertAlmostEqual(result, 1.0524)
@@ -813,7 +815,7 @@ class TestConfig(unittest.TestCase):
 
         height_z = 15.4  # Suspension
         for cat, mzcat10 in zip(categories, mzcat10s):
-            row = (self.cfg.towers_by_line['LineA'][39]).copy()
+            row = (self.cfg.towers_by_line['LineA']['T14']).copy()
             row['terrain_cat'] = cat
             row['function'] = 'Suspension'
             row['height_z'] = height_z
@@ -824,7 +826,7 @@ class TestConfig(unittest.TestCase):
 
         height_z = 12.2  # Strainer, Terminal
         for cat, mzcat10 in zip(categories, mzcat10s):
-            row = (self.cfg.towers_by_line['LineA'][57]).copy()
+            row = (self.cfg.towers_by_line['LineA']['T1']).copy()
             row['terrain_cat'] = cat
             row['function'] = 'Strainer'
             row['height_z'] = height_z
@@ -915,20 +917,20 @@ class TestConfig(unittest.TestCase):
     def test_assign_id_adj_towers(self):
 
         # Tower 14
-        row = self.cfg.towers_by_line['LineA'][39]
+        row = self.cfg.towers_by_line['LineA']['T14']
         self.assertEqual(row['name'], 'T14')
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'], [11, 12, 13, 14, 15])
         self.assertEqual(result['idl'], 13)
 
         # T26
-        row = self.cfg.towers_by_line['LineB'][58]
+        row = self.cfg.towers_by_line['LineB']['T26']
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'], [1, 2, 3, 4, 5])
         self.assertEqual(result['idl'], 3)
 
         # T32
-        row = self.cfg.towers_by_line['LineB'][27]
+        row = self.cfg.towers_by_line['LineB']['T32']
         result = self.cfg.assign_id_adj_towers(row)
         self.assertEqual(result['id_adj'],
                          [3, 4, 5, 6, 7, 8, -1, 10, 11, 12, 13, 14, 15])
@@ -937,7 +939,7 @@ class TestConfig(unittest.TestCase):
     def test_assign_cond_pc_adj(self):
 
         # T14: suspension tower
-        tower = self.cfg.towers_by_line['LineA'][39]
+        tower = self.cfg.towers_by_line['LineA']['T14']
         self.assertEqual(tower['name'], 'T14')
         self.assertEqual(tower['idl'], 13)
         row = assign_cond_pc_adj(tower)
@@ -959,7 +961,7 @@ class TestConfig(unittest.TestCase):
             print('{}'.format(row['cond_pc_adj_sim_prob']))
 
         # T1: terminal tower
-        tower = self.cfg.towers_by_line['LineA'][57]
+        tower = self.cfg.towers_by_line['LineA']['T1']
         row = assign_cond_pc_adj(tower)
         self.assertEqual(tower['name'], 'T1')
         self.assertEqual(tower['idl'], 0)
@@ -975,7 +977,7 @@ class TestConfig(unittest.TestCase):
                                    expected['cond_pc_adj_sim_prob'])
 
         # T22: terminal tower
-        tower = self.cfg.towers_by_line['LineA'][19]
+        tower = self.cfg.towers_by_line['LineA']['T22']
         self.assertEqual(tower['name'], 'T22')
         self.assertEqual(tower['idl'], 21)
         row = assign_cond_pc_adj(tower)
@@ -991,7 +993,7 @@ class TestConfig(unittest.TestCase):
                                    expected['cond_pc_adj_sim_prob'])
 
         # T9: strainer tower
-        tower = self.cfg.towers_by_line['LineA'][23]
+        tower = self.cfg.towers_by_line['LineA']['T9']
         self.assertEqual(tower['name'], 'T9')
         self.assertEqual(tower['idl'], 8)
         row = assign_cond_pc_adj(tower)
@@ -1012,7 +1014,7 @@ class TestConfig(unittest.TestCase):
                                    expected['cond_pc_adj_sim_prob'])
 
         # T1: suspension tower neighboring strainer (9)
-        tower = self.cfg.towers_by_line['LineB'][49]
+        tower = self.cfg.towers_by_line['LineB']['T33']
         row = assign_cond_pc_adj(tower)
         self.assertEqual(tower['name'], 'T33')
         self.assertEqual(tower['idl'], 10)
@@ -1048,7 +1050,7 @@ class TestConfig(unittest.TestCase):
     def test_assign_shapely_point(self):
 
         # T1: terminal tower
-        tower = self.cfg.towers_by_line['LineA'][57]
+        tower = self.cfg.towers_by_line['LineA']['T1']
         row = assign_shapely_point(tower)
         expected = {'coord': [149.0, 0.0],
                     'coord_lat_lon': [0.0, 149.0]}
@@ -1253,7 +1255,7 @@ class TestConfig3(unittest.TestCase):
     def test_assign_cond_pc_interaction(self):
 
         # Tower 1: Terminal
-        row = self.cfg.towers_by_line['LineA'][57]
+        row = self.cfg.towers_by_line['LineA']['T1']
         row.pop('cond_pc_interaction_no')
         row.pop('cond_pc_interaction_prob')
         row.pop('cond_pc_interaction_cprob')
@@ -1272,7 +1274,7 @@ class TestConfig3(unittest.TestCase):
 
         for func, height in zip(functions, heights):
 
-            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row = self.cfg.towers_by_line['LineA']['T12'].copy()
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['height'] = height
@@ -1290,7 +1292,7 @@ class TestConfig3(unittest.TestCase):
 
         for func, height in zip(functions, heights):
 
-            row = self.cfg.towers_by_line['LineA'][50].copy()
+            row = self.cfg.towers_by_line['LineA']['T12'].copy()
             row['type'] = 'Lattice Tower'
             row['function'] = func
             row['height'] = height

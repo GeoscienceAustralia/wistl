@@ -78,7 +78,7 @@ class TestLine1(unittest.TestCase):
 
         self.assertEqual(self.line.towers[0].name, 'T23')
         self.assertEqual(self.line.towers[0].idl, 0)
-        self.assertEqual(self.line.towers[0].idn, 41)
+        self.assertEqual(self.line.towers[0].idn, 'T23')
         self.assertEqual(self.line.towers[0].no_time, 2)
         self.assertEqual(self.line.towers[0].no_sims, self.no_sims)
         self.assertEqual(self.line.towers[0].damage_states, ['minor', 'collapse'])
