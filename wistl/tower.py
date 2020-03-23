@@ -145,6 +145,7 @@ class Tower(object):
         self._dmg = None
         self._dmg1 = None
         self._dmg_time_idx = None
+        self._dmg_idxmax = None
         self._collapse_adj = None
 
         # simulation method: determine_damage_isolation_sim,
@@ -208,6 +209,16 @@ class Tower(object):
             idt1 = self.wind.index.get_loc(idt[-1]) + 1
             self._dmg_time_idx = (idt0, idt1)
         return self._dmg_time_idx
+
+    @property
+    def dmg_idxmax(self):
+        """
+        return index of max. dmg relative to wind time index
+        """
+        if self._dmg_idxmax is None and not self.dmg.empty:
+            idt = self.dmg.loc[self.dmg['collapse']==self.dmg['collapse'].max()].index
+            self._dmg_idxmax = [self.wind.index.get_loc(x) for x in idt]
+        return self._dmg_idxmax
 
     @property
     def file_wind(self):

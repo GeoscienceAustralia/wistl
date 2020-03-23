@@ -480,6 +480,17 @@ class TestTower1(unittest.TestCase):
         # checking index
         self.assertEqual((1,4), self.tower.dmg_time_idx)
 
+    def test_dmg_idxmax(self):
+
+        df = pd.DataFrame([[0.1, 130.0], [0.9605, 130.0], [0.1, 130.0], [0.97, 130.0]], columns=['ratio', 'Bearing'])
+        df['time'] = pd.date_range(start='01/01/2011', end='01/04/2011', freq='D')
+        df.set_index('time', inplace=True)
+
+        self.tower.init()
+        self.tower._wind = df
+        # checking index
+        self.assertEqual([3], self.tower.dmg_idxmax)
+
     def test_compare_dmg_with_dmg_sim(self):
 
         # dmg_isolated vs. dmg_sim

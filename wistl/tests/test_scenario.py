@@ -83,21 +83,21 @@ class EventTest2(unittest.TestCase):
         os.removedirs(cls.scenario.path_output)
 
     def test_no_time(self):
-        self.assertEqual(self.scenario.no_time, 13)
+        self.assertEqual(self.scenario.no_time, 3)
 
         self.assertEqual(self.scenario.lines['LineA'].no_time, None)
-        self.assertEqual(self.scenario.lines['LineB'].no_time, 13)
+        self.assertEqual(self.scenario.lines['LineB'].no_time, 3)
 
     def test_dmg_lines(self):
         with self.assertLogs('wistl', level='INFO') as cm:
             self.assertEqual(self.scenario.dmg_lines, ['LineB'])
 
     def test_dmg_time_idx(self):
-        self.assertEqual(self.scenario.dmg_time_idx, (471, 484))
+        self.assertEqual(self.scenario.dmg_time_idx, (479, 482))
 
         with self.assertLogs('wistl', level='INFO') as cm:
             self.assertEqual(self.scenario.lines['LineA'].dmg_time_idx, None)
-        self.assertEqual(self.scenario.lines['LineB'].dmg_time_idx, (471, 484))
+        self.assertEqual(self.scenario.lines['LineB'].dmg_time_idx, (479, 482))
 
 
 if __name__ == '__main__':

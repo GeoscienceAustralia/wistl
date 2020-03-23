@@ -149,15 +149,15 @@ class Line(object):
         index of dmg relative to wind time index
         """
         if self._dmg_time_idx is None:
-            # get min of dmg_time_idx[0], max of dmg_time_idx[1]
-            tmp = [self.towers[k].dmg_time_idx for k in self.dmg_towers]
-            try:
-                id0 = list(map(min, zip(*tmp)))[0]
-            except IndexError:
-                self.logger.info(f'Line:{self.name} sustains no damage')
+            # get min of dmg_idxmax, max of idxmax
+            tmp = [self.towers[k].dmg_idxmax for k in self.dmg_towers]
+            flatten = [y for x in tmp for y in x]
+            if flatten:
+                id0 = max(0, min(flatten) - 1)
+                id1 = min(max(flatten) + 1, len(self.towers[0].wind)) + 1
+                self._dmg_time_idx = id0, id1
             else:
-                id1 = list(map(max, zip(*tmp)))[1]
-                self._dmg_time_idx = (id0, id1)
+                self.logger.info(f'Line:{self.name} sustains no damage')
         return self._dmg_time_idx
 
     @property
@@ -244,13 +244,13 @@ class Line(object):
             for k in self.dmg_towers:
 
                 # adjust tower dmg_time_idx to line 
-                idt0, idt1 = [x - self.dmg_time_idx[0] for x in self.towers[k].dmg_time_idx]
+                idt0, idt1 = [x - self.towers[k].dmg_time_idx[0] for x in self.dmg_time_idx]
 
                 for idl, prob in self.towers[k].collapse_adj.items():
-                    pc_adj_agg[self.towers[k].idl, idl, idt0:idt1] = prob
+                    pc_adj_agg[self.towers[k].idl, idl] = prob[idt0:idt1]
 
-                pc_adj_agg[self.towers[k].idl, self.towers[k].idl,
-                           idt0:idt1] = self.towers[k].dmg['collapse']
+                pc_adj_agg[self.towers[k].idl, self.towers[k].idl] = \
+                    self.towers[k].dmg['collapse'][idt0:idt1]
 
             # pc_collapse.shape == (no_tower, no_time)
             pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
@@ -270,22 +270,23 @@ class Line(object):
                     if tower.dmg_time_idx:
 
                         # adjust tower dmg_time_idx relative to line
-                        idt0, idt1 = [x - self.dmg_time_idx[0] for x in self.towers[k].dmg_time_idx]
+                        idt0, idt1 = [x - self.towers[k].dmg_time_idx[0] for x in self.dmg_time_idx]
+
                         # P(DS>ds) - P(collapse directly) + P(collapse induced)
                         try:
-                            value = tower.dmg[ds].values \
-                                - tower.dmg['collapse'].values \
-                                + pc_collapse[tower.idl, idt0:idt1]
+                            value = tower.dmg[ds][idt0:idt1] \
+                                    - tower.dmg['collapse'][idt0:idt1] \
+                                + pc_collapse[tower.idl]
                         except ValueError:
                             self.logger.critical(f'shape: {tower.dmg[ds].values.shape} '
                                                 f'shape: {tower.dmg["collapse"].values.shape} '
                                                 f'shape: {pc_collapse.shape} '
                                                 f'idt0, idt1: {idt0}, {idt1}')
                         else:
-                            temp[tower.idl, idt0:idt1] = np.where(value > 1.0, [1.0], value)
+                            temp[tower.idl] = np.where(value > 1.0, [1.0], value)
 
                     else:
-                        temp[tower.idl, :] = pc_collapse[tower.idl, :]
+                        temp[tower.idl] = pc_collapse[tower.idl]
 
                 self.damage_prob[ds] = pd.DataFrame(
                     temp.T,
@@ -293,33 +294,6 @@ class Line(object):
                     index=self.time)
 
         return self.damage_prob
-
-    def compute_damage_prob_sim_given_sim(self, id_sim):
-        #tic = time.time()
-        # perfect correlation within a single line
-
-        results = {ds: None for ds in self.damage_states}
-        # list of (time, isim, tower_id) where tower_id can be a tuple
-        tf_ds = np.zeros((self.no_towers, self.no_time), dtype=bool)
-
-        # collapse by adjacent towers
-        for _, tower in self.towers.items():
-            _df = tower.collapse_adj_sim.loc[tower.collapse_adj_sim['id_sim']==id_sim]
-            for id_adj, grouped in _df.groupby('id_adj'):
-                for idl in id_adj:
-                    tf_ds[idl, grouped['id_time'].values] = True
-
-        # append damage state by direct wind
-        for ds in self.damage_states[::-1]:  # collapse first
-            for _, tower in self.towers.items():
-                _df = tower.dmg_state_sim[ds].loc[
-                        tower.dmg_state_sim[ds]['id_sim']==id_sim]
-                tf_ds[tower.idl, _df['id_time'].values] = True
-
-            idx = np.where(tf_ds)
-            results[ds] = [(id_time, id_sim, id_tower) for id_time, id_tower in zip(*idx)]
-
-        return results
 
     def compute_damage_prob_sim(self):
 
@@ -337,21 +311,35 @@ class Line(object):
             # collapse by adjacent towers
             for k in self.dmg_towers:
                 if self.towers[k].collapse_adj_sim is not None:
-                    for id_adj, grp in self.towers[k].collapse_adj_sim.groupby('id_adj'):
-                    # reset time index relative to line
-                        dt = self.towers[k].dmg_time_idx[0] - self.dmg_time_idx[0]
+
+                    idt0, idt1 = [x - self.towers[k].dmg_time_idx[0] for x in self.dmg_time_idx]
+                    idx = (self.towers[k].collapse_adj_sim['id_time'] >= idt0) & (
+                           self.towers[k].collapse_adj_sim['id_time'] < idt1)
+
+                    collapse_adj_sim = self.towers[k].collapse_adj_sim.loc[idx].copy()
+
+                    for id_adj, grp in collapse_adj_sim.groupby('id_adj'):
                         for idl in id_adj:
-                            tf_ds[idl, grp['id_sim'], grp['id_time'] + dt] = True
+                            try:
+                                tf_ds[idl, grp['id_sim'], grp['id_time'] - idt0] = True
+                            except IndexError:
+                                print(f'tower{k}, idl: {idl}, id_time: {grp["id_time"]}')
+
                 #else:
                 #    print(f'collapse_adj_sim of {self.name} for {self.towers[k].name},{self.towers[k].idl} is None')
             # append damage state by direct wind
             for ds in self.damage_states[::-1]:  # collapse first
 
                 for k in self.dmg_towers:
-                    dt = self.towers[k].dmg_time_idx[0] - self.dmg_time_idx[0]
+                    idt0, idt1 = [x - self.towers[k].dmg_time_idx[0] for x in self.dmg_time_idx]
+                    idx = (self.towers[k].dmg_state_sim[ds]['id_time'] >= idt0) & (
+                           self.towers[k].dmg_state_sim[ds]['id_time'] < idt1)
+
+                    dmg_state_sim = self.towers[k].dmg_state_sim[ds].loc[idx].copy()
+
                     tf_ds[self.towers[k].idl,
-                          self.towers[k].dmg_state_sim[ds]['id_sim'],
-                          self.towers[k].dmg_state_sim[ds]['id_time'] + dt] = True
+                          dmg_state_sim['id_sim'],
+                          dmg_state_sim['id_time'] - idt0] = True
 
                 # dmg index for line interaction
                 self.dmg_idx[ds] = np.where(tf_ds)
@@ -392,11 +380,15 @@ class Line(object):
 
                 for k in self.dmg_towers:
 
-                    dt = self.towers[k].dmg_time_idx[0] - self.dmg_time_idx[0]
+                    idt0, idt1 = [x - self.towers[k].dmg_time_idx[0] for x in self.dmg_time_idx]
+                    idx = (self.towers[k].dmg_state_sim[ds]['id_time'] >= idt0) & (
+                           self.towers[k].dmg_state_sim[ds]['id_time'] < idt1)
+
+                    dmg_state_sim = self.towers[k].dmg_state_sim[ds].loc[idx].copy()
 
                     tf_ds[self.towers[k].idl,
-                          self.towers[k].dmg_state_sim[ds]['id_sim'],
-                          self.towers[k].dmg_state_sim[ds]['id_time'] + dt] = True
+                          dmg_state_sim['id_sim'],
+                          dmg_state_sim['id_time'] - idt0] = True
 
                 # PE(DS)
                 self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(

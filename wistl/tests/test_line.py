@@ -74,6 +74,7 @@ class TestLine1(unittest.TestCase):
     def test_towers(self):
 
         self.assertEqual(self.line.no_towers, 22)
+        self.assertEqual(self.line.dmg_time_idx, (0, 3))
         self.assertEqual(self.line.no_time, 2)
 
         self.assertEqual(self.line.towers[0].name, 'T23')
@@ -86,11 +87,11 @@ class TestLine1(unittest.TestCase):
 
     def test_time(self):
 
-        pd.testing.assert_index_equal(self.line.time, self.line.towers[0].wind.index)
+        pd.testing.assert_index_equal(self.line.time, self.line.towers[0].wind.index[0:2])
 
     def test_no_time(self):
 
-        self.assertEqual(self.line.no_time, len(self.line.towers[0].wind.index))
+        self.assertEqual(self.line.no_time, 2)
 
     def test_damage_prob(self):
         name = 'T26'
@@ -181,7 +182,7 @@ class TestLine1(unittest.TestCase):
                     self.line.damage_prob_sim['collapse'][name][0], atol=self.cfg.atol, rtol=self.cfg.rtol)
             except AssertionError:
                 self.logger.warning(
-                    f'Tower: {name}, collapse'
+                    f'Tower: {name}, collapse '
                     f"Analytical: {self.line.damage_prob['collapse'][name][0]:.4f}, "
                     f"Simulation: {self.line.damage_prob_sim['collapse'][name][0]:.4f}")
 
@@ -537,7 +538,7 @@ class TestLine3(unittest.TestCase):
             pass
 
     def test_dmg_time_idx(self):
-        self.assertEqual(self.line.dmg_time_idx, (476, 483))
+        self.assertEqual(self.line.dmg_time_idx, (479, 482))
         #for k, v in self.line.towers.items():
         #    print(f'{k} -> {v.dmg_dmg_time_idx}')
 
@@ -590,17 +591,19 @@ class TestLine4(unittest.TestCase):
         self.assertEqual(set(self.line.dmg_towers), {16, 0})
 
         self.assertEqual(self.line.towers[0].dmg_time_idx, (0, 3))
+        self.assertEqual(self.line.towers[0].dmg_idxmax, [2])
         self.assertEqual(self.line.towers[16].dmg_time_idx, (1, 3))
-        self.assertEqual(self.line.dmg_time_idx, (0, 3))
+        self.assertEqual(self.line.towers[16].dmg_idxmax, [2])
+        self.assertEqual(self.line.dmg_time_idx, (1, 4))
 
         df = pd.DataFrame(np.column_stack(self.line.dmg_idx['collapse']), columns=['idl', 'id_sim', 'id_time'])
-        self.assertEqual(set(df['id_time'].unique()), {0, 1, 2})
+        self.assertEqual(set(df['id_time'].unique()), {0, 1})
 
         for idl in range(0, 3):
             self.assertTrue(set(df.loc[df['idl']==idl, 'id_time'].unique()).issubset({0, 1, 2}))
 
         for idl in range(14, 19):
-            self.assertTrue(set(df.loc[df['idl']==idl, 'id_time'].unique()).issubset({1, 2}))
+            self.assertTrue(set(df.loc[df['idl']==idl, 'id_time'].unique()).issubset({0, 1}))
 
     def test_dmg_idx_interaction(self):
 
