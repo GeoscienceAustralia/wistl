@@ -8,7 +8,7 @@ import pandas as pd
 from scipy.stats import itemfreq
 
 from wistl.config import Config
-from wistl.line import Line, compute_damage_per_line
+from wistl.line import Line, compute_damage_per_line, adjust_value_to_line, adjust_index_to_line
 from wistl.tests.test_config import assertDeepAlmostEqual
 from wistl.tests.test_tower import create_wind_given_bearing
 # from wistl.transmission_network import read_shape_file, populate_df_lines, \
@@ -74,8 +74,9 @@ class TestLine1(unittest.TestCase):
     def test_towers(self):
 
         self.assertEqual(self.line.no_towers, 22)
-        self.assertEqual(self.line.dmg_time_idx, (0, 3))
-        self.assertEqual(self.line.no_time, 2)
+        self.assertEqual(self.line.dmg_time_idx, (0, 2))
+        #print(self.line.time)
+        #self.assertEqual(self.line.no_time, 3)
 
         self.assertEqual(self.line.towers[0].name, 'T23')
         self.assertEqual(self.line.towers[0].idl, 0)
@@ -92,6 +93,48 @@ class TestLine1(unittest.TestCase):
     def test_no_time(self):
 
         self.assertEqual(self.line.no_time, 2)
+
+    def test_adjust_value_to_line1(self):
+
+        line_dmg_time_idx = (0, 3)
+        tower_dmg_time_idx = (0, 2)
+        prob = [1, 2]
+        result = adjust_value_to_line(line_dmg_time_idx,
+            tower_dmg_time_idx, prob)
+        expected = np.array([1, 2, 0])
+        np.testing.assert_equal(result, expected)
+
+    def test_adjust_value_to_line2(self):
+
+        line_dmg_time_idx = (1870, 1879)
+        prob = [1, 2, 3, 4]
+        tower_dmg_time_idx = (1874, 1878)
+        result = adjust_value_to_line(line_dmg_time_idx,
+            tower_dmg_time_idx, prob)
+        expected = np.array([0, 0, 0, 0, 1, 2, 3, 4, 0])
+        np.testing.assert_equal(result, expected)
+
+    def test_adjust_index_to_line1(self):
+
+        line_dmg_time_idx = (0, 3)
+        tower_dmg_time_idx = (0, 2)
+        prob = np.array([0, 1, 1, 0])
+        idt0, idx = adjust_index_to_line(line_dmg_time_idx,
+            tower_dmg_time_idx, prob)
+        self.assertEqual(idt0, 0)
+        expected = np.ones_like(prob, dtype=bool)
+        np.testing.assert_equal(idx, expected)
+
+    def test_adjust_index_to_line2(self):
+
+        line_dmg_time_idx = (1870, 1879)
+        prob = np.array([0, 1, 2, 3, 0, 1, 2, 3])
+        tower_dmg_time_idx = (1874, 1878)
+        idt0, idx = adjust_index_to_line(line_dmg_time_idx,
+            tower_dmg_time_idx, prob)
+        self.assertEqual(idt0, -4)
+        expected = np.ones_like(prob, dtype=bool)
+        np.testing.assert_equal(idx, expected)
 
     def test_damage_prob(self):
         name = 'T26'
@@ -538,7 +581,7 @@ class TestLine3(unittest.TestCase):
             pass
 
     def test_dmg_time_idx(self):
-        self.assertEqual(self.line.dmg_time_idx, (479, 482))
+        self.assertEqual(self.line.dmg_time_idx, (479, 481))
         #for k, v in self.line.towers.items():
         #    print(f'{k} -> {v.dmg_dmg_time_idx}')
 
@@ -594,7 +637,7 @@ class TestLine4(unittest.TestCase):
         self.assertEqual(self.line.towers[0].dmg_idxmax, [2])
         self.assertEqual(self.line.towers[16].dmg_time_idx, (1, 3))
         self.assertEqual(self.line.towers[16].dmg_idxmax, [2])
-        self.assertEqual(self.line.dmg_time_idx, (1, 4))
+        self.assertEqual(self.line.dmg_time_idx, (1, 3))
 
         df = pd.DataFrame(np.column_stack(self.line.dmg_idx['collapse']), columns=['idl', 'id_sim', 'id_time'])
         self.assertEqual(set(df['id_time'].unique()), {0, 1})
