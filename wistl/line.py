@@ -149,16 +149,33 @@ class Line(object):
         index of dmg relative to wind time index
         """
         if self._dmg_time_idx is None:
-            # get min of dmg_idxmax, max of idxmax
+            # get min of dmg_time_idx[0], max of dmg_time_idx[1]
+            tmp = [self.towers[k].dmg_time_idx for k in self.dmg_towers]
+            try:
+                id0 = list(map(min, zip(*tmp)))[0]
+            except IndexError:
+                self.logger.info(f'Line:{self.name} sustains no damage')
+            else:
+                id1 = list(map(max, zip(*tmp)))[1]
+                self._dmg_time_idx = (id0, id1)
+        return self._dmg_time_idx
+
+    @property
+    def dmg_time_idx1(self):
+        """
+        index of dmg relative to wind time index
+	"""
+        if self._dmg_time_idx is None:
+            # get min of dmg_time_idx[0], max of dmg_time_idx[1]
             tmp = [self.towers[k].dmg_idxmax for k in self.dmg_towers]
             flatten = [y for x in tmp for y in x]
             if flatten:
                 id0 = max(0, min(flatten) - 1)
                 id1 = min(max(flatten) + 1, len(self.towers[0].wind) + 1)
-                self._dmg_time_idx = id0, id1
+                self._dmg_time_idx1 = id0, id1
             else:
                 self.logger.info(f'Line:{self.name} sustains no damage')
-        return self._dmg_time_idx
+        return self._dmg_time_idx1
 
     @property
     def dmg_towers(self):
