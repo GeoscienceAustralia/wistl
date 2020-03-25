@@ -581,7 +581,8 @@ class TestLine3(unittest.TestCase):
             pass
 
     def test_dmg_time_idx(self):
-        self.assertEqual(self.line.dmg_time_idx, (479, 481))
+        #self.assertEqual(self.line.dmg_time_idx, (479, 481))
+        self.assertEqual(self.line.dmg_time_idx, (476, 483))
         #for k, v in self.line.towers.items():
         #    print(f'{k} -> {v.dmg_dmg_time_idx}')
 
@@ -637,16 +638,16 @@ class TestLine4(unittest.TestCase):
         self.assertEqual(self.line.towers[0].dmg_idxmax, [2])
         self.assertEqual(self.line.towers[16].dmg_time_idx, (1, 3))
         self.assertEqual(self.line.towers[16].dmg_idxmax, [2])
-        self.assertEqual(self.line.dmg_time_idx, (1, 3))
+        self.assertEqual(self.line.dmg_time_idx, (0, 3))
 
         df = pd.DataFrame(np.column_stack(self.line.dmg_idx['collapse']), columns=['idl', 'id_sim', 'id_time'])
-        self.assertEqual(set(df['id_time'].unique()), {0, 1})
+        self.assertEqual(set(df['id_time'].unique()), {0, 1, 2})
 
         for idl in range(0, 3):
             self.assertTrue(set(df.loc[df['idl']==idl, 'id_time'].unique()).issubset({0, 1, 2}))
 
         for idl in range(14, 19):
-            self.assertTrue(set(df.loc[df['idl']==idl, 'id_time'].unique()).issubset({0, 1}))
+            self.assertTrue(set(df.loc[df['idl']==idl, 'id_time'].unique()).issubset({0, 1, 2}))
 
     def test_dmg_idx_interaction(self):
 
