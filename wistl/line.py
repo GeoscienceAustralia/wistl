@@ -129,7 +129,7 @@ class Line(object):
     @property
     def file_output(self):
         if self._file_output is None:
-            self._file_output = os.path.join(self.path_output, f'{self.event_id}_{self.name}.h5')
+            self._file_output = os.path.join(self.path_output, f'{self.event_id}_{self.name}')
         return self._file_output
 
     @property
@@ -493,6 +493,15 @@ class Line(object):
     #    print(f'stat1: {time.time() - tic}')
     #    return exp_no_tower, prob_no_tower
 
+    def write_csv_output(self, idt_max, key, dic):
+        """
+        """
+        _file = self.file_output + f'_{key}.csv'
+        df = pd.DataFrame(None)
+        for k, v in dic.items():
+            df[k] = v.loc[idt_max]
+        df.to_csv(_file)
+        self.logger.info(f'{_file} is saved')
 
     def write_output(self):
 
@@ -515,7 +524,31 @@ class Line(object):
                 os.makedirs(self.path_output)
                 self.logger.info(f'{self.path_output} is created')
 
-            with h5py.File(self.file_output, 'w') as hf:
+            try:
+                idt_max = self.no_damage['collapse']['mean'].idxmax()
+
+            except TypeError:
+                pass
+
+            else:
+                # save no_damage to csv
+                self.write_csv_output(idt_max, 'no_damage', self.no_damage)
+
+                # sve prob_no_damage to csv
+                self.write_csv_output(idt_max, 'prob_no_damage', self.prob_no_damage)
+
+                # save damage_prob to csv
+                _file = self.file_output + f'_damage_prob.csv'
+                df = pd.DataFrame(None)
+                for k, v in self.damage_prob.items():
+                    df[k] = v.loc[idt_max]
+                for k, v in self.damage_prob_sim.items():
+                    df[f'{k}_sim'] = v.loc[idt_max]
+                df.to_csv(_file)
+                self.logger.info(f'{_file} is saved')
+
+            _file = self.file_output + '.h5'
+            with h5py.File(_file, 'w') as hf:
 
                 for item in items:
 
@@ -616,3 +649,4 @@ def adjust_index_to_line(line_dmg_time_idx, tower_dmg_time_idx, value):
     idt0, idt1 = [x - tower_dmg_time_idx[0] for x in line_dmg_time_idx]
     idx = (value >= idt0) & (value < idt1)
     return idt0, idx
+
