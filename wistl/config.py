@@ -30,7 +30,7 @@ INPUT_FILES = ['fragility_metadata', 'cond_prob_metadata',
                'cond_prob_interaction_metadata']
 FIELDS_TOWER = ['name', 'type', 'latitude', 'longitude', 'function', 'devangle',
                 'axisaz', 'height' , 'lineroute', 'design_span', 'design_speed',
-                'terrain_cat', 'height_z', 'shape', 'design_level']
+                'terrain_cat', 'height_z', 'shape', 'design_level', 'collapse_capacity']
 SHAPEFILE_TYPE = {'C': object, 'F': np.float64, 'N': np.int64}
 
 # scenario -> damage scenario
@@ -508,7 +508,7 @@ class Config(object):
             for tower_id, tower in grp.items():
 
                 # actual_span, collapse_capacity
-                tower.update(self.assign_collapse_capacity(tower=tower))
+                #tower.update(self.assign_collapse_capacity(tower=tower))
 
                 # cond_pc, max_no_adj_towers
                 tower.update(self.assign_cond_pc(tower=tower))
