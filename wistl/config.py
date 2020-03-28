@@ -20,7 +20,7 @@ from wistl.constants import K_FACTOR, NO_CIRCUIT
 OPTIONS = ['run_parallel', 'save_output', 'save_figure',
            'run_analytical', 'run_simulation', 'use_random_seed',
            'skip_no_cascading_collapse', 'adjust_design_by_topography',
-           'apply_line_interaction']
+           'apply_line_interaction', 'use_collapse_capacity']
 DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
 GIS_DATA = ['shape_tower', 'shape_line']
 FORMAT = ['wind_file', 'event_id']
@@ -30,7 +30,8 @@ INPUT_FILES = ['fragility_metadata', 'cond_prob_metadata',
                'cond_prob_interaction_metadata']
 FIELDS_TOWER = ['name', 'type', 'latitude', 'longitude', 'function', 'devangle',
                 'axisaz', 'height' , 'lineroute', 'design_span', 'design_speed',
-                'terrain_cat', 'height_z', 'shape', 'design_level', 'collapse_capacity']
+                'terrain_cat', 'height_z', 'shape', 'design_level',
+                'collapse_capacity']
 SHAPEFILE_TYPE = {'C': object, 'F': np.float64, 'N': np.int64}
 
 # scenario -> damage scenario
@@ -384,6 +385,10 @@ class Config(object):
                 msg = f'{item} not set in [options] in {self.file_cfg}'
                 self.logger.critical(msg)
 
+        # set FIELDS_TOWER 
+        if not self.options['use_collapse_capacity']:
+            FIELDS_TOWER.remove('collapse_capacity')
+
         # run_parameters
         key = 'run_parameters'
         self.no_sims = conf.getint(key, 'no_simulations')
@@ -508,7 +513,8 @@ class Config(object):
             for tower_id, tower in grp.items():
 
                 # actual_span, collapse_capacity
-                #tower.update(self.assign_collapse_capacity(tower=tower))
+                if not self.options['use_collapse_capacity']:
+                    tower.update(self.assign_collapse_capacity(tower=tower))
 
                 # cond_pc, max_no_adj_towers
                 tower.update(self.assign_cond_pc(tower=tower))
