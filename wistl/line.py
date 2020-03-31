@@ -81,7 +81,7 @@ class Line(object):
         self.prob_no_damage = None
         self.dmg_idx = None
 
-        # non cascading collapse
+        # no cascading collapse
         self.damage_prob_sim_no_cascading = None
         self.no_damage_no_cascading = None
         self.prob_no_damage_no_cascading = None
@@ -321,9 +321,7 @@ class Line(object):
         if self.no_time:
             #idx_by_ds = {ds: None for ds in self.damage_states}
             dic_tf_ds = {ds: None for ds in self.damage_states}
-            tf_ds = np.zeros((self.no_towers,
-                              self.no_sims,
-                              self.no_time), dtype=bool)
+            tf_ds = np.zeros((self.no_towers, self.no_sims, self.no_time), dtype=bool)
 
             # collapse by adjacent towers
             for k in self.dmg_towers:
@@ -541,12 +539,11 @@ class Line(object):
                 os.makedirs(self.path_output)
                 self.logger.info(f'{self.path_output} is created')
 
+            # save no_damage and prob_no_damage csv
             try:
                 idt_max = self.no_damage['collapse']['mean'].idxmax()
-
             except TypeError:
                 pass
-
             else:
                 # save no_damage to csv
                 self.write_csv_output(idt_max, 'no_damage', self.no_damage)
@@ -563,6 +560,17 @@ class Line(object):
                     df[f'{k}_sim'] = v.loc[idt_max]
                 df.to_csv(_file)
                 self.logger.info(f'{_file} is saved')
+
+            # save no_damage_non_cascading and prob_no_damage_non_cascading csv
+            try:
+                idt_max = self.no_damage_no_cascading['collapse']['mean'].idxmax()
+            except TypeError:
+                pass
+            else:
+                # save no_damage to csv
+                self.write_csv_output(idt_max, 'no_damage_no_cascading', self.no_damage_no_cascading)
+                # sve prob_no_damage to csv
+                self.write_csv_output(idt_max, 'prob_no_damage_no_cascading', self.prob_no_damage_no_cascading)
 
             _file = self.file_output + '.h5'
             with h5py.File(_file, 'w') as hf:
@@ -613,7 +621,7 @@ def compute_damage_per_line(line, cfg):
     if cfg.options['run_simulation']:
         line.compute_damage_prob_sim()
 
-        if not cfg.options['skip_no_cascading_collapse']:
+        if cfg.options['run_no_cascading_collapse']:
             line.compute_damage_prob_sim_no_cascading()
 
     # compare simulation against analytical

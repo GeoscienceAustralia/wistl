@@ -19,7 +19,7 @@ from wistl.constants import K_FACTOR, NO_CIRCUIT
 
 OPTIONS = ['run_parallel', 'save_output', 'save_figure',
            'run_analytical', 'run_simulation', 'use_random_seed',
-           'skip_no_cascading_collapse', 'adjust_design_by_topography',
+           'run_no_cascading_collapse', 'adjust_design_by_topography',
            'apply_line_interaction', 'use_collapse_capacity']
 DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
 GIS_DATA = ['shape_tower', 'shape_line']
@@ -31,7 +31,7 @@ INPUT_FILES = ['fragility_metadata', 'cond_prob_metadata',
 FIELDS_TOWER = ['name', 'type', 'latitude', 'longitude', 'function', 'devangle',
                 'axisaz', 'height' , 'lineroute', 'design_span', 'design_speed',
                 'terrain_cat', 'height_z', 'shape', 'design_level',
-                'collapse_capacity']
+               ]
 SHAPEFILE_TYPE = {'C': object, 'F': np.float64, 'N': np.int64}
 
 # scenario -> damage scenario
@@ -386,8 +386,8 @@ class Config(object):
                 self.logger.critical(msg)
 
         # set FIELDS_TOWER 
-        if not self.options['use_collapse_capacity']:
-            FIELDS_TOWER.remove('collapse_capacity')
+        if self.options['use_collapse_capacity'] and 'collapse_capacity' not in FIELDS_TOWER:
+            FIELDS_TOWER.append('collapse_capacity')
 
         # run_parameters
         key = 'run_parameters'

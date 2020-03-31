@@ -80,7 +80,7 @@ class TestTransmission(unittest.TestCase):
 
     def test_transmission_simulation_non_cascading(self):
 
-        if not self.cfg.options['skip_no_cascading_collapse']:
+        if self.cfg.options['run_no_cascading_collapse']:
 
             for line in self.lines:
                 self.check_file_consistency_simulation_non_cascading(line)
