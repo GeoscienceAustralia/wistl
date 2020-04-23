@@ -16,7 +16,7 @@ from dask.distributed import Client
 from wistl.config import Config
 from wistl.version import VERSION_DESC
 from wistl.scenario import Scenario
-from wistl.line import compute_damage_per_line
+#from wistl.line import compute_damage_per_line
 
 
 def run_simulation(cfg, client_ip=None):
@@ -41,7 +41,7 @@ def run_simulation(cfg, client_ip=None):
 
             for _, line in scenario.lines.items():
 
-                line = client.submit(compute_damage_per_line, line=line, cfg=cfg)
+                line = client.submit(line.compute_damage_per_line, cfg=cfg)
                 lines.append(line)
 
         client.gather(lines)
@@ -63,7 +63,7 @@ def run_simulation(cfg, client_ip=None):
 
             for _, line in scenario.lines.items():
 
-                _ = compute_damage_per_line(line=line, cfg=cfg)
+                _ = line.compute_damage_per_line(cfg=cfg)
 
                 df = pd.DataFrame(None, columns=cfg.damage_states)
 

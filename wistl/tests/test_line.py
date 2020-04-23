@@ -8,7 +8,7 @@ import pandas as pd
 from scipy.stats import itemfreq
 
 from wistl.config import Config
-from wistl.line import Line, compute_damage_per_line, adjust_value_to_line, adjust_index_to_line
+from wistl.line import Line, adjust_value_to_line, adjust_index_to_line
 from wistl.tests.test_config import assertDeepAlmostEqual
 from wistl.tests.test_tower import create_wind_given_bearing
 # from wistl.transmission_network import read_shape_file, populate_df_lines, \
@@ -531,7 +531,7 @@ class TestLine2(unittest.TestCase):
 
     def test_compute_damage_per_line(self):
         with self.assertLogs('wistl', level='INFO') as cm:
-            compute_damage_per_line(self.line, self.cfg)
+            self.line.compute_damage_per_line(self.cfg)
 
     def test_logger_dmg_time_idx(self):
 
@@ -592,7 +592,7 @@ class TestLine3(unittest.TestCase):
 
     def test_compute_damage_per_line(self):
         with self.assertLogs('wistl', level='INFO') as cm:
-            compute_damage_per_line(self.line, self.cfg)
+            self.line.compute_damage_per_line(self.cfg)
 
 
 class TestLine4(unittest.TestCase):

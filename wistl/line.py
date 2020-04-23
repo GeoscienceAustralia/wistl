@@ -507,6 +507,40 @@ class Line(object):
     #        prob_no_tower[ds] = pd.DataFrame(prob, columns=columns, index=self.time)
     #    print(f'stat1: {time.time() - tic}')
     #    return exp_no_tower, prob_no_tower
+    def compute_damage_per_line(self, cfg):
+        """
+        mc simulation over transmission line
+        :param line: instance of transmission line
+               cfg: instance of config
+        :return: None but update attributes of
+        """
+
+        self.logger.info(f'computing damage of {self.name} for {self.event_id}')
+
+        # compute damage probability analytically
+        self.compute_damage_prob()
+
+        # perfect correlation within a single line
+        if cfg.options['run_simulation']:
+            self.compute_damage_prob_sim()
+
+            if cfg.options['run_no_cascading_collapse']:
+                self.compute_damage_prob_sim_no_cascading()
+
+        # compare simulation against analytical
+        #for ds in cfg.damage_states:
+        #    idx_not_close = np.where(~np.isclose(line.damage_prob_sim[ds].values,
+        #                             line.damage_prob[ds].values,
+        #                             atol=ATOL,
+        #                             rtol=RTOL))
+        #    for idc in idx_not_close[1]:
+        #        logger.warning(f'Simulation not CLOSE {ds}:{line.towers[idc].name}')
+
+        # save
+        if cfg.options['save_output']:
+            self.write_output()
+
+        return self
 
     def write_csv_output(self, idt_max, key, dic):
         """
@@ -601,7 +635,7 @@ class Line(object):
             self.logger.info(f'{self.file_output} is saved')
         else:
             self.logger.info(f'No output for {self.name} by {self.event_id}')
-
+'''
 def compute_damage_per_line(line, cfg):
     """
     mc simulation over transmission line
@@ -638,6 +672,7 @@ def compute_damage_per_line(line, cfg):
         line.write_output()
 
     return line
+'''
 
 def h_tower(line, idn):
 
