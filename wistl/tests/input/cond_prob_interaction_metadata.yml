@@ -1,9 +1,0 @@
----
-file: ./cond_prob_interaction.yml
-probability:
-    type:
-        Lattice Tower:
-            function:
-                Suspension: height
-                Terminal: height
-                Strainer: height
