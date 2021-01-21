@@ -4,67 +4,38 @@
 Introduction
 ************
 
-Vulnerability and Adaptation to Wind Simulation (VAWS) is a software tool that can be used to model the vulnerability of small buildings such as domestic houses and light industrial sheds to wind. The primary use-case of VAWS is the examination of the change in vulnerability afforded by mitigation measures to upgrade a building’s resilience to wind hazard.
+| Severe wind hazard can pose a significant risk to high voltage transmission lines consisting of various types of towers such as suspension, tension, and terminal towers. Geoscience Australia (GA) has developed a software called WISTL (Wind Impact Simulation on Transmission Lines) based on a Monte Carlo simulation to assess the damage likelihood to transmission lines. 
+| It simulates two different damage mechanisms: damage due to direct wind assuming towers are isolated, and cascading failure mechanisms where damage is induced by the collapse of adjacent towers.  
+| It produces a damage probability for each damage state by tower and probability distribution of the number of damaged towers by line.
 
 Background
 ==========
-
-Development of VAWS commenced in 2009-2010 in a collaborative project, partly funded by the then Department of Climate Change and energy Efficiency (DCCE), between Geoscience Australia, James Cook University and JDH Consulting :cite:`GA2011,Wehner2010`. The development of the current version was undertaken as part of the Bushfire and Natural Hazard Cooperative Research Centre (BNHCRC) project “Improving the Resilience of Existing Housing to Severe Wind” led by James Cook University.
-
+The original methodology was developed for the Critical Infrastructure Protection Modelling and Analysis (CIPMA) capability for assessing the likelihood of tower failure for a range of transmission tower and conductor types. CIPMA is a program managed by the Federal Attorney-General’s Department and Geoscience Australia (GA) is leading the technical development. The methodology was presented in :cite:`AhmedArthurEdwards2010,AhmedEdwards2010`, and applied for a project examining towers in Gladstone region in 2006. The methology was subsequently refined and implemented in Python for a strudy of the vulnerability of the Metro Manila electricity transmission system to typhoons.
 
 Overall logic
 =============
+The primary mechanism for wind damage to transmission towers is the direct action of wind on a tower and conductors in severe wind events such as tropical cyclones. The secondary mechanism of damage is the collapse of neighbouring towers with the transfer of load to adjacent towers due to unbroken conductors. Collapse of one tower leads to additional pulling load on neighbouring towers connected to it in addition to wind loads. A cluster of towers can fail from the initiation of a primary failure due to wind with the subsequent pull down of neighbouring towers. This phenomenon is referred to as a cascading failure.
 
-The VAWS tool takes a component-based approach to modelling building vulnerability. It is based on the premise that overall building damage is strongly related to the failure of key connections.
+Damage due to the direct action of wind was modelled by defining tower fragility functions. The fragility functions are defined with respect to the type of tower based on functionality.
+The cascading failure in the event of a primary tower failure was modelled by defining conditional probabilities for potential collapse patterns. Different sets of conditional probabilities were defined with respect to the function of the primary collapse tower.
 
-The tool generates a building model by randomly selecting parameter values from predetermined probability distributions using a Monte Carlo process. Values include component and connection strengths, external pressure coefficients, shielding coefficients, wind speed profile with height, building orientation, debris damage parameters, and component masses.
+..
+    For more details, see  :ref:`Chapter 3 <logic>`.
 
-Then, for progressive gust wind speed increments, it calculates the forces in all critical connections using influence coefficients, assesses which connections have failed and translates these into a damage scenario and costs the repair. Using the repair cost and the full replacement cost, it calculates a damage index for each wind speed.
+  Key features
+  ============
+  
+  * Uncertainty captured through a Monte-Carlo simulation
+  
+  
+  * Directional wind effects by the base shape of suspension towers:
+  . The fragility functions are defined with respect to the type of tower based on functionality
+  
+  * Mechanisms of transmission tower failure:
 
-For more details, see  :ref:`Chapter 5 <logic>`.
-
-Key features
-============
-
-* Component-based approach:
-
-  A house is modelled consisting of a large number of components, and overall damage is estimated based on damage to each of the components.
-
-* Uncertainty captured through a Monte-Carlo process:
-
-  Various uncertainties affecting house performance are modelled through a monte-carlo process.
-
-* Inclusion of debris and water ingress induced damages:
-
-  In addition to the damage to the connections by wind loads, debris and water ingress induced damages are modelled.
-
-* Internal pressurisation:
-
-  Internal pressure coefficients are calculated at each wind speed following the procedures of AS/NZS 1170.2 (Standards Australia, 2011) using the modelled envelope failures to determine envelope permeability.
-
-
-Key uncertainties
-=================
-
-The Monte Carlo process capture a range of variability in both wind loading and component parameters. The parameter values are sampled for each model and kept the same through the wind steps.
-
-- Wind direction
-
-  For each house, its orientation with respect to the wind is chosen from the eight cardinal directions either randomly, or by the user.
-
-- Gust wind profile
-
-  Variation in the profile of wind speed with height is captured by the random sampling of a profile from a suite of user-provided profiles.
-
-- Pressure coefficients for zones and coverages
-
-  Pressure coefficients for different zones of the house surfaces envelope are randomly chosen from a Type III (Weibull) extreme value distribution with specified means for different zones of the house envelope, and specified coefficients of variation for different load effects.
-
-- Strength and dead load
-
-  Connection strengths and dead loads for generated houses are sampled from lognormal probability distributions.
 
 Caveats and limitations
 =======================
 
-VAWS has been designed primarily as a tool for assessing vulnerability of houses to wind hazard. The simulation outcomes should be interpreted as vulnerability of a group of similar houses on average, even though an individual house is modelled. In other words, the tool is not capable of predicting performance of an individual house for a specific wind event.
+WISTL has been developed as a tool to provide information on vulnerability of trasmission lines to wind hazard. The methodology of simulation of wind damage to transmission lines are based on various assumptions. Therefore the simulation outcomes should be interpreted with caution given the assumptions.
+

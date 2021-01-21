@@ -17,7 +17,7 @@
     
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Getting Started" href="ch02_software.html" />
+    <link rel="next" title="Glossary" href="glossary.html" />
     <link rel="prev" title="WISTL: Wind Impact Simulation on Transmission Lines" href="index.html" /> 
   </head><body>
     <div class="related" role="navigation" aria-label="related navigation">
@@ -27,7 +27,7 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="ch02_software.html" title="Getting Started"
+          <a href="glossary.html" title="Glossary"
              accesskey="N">next</a> |</li>
         <li class="right" >
           <a href="index.html" title="WISTL: Wind Impact Simulation on Transmission Lines"
@@ -44,56 +44,24 @@
             
   <div class="section" id="introduction">
 <span id="intro-page"></span><h1>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h1>
-<p>Vulnerability and Adaptation to Wind Simulation (VAWS) is a software tool that can be used to model the vulnerability of small buildings such as domestic houses and light industrial sheds to wind. The primary use-case of VAWS is the examination of the change in vulnerability afforded by mitigation measures to upgrade a building’s resilience to wind hazard.</p>
+<div class="line-block">
+<div class="line">Severe wind hazard can pose a significant risk to high voltage transmission lines consisting of various types of towers such as suspension, tension, and terminal towers. Geoscience Australia (GA) has developed a software called WISTL (Wind Impact Simulation on Transmission Lines) based on a Monte Carlo simulation to assess the damage likelihood to transmission lines.</div>
+<div class="line">It simulates two different damage mechanisms: damage due to direct wind assuming towers are isolated, and cascading failure mechanisms where damage is induced by the collapse of adjacent towers.</div>
+<div class="line">It produces a damage probability for each damage state by tower and probability distribution of the number of damaged towers by line.</div>
+</div>
 <div class="section" id="background">
 <h2>Background<a class="headerlink" href="#background" title="Permalink to this headline">¶</a></h2>
-<p>Development of VAWS commenced in 2009-2010 in a collaborative project, partly funded by the then Department of Climate Change and energy Efficiency (DCCE), between Geoscience Australia, James Cook University and JDH Consulting <span id="id1">[<span>GA2011</span><span>Wehner2010</span>]</span>. The development of the current version was undertaken as part of the Bushfire and Natural Hazard Cooperative Research Centre (BNHCRC) project “Improving the Resilience of Existing Housing to Severe Wind” led by James Cook University.</p>
+<p>The original methodology was developed for the Critical Infrastructure Protection Modelling and Analysis (CIPMA) capability for assessing the likelihood of tower failure for a range of transmission tower and conductor types. CIPMA is a program managed by the Federal Attorney-General’s Department and Geoscience Australia (GA) is leading the technical development. The methodology was presented in <span id="id1">[<a class="reference internal" href="zbibliography.html#id2"><span>1</span></a>,<a class="reference internal" href="zbibliography.html#id3"><span>2</span></a>]</span>, and applied for a project examining towers in Gladstone region in 2006. The methology was subsequently refined and implemented in Python for a strudy of the vulnerability of the Metro Manila electricity transmission system to typhoons.</p>
 </div>
 <div class="section" id="overall-logic">
 <h2>Overall logic<a class="headerlink" href="#overall-logic" title="Permalink to this headline">¶</a></h2>
-<p>The VAWS tool takes a component-based approach to modelling building vulnerability. It is based on the premise that overall building damage is strongly related to the failure of key connections.</p>
-<p>The tool generates a building model by randomly selecting parameter values from predetermined probability distributions using a Monte Carlo process. Values include component and connection strengths, external pressure coefficients, shielding coefficients, wind speed profile with height, building orientation, debris damage parameters, and component masses.</p>
-<p>Then, for progressive gust wind speed increments, it calculates the forces in all critical connections using influence coefficients, assesses which connections have failed and translates these into a damage scenario and costs the repair. Using the repair cost and the full replacement cost, it calculates a damage index for each wind speed.</p>
-<p>For more details, see  <a class="reference internal" href="ch05_logic.html#logic"><span class="std std-ref">Chapter 5</span></a>.</p>
-</div>
-<div class="section" id="key-features">
-<h2>Key features<a class="headerlink" href="#key-features" title="Permalink to this headline">¶</a></h2>
-<ul>
-<li><p>Component-based approach:</p>
-<p>A house is modelled consisting of a large number of components, and overall damage is estimated based on damage to each of the components.</p>
-</li>
-<li><p>Uncertainty captured through a Monte-Carlo process:</p>
-<p>Various uncertainties affecting house performance are modelled through a monte-carlo process.</p>
-</li>
-<li><p>Inclusion of debris and water ingress induced damages:</p>
-<p>In addition to the damage to the connections by wind loads, debris and water ingress induced damages are modelled.</p>
-</li>
-<li><p>Internal pressurisation:</p>
-<p>Internal pressure coefficients are calculated at each wind speed following the procedures of AS/NZS 1170.2 (Standards Australia, 2011) using the modelled envelope failures to determine envelope permeability.</p>
-</li>
-</ul>
-</div>
-<div class="section" id="key-uncertainties">
-<h2>Key uncertainties<a class="headerlink" href="#key-uncertainties" title="Permalink to this headline">¶</a></h2>
-<p>The Monte Carlo process capture a range of variability in both wind loading and component parameters. The parameter values are sampled for each model and kept the same through the wind steps.</p>
-<ul>
-<li><p>Wind direction</p>
-<p>For each house, its orientation with respect to the wind is chosen from the eight cardinal directions either randomly, or by the user.</p>
-</li>
-<li><p>Gust wind profile</p>
-<p>Variation in the profile of wind speed with height is captured by the random sampling of a profile from a suite of user-provided profiles.</p>
-</li>
-<li><p>Pressure coefficients for zones and coverages</p>
-<p>Pressure coefficients for different zones of the house surfaces envelope are randomly chosen from a Type III (Weibull) extreme value distribution with specified means for different zones of the house envelope, and specified coefficients of variation for different load effects.</p>
-</li>
-<li><p>Strength and dead load</p>
-<p>Connection strengths and dead loads for generated houses are sampled from lognormal probability distributions.</p>
-</li>
-</ul>
+<p>The primary mechanism for wind damage to transmission towers is the direct action of wind on a tower and conductors in severe wind events such as tropical cyclones. The secondary mechanism of damage is the collapse of neighbouring towers with the transfer of load to adjacent towers due to unbroken conductors. Collapse of one tower leads to additional pulling load on neighbouring towers connected to it in addition to wind loads. A cluster of towers can fail from the initiation of a primary failure due to wind with the subsequent pull down of neighbouring towers. This phenomenon is referred to as a cascading failure.</p>
+<p>Damage due to the direct action of wind was modelled by defining tower fragility functions. The fragility functions are defined with respect to the type of tower based on functionality.
+The cascading failure in the event of a primary tower failure was modelled by defining conditional probabilities for potential collapse patterns. Different sets of conditional probabilities were defined with respect to the function of the primary collapse tower.</p>
 </div>
 <div class="section" id="caveats-and-limitations">
 <h2>Caveats and limitations<a class="headerlink" href="#caveats-and-limitations" title="Permalink to this headline">¶</a></h2>
-<p>VAWS has been designed primarily as a tool for assessing vulnerability of houses to wind hazard. The simulation outcomes should be interpreted as vulnerability of a group of similar houses on average, even though an individual house is modelled. In other words, the tool is not capable of predicting performance of an individual house for a specific wind event.</p>
+<p>WISTL has been developed as a tool to provide information on vulnerability of trasmission lines to wind hazard. The methodology of simulation of wind damage to transmission lines are based on various assumptions. Therefore the simulation outcomes should be interpreted with caution given the assumptions.</p>
 </div>
 </div>
 
@@ -109,8 +77,6 @@
 <li><a class="reference internal" href="#">Introduction</a><ul>
 <li><a class="reference internal" href="#background">Background</a></li>
 <li><a class="reference internal" href="#overall-logic">Overall logic</a></li>
-<li><a class="reference internal" href="#key-features">Key features</a></li>
-<li><a class="reference internal" href="#key-uncertainties">Key uncertainties</a></li>
 <li><a class="reference internal" href="#caveats-and-limitations">Caveats and limitations</a></li>
 </ul>
 </li>
@@ -120,8 +86,8 @@
   <p class="topless"><a href="index.html"
                         title="previous chapter">WISTL: Wind Impact Simulation on Transmission Lines</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="ch02_software.html"
-                        title="next chapter">Getting Started</a></p>
+  <p class="topless"><a href="glossary.html"
+                        title="next chapter">Glossary</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
@@ -150,7 +116,7 @@
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="ch02_software.html" title="Getting Started"
+          <a href="glossary.html" title="Glossary"
              >next</a> |</li>
         <li class="right" >
           <a href="index.html" title="WISTL: Wind Impact Simulation on Transmission Lines"

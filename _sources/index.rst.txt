@@ -16,9 +16,6 @@ WISTL: Wind Impact Simulation on Transmission Lines
    :maxdepth: 2
 
    ch01_introduction
-   ch02_software
-   ch03_input
-   ch04_logic
    glossary
    zbibliography
 
