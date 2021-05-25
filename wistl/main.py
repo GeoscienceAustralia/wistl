@@ -7,17 +7,92 @@ WISTL: Wind Impact Simulation on Transmission Lines
 import os
 import sys
 import time
+import collections
 import logging.config
 import pandas as pd
 from optparse import OptionParser
 import dask
 from dask.distributed import Client
+import multiprocessing
+import itertools
+import functools
 
-from wistl.config import Config
+from wistl.config import Config, set_towers_and_lines
 from wistl.version import VERSION_DESC
 from wistl.scenario import Scenario
+from wistl.constants import params_event, params_tower, params_line
 #from wistl.line import compute_damage_per_line
+from wistl.tower import compute_tower_damage
+from itertools import repeat
 
+# create a list of towers 
+Tower = collections.namedtuple('Tower', params_tower)
+Line = collections.namedtuple('Line', params_line)
+
+logger = logging.getLogger(__name__)
+
+
+def combine_by_line(x0, x1):
+    """
+    x0: (DF, str)
+    x1: (DF, str)
+    """
+    df0, str0 = x0
+    df1, str1 = x1
+    xc = df0.merge(df1,
+                  how='outer',
+                  left_on='Time',
+                  right_on='Time',
+                  suffixes=(str0, str1))
+
+    return (xc, '')
+
+
+def run_simulation_alt(cfg, client_ip=None):
+
+    logger.info('parallel MC run on.......')
+
+    #cfg.no_sims = 100000
+
+    dic_towers, dic_lines = set_towers_and_lines(cfg)
+
+    # using default dict or named tuple
+    towers = collections.defaultdict(list)
+    lines = collections.defaultdict(list)
+    for line_name, items in dic_towers.items():
+        lines[line_name] = Line(**dic_lines[line_name])
+        for tower_name, item in items.items():
+            towers[tower_name] = Tower(**item)
+
+    client = Client(client_ip)
+
+    results = []
+    #result = collections.defaultdict(dict)
+    for event in cfg.events:
+        for _, tower in towers.items():
+
+            result = client.submit(compute_tower_damage, event, lines, tower, cfg)
+            results.append(result)
+
+    results = client.gather(results)
+
+    client.close()
+
+    # aggregate by event and line
+    damage_prob = {}
+    for event in cfg.events:
+        damage_prob[event.id] = {}
+        for line_name in dic_lines.keys():
+            dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results if (x['event']==event.id) and (x['line']==line_name)])
+            try:
+                damage_prob[event.id][line_name] = functools.reduce(combine_by_line, zip(dump_df, dump_str))[0]
+            except KeyError:
+                pass
+
+    #with multiprocessing.Pool() as pool:
+    #    results = pool.starmap(compute_dmg, itertools.product(cfg.events, towers.values()))
+    #print(len(results))
+    return results
 
 def run_simulation(cfg, client_ip=None):
     """
@@ -29,6 +104,21 @@ def run_simulation(cfg, client_ip=None):
 
     logger = logging.getLogger(__name__)
 
+    logger.info('parallel MC run on.......')
+
+    # create a list of towers 
+    Tower = namedtuple('Tower', params_tower)
+    Line = namedtuple('Line', params_line)
+
+    # using default dict or named tuple
+    towers = defaultdict(list)
+    lines = defaultdict(list)
+    for line_name, items in cfg.towers_by_line.items():
+        lines[line_name] = Line(**cfg.lines[line_name])
+        for tower_name, item in items.items():
+            towers[tower_name] = Tower(**item)
+
+    # first compute analytical 
     if cfg.options['run_parallel']:
 
         logger.info('parallel MC run on.......')
@@ -181,7 +271,12 @@ def main():
             path_cfg = os.path.dirname(os.path.realpath(options.config_file))
             set_logger(path_cfg, options.verbose)
             conf = Config(file_cfg=options.config_file)
-            run_simulation(cfg=conf, client_ip=options.client_ip)
+            #run_simulation(cfg=conf, client_ip=options.client_ip)
+            start = time.time()
+            results = run_simulation_alt(cfg=conf, client_ip=options.client_ip)
+            #results = demo_dask(cfg=conf, client_ip=options.client_ip)
+            #print(results)
+            print(f'Elapsed time: {time.time() - start}')
     else:
         parser.print_help()
 
