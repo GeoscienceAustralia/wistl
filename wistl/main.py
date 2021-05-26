@@ -32,20 +32,47 @@ Line = collections.namedtuple('Line', params_line)
 logger = logging.getLogger(__name__)
 
 
-def combine_by_line(x0, x1):
-    """
-    x0: (DF, str)
-    x1: (DF, str)
-    """
-    df0, str0 = x0
-    df1, str1 = x1
-    xc = df0.merge(df1,
-                  how='outer',
-                  left_on='Time',
-                  right_on='Time',
-                  suffixes=(str0, str1))
+"""
+def sort_results_df_by_line(item, results, cfg, dic_lines):
 
-    return (xc, '')
+
+    _dic = collections.defaultdict(dict)
+
+    for event in cfg.events:
+        for line_name in dic_lines.keys():
+
+            dump_str, dump_df = zip(*[(x['tower'], x[item]) for x in results if (x['event']==event.id) and (x['line']==line_name)])
+            try:
+                _dic[event.id][line_name] = functools.reduce(combine_by_line, zip(dump_df, dump_str))[0]
+            except KeyError:
+                _dic[event.id][line_name] = {}
+
+    return _dic
+
+
+def get_item_by_event_and_line(item, results):
+
+    _dic = collections.defaultdict(dict)
+    for event in cfg.events:
+        for line_name in dic_lines.keys():
+            dump_str, dump_df = zip(*[(x['tower'], x[item]) for x in results if (x['event']==event.id) and (x['line']==line_name)])
+                 
+    dump, dump_df = zip(*[(x['tower'], x['dmg']) for x in results if (x['event']==event.id) and (x['tower']==line_name) ])
+   
+
+def sort_results_by_line(results):
+    dmg = collections.defaultdict(dict): df
+    collapse_adj = collections.defaultdict(dict) : dict
+    dmg_state_sim = collections.defaultdict(dict) :
+    collapse_adj_sim = collections.defaultdict(dict): 
+    dmg_time_idx = collections.defaultdict(dict)
+
+    for event in cfg.events:
+        for line_name in dic_lines.keys():
+
+            dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results if (x['event']==event.id) and (x['line']==line_name)])
+            damage_prob[event.id][line_name] = functools.reduce(combine_by_line, zip(dump_df, dump_str))[0]
+"""
 
 
 def run_simulation_alt(cfg, client_ip=None):

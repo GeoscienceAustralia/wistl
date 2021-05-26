@@ -14,46 +14,89 @@ import logging
 from wistl.tower import Tower
 from wistl.config import create_list_idx, unit_vector_by_bearing, angle_between_unit_vectors
 
-def set_no_time(dmg_towers):
-    if dmg_towers:
-        no_time = len(self.time)
-    return self._no_time
 
-def set_dmg_towers(self):
-    return [k for k, v in self.towers.items() if v.no_time]
-
-
-def set_time(towers):
-    if self.dmg_towers:
-        try:
-            self._time = self.towers[0].wind.index[
-                    self.dmg_time_idx[0]:self.dmg_time_idx[1]]
-        except AttributeError:
-            self.logger.error(
-                    f'Can not set time for Line:{self.name}')
-        return self._time
-
-def dmg_time_idx(towers_dmg):
+def compute_damage_prob(results, event, line, cfg):
     """
-    index of dmg relative to wind time index
+    calculate damage probability of towers analytically
+    Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
+    where Pd: collapse due to direct wind
+    Pi,j: collapse probability due to collapse of j (=Pd(j)*Pc(i|j))
+    pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
     """
 
-    # get min of dmg_time_idx[0], max of dmg_time_idx[1]
-    tmp = [self.towers[k].dmg_time_idx for k in self.dmg_towers]
-    try:
-        id0 = list(map(min, zip(*tmp)))[0]
-    except IndexError:
-        self.logger.info(f'Line:{self.name} sustains no damage')
-    else:
-        id1 = list(map(max, zip(*tmp)))[1]
-        self._dmg_time_idx = (id0, id1)
-    return self._dmg_time_idx
+    # dmg
+    dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results
+                              if (x['event']==event.id) and (x['line']==line.linename)])
+    dmg = pd.concat(dump_df, join='outer', axis=1)
 
-def dmg_towers(self):
+    if not dmg.empty:
 
+        _str = [[f'{ds}_{name}' for name in dump_str] for ds in cfg.damage_states]
+        dmg.columns = [x for z in zip(*_str) for x in z]
 
-    dmg_towers = [k for k, v in self.towers.items() if v.no_time]
-    return self._dmg_towers
+        # collapse_adj
+        collapse_adj = {x['tower']: x['collapse_adj'] for x in results
+                        if (x['event']==event.id) and (x['line']==line.linename)}
+
+        # compute no_time for line
+        no_time = dmg.shape[0]
+
+        if no_time:
+
+            pc_adj_agg = np.zeros((line.no_towers, line.no_towers, no_time))
+
+            damage_prob = {}
+
+            # prob of collapse
+            for k, name in enumerate(line.names):
+
+                # adjust tower dmg_time_idx to line 
+                for idl, prob in collapse_adj[name].items():
+
+                    prob = adjust_value_to_line(dmg, name, prob)
+
+                    try:
+                        pc_adj_agg[k, idl] = prob
+                    except ValueError:
+                        print(f'collapse_adj of {name} can not be combined with pc_adj_agg of {line_name} as {prob.shape} is not compatible with {pc_adj_agg.shape}')
+
+                pc_adj_agg[k, k] = dmg[f'collapse_{name}'].fillna(0.0).values
+
+            # pc_collapse.shape == (no_tower, no_time)
+            pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
+
+            damage_prob['collapse'] = pd.DataFrame(pc_collapse.T,
+                    columns=line.names, index=dmg.index)
+
+            # non_collapse state
+            for ds in cfg.non_collapse:
+
+                temp = np.zeros_like(pc_collapse)
+
+                for k, name in enumerate(line.names):
+
+                    dmg_ds = dmg[f'{ds}_{name}'].fillna(0.0).values
+                    dmg_collapse = dmg[f'collapse_{name}'].fillna(0.0).values
+
+                    if len(dmg_ds):
+
+                        # P(DS>ds) - P(collapse directly) + P(collapse induced)
+                        try:
+                            value = dmg_ds - dmg_collapse + pc_collapse[k]
+                        except ValueError:
+                            self.logger.critical(f'PE of {ds} of {name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
+                        else:
+                            temp[k] = np.where(value > 1.0, [1.0], value)
+
+                    else:
+                        temp[k] = pc_collapse[k]
+
+                damage_prob[ds] = pd.DataFrame(temp.T,
+                        columns=line.names,
+                        index=dmg.index)
+
+            return damage_prob
+
 
 def compute_damage_prob_sim(self):
 
@@ -123,79 +166,8 @@ def compute_damage_prob_sim(self):
 
 
 
-def compute_damage_prob(line, dmg, collapse_adj, cfg):
-    """
-    calculate damage probability of towers analytically
-    Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
-    where Pd: collapse due to direct wind
-    Pi,j: collapse probability due to collapse of j (=Pd(j)*Pc(i|j))
-    pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
-    """
 
-    # compute no_time for line
-    #no_time = 
 
-    if self.no_time:
-
-        pc_adj_agg = np.zeros((line.no_towers, line.no_towers, no_time))
-
-        damage_prob = {}
-
-        # prob of collapse
-        for k in self.dmg_towers:
-
-            # adjust tower dmg_time_idx to line 
-            for idl, prob in towers_collapse_adj.items():
-
-                prob = adjust_value_to_line(self.dmg_time_idx, self.towers[k].dmg_time_idx, prob)
-
-                try:
-                    pc_adj_agg[self.towers[k].idl, idl] = prob
-                except ValueError:
-                    self.logger.critical(f'collapse_adj of {self.towrs[k].name} can not be combined with pc_adj_agg of {self.name} as {prob.shape} is not compatible with {pc_adj_agg.shape}')
-
-            pc_adj_agg[self.towers[k].idl, self.towers[k].idl] = adjust_value_to_line(
-                self.dmg_time_idx, self.towers[k].dmg_time_idx, self.towers[k].dmg['collapse'])
-
-        # pc_collapse.shape == (no_tower, no_time)
-        pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
-
-        damage_prob['collapse'] = pd.DataFrame(
-            pc_collapse.T,
-            columns=self.names,
-            index=self.time)
-
-        # non_collapse state
-        for ds in self.non_collapse:
-
-            temp = np.zeros_like(pc_collapse)
-
-            for k, tower in self.towers.items():
-
-                if tower.dmg_time_idx:
-
-                    # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                    try:
-                        # adjust tower dmg_time_idx relative to line
-                        dmg_ds = adjust_value_to_line(self.dmg_time_idx,
-                            tower.dmg_time_idx, tower.dmg[ds])
-                        dmg_collapse = adjust_value_to_line(self.dmg_time_idx,
-                            tower.dmg_time_idx, tower.dmg['collapse'])
-                        value = dmg_ds - dmg_collapse + pc_collapse[tower.idl]
-                    except ValueError:
-                        self.logger.critical(f'PE of {ds} of {tower.name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
-                    else:
-                        temp[tower.idl] = np.where(value > 1.0, [1.0], value)
-
-                else:
-                    temp[tower.idl] = pc_collapse[tower.idl]
-
-            self.damage_prob[ds] = pd.DataFrame(
-                temp.T,
-                columns=self.names,
-                index=self.time)
-
-        return self.damage_prob
 
 
 
@@ -882,16 +854,20 @@ def h_tower(line, idn):
 
     return dic
 
-def adjust_value_to_line(line_dmg_time_idx, tower_dmg_time_idx, value):
+def adjust_value_to_line(dmg, tower_name, value):
     """
     line_dmg_time_idx: tuple
     tower_dmg_time_idx: tuple
     value: list or array
     """
-    assert len(range(*tower_dmg_time_idx)) == len(value)
-    _dic = {k:v for k, v in zip(range(*tower_dmg_time_idx), value)}
-    return np.array([_dic[k] if k in _dic else 0
-                     for k in range(*line_dmg_time_idx)])
+    new = dmg[f'collapse_{tower_name}'].copy()
+    try:
+        new.loc[~new.isna()] = value
+    except ValueError:
+        print(f'different length provided for {tower_name}')
+    else:
+        return new.fillna(0.0)
+
 
 def adjust_index_to_line(line_dmg_time_idx, tower_dmg_time_idx, value):
     """
