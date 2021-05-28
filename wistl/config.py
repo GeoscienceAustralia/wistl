@@ -20,7 +20,7 @@ from wistl.constants import K_FACTOR, NO_CIRCUIT, FIELDS_TOWER, params_event
 
 OPTIONS = ['run_parallel', 'save_output', 'save_figure',
            'run_analytical', 'run_simulation', 'use_random_seed',
-           'run_no_cascading_collapse', 'adjust_design_by_topography',
+           'run_simulation_wo_cascading', 'adjust_design_by_topography',
            'apply_line_interaction', 'use_collapse_capacity']
 DIRECTORIES = ['gis_data', 'wind_event_base', 'input', 'output']
 GIS_DATA = ['shape_tower', 'shape_line']

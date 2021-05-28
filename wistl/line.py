@@ -1,21 +1,124 @@
 #!/usr/bin/env python
 
-import copy
-import time
-import dask
-import itertools
-from collections import defaultdict
 import os
 import pandas as pd
 import numpy as np
 import h5py
 import logging
 
-from wistl.tower import Tower
-from wistl.config import create_list_idx, unit_vector_by_bearing, angle_between_unit_vectors
+
+logger = logging.getLogger(__name__)
 
 
-def compute_damage_prob(results, event, line, cfg):
+def compute_damage_by_line(line, results, event, cfg):
+    """
+    mc simulation over transmission line
+    :param line: instance of transmission line
+           cfg: instance of config
+    :return: None but update attributes of
+    """
+
+    #logger.info(f'computing damage of {self.name} for {self.event_id}')
+
+    # compute damage probability analytically
+    damage_prob = compute_damage_prob(event, line, cfg, results)
+
+    # perfect correlation within a single line
+    if cfg.options['run_simulation']:
+        damage_prob_sim, no_damage, prob_no_damage =  compute_damage_prob_sim(event, line, cfg, results)
+
+        if cfg.options['run_simulation_wo_cascading']:
+            damage_prob_sim_wo_cascading, no_damage_wo_cascading, prob_no_damage_wo_cascading = compute_damage_prob_sim_wo_cascading(event, line, cfg, results)
+        else:
+            damage_prob_sim_wo_cascading = None
+            no_damage_wo_cascading = None
+            prob_no_damage_wo_cascading = None
+    else:
+        damage_prob_sim = None
+        no_damage = None
+        prob_no_damage = None
+
+    # compare simulation against analytical
+    if damage_prob is not None:
+
+        for ds in cfg.damage_states:
+            diff = np.abs(damage_prob_sim[ds] - damage_prob[ds]) - (cfg.atol + cfg.rtol * damage_prob[ds])
+
+            if len(diff[diff > 0]):
+                idx = diff[diff > 0].max(axis=0).idxmax()
+                idt = diff[diff > 0][idx].idxmax()
+                logger.warning(f"""
+                Simulation results not close to analytical for {line.linename}: {ds}
+                At {idt} for tower {idx}:
+                (S) {damage_prob_sim[ds][idx].loc[idt]:.4f} vs (A) {damage_prob[ds][idx].loc[idt]:.4f}
+                """)
+
+    # save
+    #if cfg.options['save_output']:
+    #    write_output()
+
+    return {'event': event.id,
+            'line': line.linename,
+            'damage_prob': damage_prob,
+            'damage_prob_sim': damage_prob_sim,
+            'no_damage': no_damage,
+            'prob_no_damage': prob_no_damage,
+            'dmg_prob_sim_wo_cascading': damage_prob_sim_wo_cascading,
+            'no_damage_wo_cascading': no_damage_wo_cascading,
+            'prob_no_damage_wo_cascading': prob_no_damage_wo_cascading,
+            }
+
+
+def compute_stats(dic_tf_ds, cfg, no_towers, idx_time):
+    """
+    compute mean and std of no. of ds
+    tf_collapse_sim.shape = (no_towers, no_sim, no_time)
+    :param tf_sim:
+    :return:
+    """
+    #tic = time.time()
+    no_damage = {}
+    prob_no_damage = {}
+    columns = [str(x) for x in range(no_towers + 1)]
+    no_time = len(idx_time)
+
+    # (no_towers, 1)
+    x_tower = np.array(range(no_towers + 1))[:, np.newaxis]
+    x2_tower = x_tower ** 2.0
+
+    tf_ds = np.zeros((no_towers,
+                      cfg.no_sims,
+                      no_time), dtype=bool)
+
+    # from collapse and minor
+    for ds in cfg.damage_states[::-1]:
+
+        tf_ds = np.logical_xor(dic_tf_ds[ds], tf_ds)
+
+        # mean and standard deviation
+        # no_ds_across_towers.shape == (no_sims, no_time)
+        no_ds_across_towers = tf_ds.sum(axis=0)
+        prob = np.zeros(shape=(no_time, no_towers + 1))
+
+        for i in range(no_time):
+            value, freq = np.unique(no_ds_across_towers[:, i], return_counts=True)  # (value, freq)
+            prob[i, [int(x) for x in value]] = freq
+
+        prob /= cfg.no_sims  # (no_time, no_towers)
+
+        _exp = np.dot(prob, x_tower)
+        _std = np.sqrt(np.dot(prob, x2_tower) - _exp ** 2)
+
+        no_damage[ds] = pd.DataFrame(np.hstack((_exp, _std)),
+            columns=['mean', 'std'], index=idx_time)
+
+        prob_no_damage[ds] = pd.DataFrame(prob, columns=columns, index=idx_time)
+
+    return no_damage, prob_no_damage
+
+
+
+def compute_damage_prob(event, line, cfg, results):
     """
     calculate damage probability of towers analytically
     Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
@@ -31,6 +134,8 @@ def compute_damage_prob(results, event, line, cfg):
 
     if not dmg.empty:
 
+        damage_prob = {}
+
         _str = [[f'{ds}_{name}' for name in dump_str] for ds in cfg.damage_states]
         dmg.columns = [x for z in zip(*_str) for x in z]
 
@@ -38,113 +143,131 @@ def compute_damage_prob(results, event, line, cfg):
         collapse_adj = {x['tower']: x['collapse_adj'] for x in results
                         if (x['event']==event.id) and (x['line']==line.linename)}
 
-        # compute no_time for line
-        no_time = dmg.shape[0]
+        pc_adj_agg = np.zeros((line.no_towers, line.no_towers, dmg.shape[0]))
 
-        if no_time:
+        # prob of collapse
+        for k, name in enumerate(line.names):
 
-            pc_adj_agg = np.zeros((line.no_towers, line.no_towers, no_time))
+            # adjust tower dmg_time_idx to line 
+            for idl, prob in collapse_adj[name].items():
 
-            damage_prob = {}
+                new = dmg[f'collapse_{name}'].copy()
+                try:
+                    new.loc[~new.isna()] = prob
+                except ValueError:
+                    logger.warning(f'different length provided for {tower_name}')
+                else:
+                    pc_adj_agg[k, idl] = new.fillna(0.0)
 
-            # prob of collapse
+            pc_adj_agg[k, k] = dmg[f'collapse_{name}'].fillna(0.0).values
+
+        # pc_collapse.shape == (no_tower, no_time)
+        pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
+
+        damage_prob['collapse'] = pd.DataFrame(pc_collapse.T,
+                columns=line.names, index=dmg.index)
+
+        # non_collapse state
+        for ds in cfg.non_collapse:
+
+            temp = np.zeros_like(pc_collapse)
+
             for k, name in enumerate(line.names):
 
-                # adjust tower dmg_time_idx to line 
-                for idl, prob in collapse_adj[name].items():
+                dmg_ds = dmg[f'{ds}_{name}'].fillna(0.0).values
+                dmg_collapse = dmg[f'collapse_{name}'].fillna(0.0).values
 
-                    prob = adjust_value_to_line(dmg, name, prob)
+                if len(dmg_ds):
 
+                    # P(DS>ds) - P(collapse directly) + P(collapse induced)
                     try:
-                        pc_adj_agg[k, idl] = prob
+                        value = dmg_ds - dmg_collapse + pc_collapse[k]
                     except ValueError:
-                        print(f'collapse_adj of {name} can not be combined with pc_adj_agg of {line_name} as {prob.shape} is not compatible with {pc_adj_agg.shape}')
-
-                pc_adj_agg[k, k] = dmg[f'collapse_{name}'].fillna(0.0).values
-
-            # pc_collapse.shape == (no_tower, no_time)
-            pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
-
-            damage_prob['collapse'] = pd.DataFrame(pc_collapse.T,
-                    columns=line.names, index=dmg.index)
-
-            # non_collapse state
-            for ds in cfg.non_collapse:
-
-                temp = np.zeros_like(pc_collapse)
-
-                for k, name in enumerate(line.names):
-
-                    dmg_ds = dmg[f'{ds}_{name}'].fillna(0.0).values
-                    dmg_collapse = dmg[f'collapse_{name}'].fillna(0.0).values
-
-                    if len(dmg_ds):
-
-                        # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                        try:
-                            value = dmg_ds - dmg_collapse + pc_collapse[k]
-                        except ValueError:
-                            self.logger.critical(f'PE of {ds} of {name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
-                        else:
-                            temp[k] = np.where(value > 1.0, [1.0], value)
-
+                        self.logger.critical(f'PE of {ds} of {name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
                     else:
-                        temp[k] = pc_collapse[k]
+                        temp[k] = np.where(value > 1.0, [1.0], value)
 
-                damage_prob[ds] = pd.DataFrame(temp.T,
-                        columns=line.names,
-                        index=dmg.index)
+                else:
+                    temp[k] = pc_collapse[k]
 
-            return damage_prob
+            damage_prob[ds] = pd.DataFrame(temp.T,
+                    columns=line.names,
+                    index=dmg.index)
+
+        return damage_prob
 
 
-def compute_damage_prob_sim(self):
 
-    # perfect correlation within a single line
-    self.damage_prob_sim = {}
-    self.dmg_idx = {}  # tuple of idl, id_sim, id_time
+def compute_damage_prob_sim(event, line, cfg, results, dmg=None):
 
-    if self.no_time:
+    if dmg is None:
+        dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results
+                              if (x['event']==event.id) and (x['line']==line.linename)])
+        dmg = pd.concat(dump_df, join='outer', axis=1)
+
+        if not dmg.empty:
+            _str = [[f'{ds}_{name}' for name in dump_str] for ds in cfg.damage_states]
+            dmg.columns = [x for z in zip(*_str) for x in z]
+
+    if dmg.empty:
+        return None, None, None
+
+    else:
+
+        # dmg_state_sim
+        dmg_state_sim = {x['tower']: x['dmg_state_sim'] for x in results
+                        if (x['event']==event.id) and (x['line']==line.linename)}
+
+        # collapse_adj_sim
+        collapse_adj_sim = {x['tower']: x['collapse_adj_sim'] for x in results
+                        if (x['event']==event.id) and (x['line']==line.linename)}
+
+        # perfect correlation within a single line
+        damage_prob_sim = {}
+        #self.dmg_idx = {}  # tuple of idl, id_sim, id_time
+
         #idx_by_ds = {ds: None for ds in self.damage_states}
-        dic_tf_ds = {ds: None for ds in self.damage_states}
-        tf_ds = np.zeros((self.no_towers, self.no_sims, self.no_time), dtype=bool)
+        dic_tf_ds = {ds: None for ds in cfg.damage_states}
+        tf_ds = np.zeros((line.no_towers, cfg.no_sims, dmg.shape[0]), dtype=bool)
 
         # collapse by adjacent towers
-        for k in self.dmg_towers:
-            if self.towers[k].collapse_adj_sim is not None:
+        for name in line.names:
 
-                idt0, idx = adjust_index_to_line(self.dmg_time_idx,
-                    self.towers[k].dmg_time_idx,
-                    self.towers[k].collapse_adj_sim['id_time'])
+            try:
+                collapse_adj_sim[name]['id_adj']
+            except KeyError:
+                pass
+            else:
+                # adjust time index from tower to line
+                _ = (~dmg[f'collapse_{name}'].isna()).idxmax()
+                ida = dmg[f'collapse_{name}'].index.get_loc(_)
 
-                collapse_adj_sim = self.towers[k].collapse_adj_sim.loc[idx].copy()
-
-                for id_adj, grp in collapse_adj_sim.groupby('id_adj'):
+                for id_adj, grp in collapse_adj_sim[name].groupby('id_adj'):
                     for idl in id_adj:
-                        tf_ds[idl, grp['id_sim'], grp['id_time'] - idt0] = True
+                        tf_ds[idl, grp['id_sim'].values, grp['id_time'].values + ida] = True
 
             #else:
             #    print(f'collapse_adj_sim of {self.name} for {self.towers[k].name},{self.towers[k].idl} is None')
         # append damage state by direct wind
-        for ds in self.damage_states[::-1]:  # collapse first
+        for ds in cfg.damage_states[::-1]:  # collapse first
 
-            for k in self.dmg_towers:
+            for k, name in enumerate(line.names):
 
-                idt0, idx = adjust_index_to_line(self.dmg_time_idx,
-                    self.towers[k].dmg_time_idx,
-                    self.towers[k].dmg_state_sim[ds]['id_time'])
+                # adjust time index from tower to line
+                _ = (~dmg[f'collapse_{name}'].isna()).idxmax()
+                ida = dmg[f'collapse_{name}'].index.get_loc(_)
 
-                dmg_state_sim = self.towers[k].dmg_state_sim[ds].loc[idx].copy()
+                #dmg_state_sim = self.towers[k].dmg_state_sim[ds].loc[idx].copy()
 
-                tf_ds[self.towers[k].idl, dmg_state_sim['id_sim'],
-                      dmg_state_sim['id_time'] - idt0] = True
+                tf_ds[k, dmg_state_sim[name][ds]['id_sim'].values,
+                      dmg_state_sim[name][ds]['id_time'].values + ida] = True
 
             # dmg index for line interaction
-            self.dmg_idx[ds] = np.where(tf_ds)
+            #self.dmg_idx[ds] = np.where(tf_ds)
 
             # PE(DS)
-            self.damage_prob_sim[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / self.no_sims,
-                columns=self.names, index=self.time)
+            damage_prob_sim[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / cfg.no_sims,
+                columns=line.names, index=dmg.index)
 
             dic_tf_ds[ds] = tf_ds.copy()
             #idx = np.where(tf_ds)
@@ -152,17 +275,79 @@ def compute_damage_prob_sim(self):
             #                 id_tower, id_sim, id_time in zip(*idx)]
 
         # compute mean, std of no. of damaged towers
-        self.no_damage, self.prob_no_damage = self.compute_stats(dic_tf_ds)
+        no_damage, prob_no_damage = compute_stats(dic_tf_ds, cfg, line.no_towers, dmg.index)
 
         # checking against analytical value
-        for name in self.names:
-            try:
-                np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
-                    self.damage_prob_sim['collapse'][name].values, atol=self.atol, rtol=self.rtol)
-            except AssertionError:
-                self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
-    return self.damage_prob_sim
+        #for name in self.names:
+        #    try:
+        #        np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
+        #            self.damage_prob_sim['collapse'][name].values, atol=self.atol, rtol=self.rtol)
+        #    except AssertionError:
+        #        self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
+        return damage_prob_sim, no_damage, prob_no_damage
 
+
+def compute_damage_prob_sim_wo_cascading(event, line, cfg, results = None, dmg=None, dmg_state_sim=None):
+
+    if results is None:
+        assert dmg is not None, logger.warning('Either dmg or results should be provided')
+        assert dmg_state_sim is not None, logger.warning('Either dmg_state_sim or results should be provided')
+
+    if dmg is None:
+        dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results
+                              if (x['event']==event.id) and (x['line']==line.linename)])
+        dmg = pd.concat(dump_df, join='outer', axis=1)
+
+        if not dmg.empty:
+            _str = [[f'{ds}_{name}' for name in dump_str] for ds in cfg.damage_states]
+            dmg.columns = [x for z in zip(*_str) for x in z]
+
+    if dmg_state_sim is None:
+        # dmg_state_sim
+        dmg_state_sim = {x['tower']: x['dmg_state_sim'] for x in results
+                        if (x['event']==event.id) and (x['line']==line.linename)}
+
+    if dmg.empty:
+        return None, None, None
+    else:
+
+        damage_prob_sim_wo_cascading = {}
+
+        dic_tf_ds = {ds: None for ds in cfg.damage_states}
+
+        tf_ds = np.zeros((line.no_towers, cfg.no_sims, dmg.shape[0]), dtype=bool)
+
+        for ds in cfg.damage_states[::-1]:  # collapse first
+
+            for k, name in enumerate(line.names):
+
+                # adjust time index from tower to line
+                _ = (~dmg[f'collapse_{name}'].isna()).idxmax()
+                ida = dmg[f'collapse_{name}'].index.get_loc(_)
+
+                tf_ds[k, dmg_state_sim[name][ds]['id_sim'].values,
+                      dmg_state_sim[name][ds]['id_time'].values + ida] = True
+
+            # PE(DS)
+            damage_prob_sim_wo_cascading[ds] = pd.DataFrame(
+                tf_ds.sum(axis=1).T / cfg.no_sims,
+                columns=line.names,
+                index=dmg.index)
+
+            dic_tf_ds[ds] = tf_ds.copy()
+
+        no_damage_wo_cascading, prob_no_damage_wo_cascading = compute_stats(dic_tf_ds, cfg, line.no_towers, dmg.index)
+
+        # checking against analytical value for non collapse damage states
+        #for k in self.dmg_towers:
+        #    name = self.towers[k].name
+        #    idt0, idt1 = [x - self.dmg_time_idx[0] for x in self.towers[k].dmg_time_idx]
+        #    try:
+        #        np.testing.assert_allclose(self.towers[k].dmg[ds].values,
+        #                self.damage_prob_sim_no_cascading[ds].iloc[idt0:idt1][name].values, atol=self.atol, rtol=self.rtol)
+        #    except AssertionError:
+        #        self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
+    return damage_prob_sim_wo_cascading, no_damage_wo_cascading, prob_no_damage_wo_cascading
 
 
 
@@ -325,7 +510,7 @@ class Line(object):
     def dmg_time_idx1(self):
         """
         index of dmg relative to wind time index
-	"""
+    """
         if self._dmg_time_idx is None:
             # get min of dmg_time_idx[0], max of dmg_time_idx[1]
             tmp = [self.towers[k].dmg_idxmax for k in self.dmg_towers]
@@ -402,306 +587,6 @@ class Line(object):
                         msg = f'tower:{tower.name}, angle: {angle[target_line]}, wind:{wind_vector}'
                         self.logger.warning(msg)
         return self._dmg_idx_interaction
-
-    def compute_damage_prob(self):
-        """
-        calculate damage probability of towers analytically
-        Pc(i) = 1-(1-Pd(i))x(1-Pc(i,1))*(1-Pc(i,2)) ....
-        where Pd: collapse due to direct wind
-        Pi,j: collapse probability due to collapse of j (=Pd(j)*Pc(i|j))
-        pc_adj_agg[i,j]: probability of collapse of j due to ith collapse
-        """
-        self.damage_prob = {}
-
-        if self.no_time:
-
-            pc_adj_agg = np.zeros((self.no_towers, self.no_towers, self.no_time))
-
-            # prob of collapse
-            for k in self.dmg_towers:
-
-                # adjust tower dmg_time_idx to line 
-                for idl, prob in self.towers[k].collapse_adj.items():
-
-                    prob = adjust_value_to_line(self.dmg_time_idx, self.towers[k].dmg_time_idx, prob)
-
-                    try:
-                        pc_adj_agg[self.towers[k].idl, idl] = prob
-                    except ValueError:
-                        self.logger.critical(f'collapse_adj of {self.towrs[k].name} can not be combined with pc_adj_agg of {self.name} as {prob.shape} is not compatible with {pc_adj_agg.shape}')
-
-                pc_adj_agg[self.towers[k].idl, self.towers[k].idl] = adjust_value_to_line(
-                    self.dmg_time_idx, self.towers[k].dmg_time_idx, self.towers[k].dmg['collapse'])
-
-            # pc_collapse.shape == (no_tower, no_time)
-            pc_collapse = 1.0 - np.prod(1 - pc_adj_agg, axis=0)
-
-            self.damage_prob['collapse'] = pd.DataFrame(
-                pc_collapse.T,
-                columns=self.names,
-                index=self.time)
-
-            # non_collapse state
-            for ds in self.non_collapse:
-
-                temp = np.zeros_like(pc_collapse)
-
-                for k, tower in self.towers.items():
-
-                    if tower.dmg_time_idx:
-
-                        # P(DS>ds) - P(collapse directly) + P(collapse induced)
-                        try:
-                            # adjust tower dmg_time_idx relative to line
-                            dmg_ds = adjust_value_to_line(self.dmg_time_idx,
-                                tower.dmg_time_idx, tower.dmg[ds])
-                            dmg_collapse = adjust_value_to_line(self.dmg_time_idx,
-                                tower.dmg_time_idx, tower.dmg['collapse'])
-                            value = dmg_ds - dmg_collapse + pc_collapse[tower.idl]
-                        except ValueError:
-                            self.logger.critical(f'PE of {ds} of {tower.name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
-                        else:
-                            temp[tower.idl] = np.where(value > 1.0, [1.0], value)
-
-                    else:
-                        temp[tower.idl] = pc_collapse[tower.idl]
-
-                self.damage_prob[ds] = pd.DataFrame(
-                    temp.T,
-                    columns=self.names,
-                    index=self.time)
-
-        return self.damage_prob
-
-    def compute_damage_prob_sim(self):
-
-        # perfect correlation within a single line
-        self.damage_prob_sim = {}
-        self.dmg_idx = {}  # tuple of idl, id_sim, id_time
-
-        if self.no_time:
-            #idx_by_ds = {ds: None for ds in self.damage_states}
-            dic_tf_ds = {ds: None for ds in self.damage_states}
-            tf_ds = np.zeros((self.no_towers, self.no_sims, self.no_time), dtype=bool)
-
-            # collapse by adjacent towers
-            for k in self.dmg_towers:
-                if self.towers[k].collapse_adj_sim is not None:
-
-                    idt0, idx = adjust_index_to_line(self.dmg_time_idx,
-                        self.towers[k].dmg_time_idx,
-                        self.towers[k].collapse_adj_sim['id_time'])
-
-                    collapse_adj_sim = self.towers[k].collapse_adj_sim.loc[idx].copy()
-
-                    for id_adj, grp in collapse_adj_sim.groupby('id_adj'):
-                        for idl in id_adj:
-                            tf_ds[idl, grp['id_sim'], grp['id_time'] - idt0] = True
-
-                #else:
-                #    print(f'collapse_adj_sim of {self.name} for {self.towers[k].name},{self.towers[k].idl} is None')
-            # append damage state by direct wind
-            for ds in self.damage_states[::-1]:  # collapse first
-
-                for k in self.dmg_towers:
-
-                    idt0, idx = adjust_index_to_line(self.dmg_time_idx,
-                        self.towers[k].dmg_time_idx,
-                        self.towers[k].dmg_state_sim[ds]['id_time'])
-
-                    dmg_state_sim = self.towers[k].dmg_state_sim[ds].loc[idx].copy()
-
-                    tf_ds[self.towers[k].idl, dmg_state_sim['id_sim'],
-                          dmg_state_sim['id_time'] - idt0] = True
-
-                # dmg index for line interaction
-                self.dmg_idx[ds] = np.where(tf_ds)
-
-                # PE(DS)
-                self.damage_prob_sim[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / self.no_sims,
-                    columns=self.names, index=self.time)
-
-                dic_tf_ds[ds] = tf_ds.copy()
-                #idx = np.where(tf_ds)
-                #idx_by_ds[ds] = [(id_time, id_sim, id_tower) for
-                #                 id_tower, id_sim, id_time in zip(*idx)]
-
-            # compute mean, std of no. of damaged towers
-            self.no_damage, self.prob_no_damage = self.compute_stats(dic_tf_ds)
-
-            # checking against analytical value
-            for name in self.names:
-                try:
-                    np.testing.assert_allclose(self.damage_prob['collapse'][name].values,
-                        self.damage_prob_sim['collapse'][name].values, atol=self.atol, rtol=self.rtol)
-                except AssertionError:
-                    self.logger.warning(f'Simulation results of {name}:collapse are not close to the analytical')
-        return self.damage_prob_sim
-
-    def compute_damage_prob_sim_no_cascading(self):
-
-        self.damage_prob_sim_no_cascading = {}
-
-        if self.no_time:
-            dic_tf_ds = {ds: None for ds in self.damage_states}
-
-            tf_ds = np.zeros((self.no_towers, self.no_sims, self.no_time), dtype=bool)
-
-            for ds in self.damage_states[::-1]:  # collapse first
-
-                for k in self.dmg_towers:
-
-                    idt0, idx = adjust_index_to_line(self.dmg_time_idx,
-                        self.towers[k].dmg_time_idx,
-                        self.towers[k].dmg_state_sim[ds]['id_time'])
-
-                    dmg_state_sim = self.towers[k].dmg_state_sim[ds].loc[idx].copy()
-
-                    tf_ds[self.towers[k].idl, dmg_state_sim['id_sim'],
-                          dmg_state_sim['id_time'] - idt0] = True
-
-                # PE(DS)
-                self.damage_prob_sim_no_cascading[ds] = pd.DataFrame(
-                    tf_ds.sum(axis=1).T / self.no_sims,
-                    columns=self.names,
-                    index=self.time)
-
-                dic_tf_ds[ds] = tf_ds.copy()
-
-            self.no_damage_no_cascading, self.prob_no_damage_no_cascading = \
-                self.compute_stats(dic_tf_ds)
-
-            # checking against analytical value for non collapse damage states
-            for k in self.dmg_towers:
-                name = self.towers[k].name
-                idt0, idt1 = [x - self.dmg_time_idx[0] for x in self.towers[k].dmg_time_idx]
-                try:
-                    np.testing.assert_allclose(self.towers[k].dmg[ds].values,
-                            self.damage_prob_sim_no_cascading[ds].iloc[idt0:idt1][name].values, atol=self.atol, rtol=self.rtol)
-                except AssertionError:
-                    self.logger.warning(f'Simulation results of {name}:{ds} are not close to the analytical')
-        return self.damage_prob_sim_no_cascading
-
-    def compute_stats(self, dic_tf_ds):
-        """
-        compute mean and std of no. of ds
-        tf_collapse_sim.shape = (no_towers, no_sim, no_time)
-        :param tf_sim:
-        :return:
-        """
-        #tic = time.time()
-        no_damage = {}
-        prob_no_damage = {}
-        columns = [str(x) for x in range(self.no_towers + 1)]
-
-        # (no_towers, 1)
-        x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
-        x2_tower = x_tower ** 2.0
-
-        tf_ds = np.zeros((self.no_towers,
-                          self.no_sims,
-                          self.no_time), dtype=bool)
-
-        # from collapse and minor
-        for ds in self.damage_states[::-1]:
-
-            tf_ds = np.logical_xor(dic_tf_ds[ds], tf_ds)
-
-            # mean and standard deviation
-            # no_ds_across_towers.shape == (no_sims, no_time)
-            no_ds_across_towers = tf_ds.sum(axis=0)
-            prob = np.zeros(shape=(self.no_time, self.no_towers + 1))
-
-            for i in range(self.no_time):
-                value, freq = np.unique(no_ds_across_towers[:, i], return_counts=True)  # (value, freq)
-                prob[i, [int(x) for x in value]] = freq
-
-            prob /= self.no_sims  # (no_time, no_towers)
-
-            _exp = np.dot(prob, x_tower)
-            _std = np.sqrt(np.dot(prob, x2_tower) - _exp ** 2)
-
-            no_damage[ds] = pd.DataFrame(np.hstack((_exp, _std)),
-                columns=['mean', 'std'], index=self.time)
-
-            prob_no_damage[ds] = pd.DataFrame(prob, columns=columns, index=self.time)
-
-        #print(f'stat: {time.time() - tic}')
-        return no_damage, prob_no_damage
-
-    #def compute_stats1(self, idx_by_ds):
-    #    """
-    #    compute mean and std of no. of ds
-    #    idx_by_ds = dict of list of tuples(id_time, id_sim, id_tower)
-    #    :return:
-    #    """
-
-    #    tic = time.time()
-    #    exp_no_tower = {}
-    #    prob_no_tower = {}
-    #    columns = [str(x) for x in range(self.no_towers + 1)]
-
-    #    # (no_towers, 1)
-    #    x_tower = np.array(range(self.no_towers + 1))[:, np.newaxis]
-    #    x2_tower = x_tower ** 2.0
-
-    #    # from collapse and minor
-    #    prev = set()
-    #    for ds in self.damage_states[::-1]:
-
-    #        prob = np.zeros((self.no_time, self.no_towers + 1))
-    #        # mean and standard deviation
-    #        # no_ds_across_towers.shape == (no_sims, no_time)
-    #        tmp = list(set(idx_by_ds[ds]).difference(prev))
-    #        df = pd.DataFrame(tmp, columns=['id_time','id_sim','id_tower'])
-    #        prev = set(idx_by_ds[ds])
-    #        for id_time, grp in df.groupby('id_time'):
-    #            freq = grp.groupby('id_sim').agg({'id_tower': len})['id_tower'].value_counts()
-    #            freq[0] = self.no_sims - freq.sum()
-    #            prob[id_time][freq.index] = freq / self.no_sims
-
-    #        _mean = np.dot(prob, x_tower)
-    #        _std = np.sqrt(np.dot(prob, x2_tower) - _mean ** 2)
-
-    #        exp_no_tower[ds] = pd.DataFrame(np.hstack((_mean, _std)),
-    #            columns=['mean', 'std'], index=self.time)
-    #        prob_no_tower[ds] = pd.DataFrame(prob, columns=columns, index=self.time)
-    #    print(f'stat1: {time.time() - tic}')
-    #    return exp_no_tower, prob_no_tower
-    def compute_damage_per_line(self, cfg):
-        """
-        mc simulation over transmission line
-        :param line: instance of transmission line
-               cfg: instance of config
-        :return: None but update attributes of
-        """
-
-        self.logger.info(f'computing damage of {self.name} for {self.event_id}')
-
-        # compute damage probability analytically
-        self.compute_damage_prob()
-
-        # perfect correlation within a single line
-        if cfg.options['run_simulation']:
-            self.compute_damage_prob_sim()
-
-            if cfg.options['run_no_cascading_collapse']:
-                self.compute_damage_prob_sim_no_cascading()
-
-        # compare simulation against analytical
-        #for ds in cfg.damage_states:
-        #    idx_not_close = np.where(~np.isclose(line.damage_prob_sim[ds].values,
-        #                             line.damage_prob[ds].values,
-        #                             atol=ATOL,
-        #                             rtol=RTOL))
-        #    for idc in idx_not_close[1]:
-        #        logger.warning(f'Simulation not CLOSE {ds}:{line.towers[idc].name}')
-
-        # save
-        if cfg.options['save_output']:
-            self.write_output()
-
-        return self
 
     def write_csv_output(self, idt_max, key, dic):
         """
@@ -796,6 +681,8 @@ class Line(object):
             self.logger.info(f'{self.file_output} is saved')
         else:
             self.logger.info(f'No output for {self.name} by {self.event_id}')
+
+
 '''
 def compute_damage_per_line(line, cfg):
     """
@@ -834,48 +721,4 @@ def compute_damage_per_line(line, cfg):
 
     return line
 '''
-
-
-
-
-
-def h_tower(line, idn):
-
-    dic = line.dic_towers[idn].copy()
-    dic.update({'idn': idn,
-                'no_sims': line.no_sims,
-                'damage_states': line.damage_states,
-                'scale': line.scale,
-                'rtol': line.rtol,
-                'atol': line.atol,
-                'dmg_threshold': line.dmg_threshold,
-                'rnd_state': line.rnd_state,
-                'path_event': line.path_event})
-
-    return dic
-
-def adjust_value_to_line(dmg, tower_name, value):
-    """
-    line_dmg_time_idx: tuple
-    tower_dmg_time_idx: tuple
-    value: list or array
-    """
-    new = dmg[f'collapse_{tower_name}'].copy()
-    try:
-        new.loc[~new.isna()] = value
-    except ValueError:
-        print(f'different length provided for {tower_name}')
-    else:
-        return new.fillna(0.0)
-
-
-def adjust_index_to_line(line_dmg_time_idx, tower_dmg_time_idx, value):
-    """
-    line_dmg_time_idx: tuple
-    tower_dmg_time_idx: tuple
-    value: df or array
-    """
-    idt0, idt1 = [x - tower_dmg_time_idx[0] for x in line_dmg_time_idx]
-    idx = (value >= idt0) & (value < idt1)
-    return idt0, idx
 

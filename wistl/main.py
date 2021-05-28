@@ -11,117 +11,164 @@ import collections
 import logging.config
 import pandas as pd
 from optparse import OptionParser
-import dask
 from dask.distributed import Client
-import multiprocessing
-import itertools
-import functools
 
 from wistl.config import Config, set_towers_and_lines
 from wistl.version import VERSION_DESC
-from wistl.scenario import Scenario
-from wistl.constants import params_event, params_tower, params_line
-#from wistl.line import compute_damage_per_line
-from wistl.tower import compute_tower_damage
-from itertools import repeat
+from wistl.constants import params_tower, params_line
+from wistl.line import compute_damage_by_line
+from wistl.tower import compute_damage_by_tower
 
-# create a list of towers 
+
+# define Tower and Line class
 Tower = collections.namedtuple('Tower', params_tower)
 Line = collections.namedtuple('Line', params_line)
 
-logger = logging.getLogger(__name__)
+
+def run_simulation(cfg, client_ip=None):
+    """
+    main function
+    :cfg: an instance of Config
+    :
+    """
+
+    tic = time.time()
+
+    logger = logging.getLogger(__name__)
+
+    towers, lines = create_towers_and_lines(cfg)
+
+    if cfg.options['run_parallel']:
+
+        logger.info('parallel MC run on....')
+        client = Client(client_ip)
+
+        # compute damage by tower and event
+        results = []
+        for event in cfg.events:
+            for _, tower in towers.items():
+
+                result = client.submit(compute_damage_by_tower, tower, event, lines, cfg)
+                results.append(result)
+
+        results = client.gather(results)
+
+        # compute damage by line and event
+        out = []
+        for event in cfg.events:
+            for _, line in lines.items():
+
+                result = client.submit(compute_damage_by_line, line, results, event, cfg)
+                out.append(result)
+
+        _ = client.gather(out)
+
+        client.close()
+
+    else:
+
+        logger.info('serial MC run on....')
+
+        results = []
+        for event in cfg.events:
+            for _, tower in towers.items():
+
+                result = compute_damage_by_tower(tower, event, lines, cfg)
+                results.append(result)
+
+        # compute damage by line and event
+        for event in cfg.events:
+            for _, line in lines.items():
+
+                _ = compute_damage_by_line(line, results, event, cfg)
 
 
-"""
-def sort_results_df_by_line(item, results, cfg, dic_lines):
-
-
-    _dic = collections.defaultdict(dict)
-
-    for event in cfg.events:
-        for line_name in dic_lines.keys():
-
-            dump_str, dump_df = zip(*[(x['tower'], x[item]) for x in results if (x['event']==event.id) and (x['line']==line_name)])
-            try:
-                _dic[event.id][line_name] = functools.reduce(combine_by_line, zip(dump_df, dump_str))[0]
-            except KeyError:
-                _dic[event.id][line_name] = {}
-
-    return _dic
-
-
-def get_item_by_event_and_line(item, results):
-
-    _dic = collections.defaultdict(dict)
-    for event in cfg.events:
-        for line_name in dic_lines.keys():
-            dump_str, dump_df = zip(*[(x['tower'], x[item]) for x in results if (x['event']==event.id) and (x['line']==line_name)])
-                 
-    dump, dump_df = zip(*[(x['tower'], x['dmg']) for x in results if (x['event']==event.id) and (x['tower']==line_name) ])
-   
-
-def sort_results_by_line(results):
-    dmg = collections.defaultdict(dict): df
-    collapse_adj = collections.defaultdict(dict) : dict
-    dmg_state_sim = collections.defaultdict(dict) :
-    collapse_adj_sim = collections.defaultdict(dict): 
-    dmg_time_idx = collections.defaultdict(dict)
-
-    for event in cfg.events:
-        for line_name in dic_lines.keys():
-
-            dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results if (x['event']==event.id) and (x['line']==line_name)])
-            damage_prob[event.id][line_name] = functools.reduce(combine_by_line, zip(dump_df, dump_str))[0]
-"""
-
-
-def run_simulation_alt(cfg, client_ip=None):
-
-    logger.info('parallel MC run on.......')
-
-    #cfg.no_sims = 100000
+def create_towers_and_lines(cfg):
 
     dic_towers, dic_lines = set_towers_and_lines(cfg)
 
     # using default dict or named tuple
-    towers = collections.defaultdict(list)
-    lines = collections.defaultdict(list)
+    towers, lines = {}, {}
     for line_name, items in dic_towers.items():
         lines[line_name] = Line(**dic_lines[line_name])
         for tower_name, item in items.items():
             towers[tower_name] = Tower(**item)
 
-    client = Client(client_ip)
+    return towers, lines
 
-    results = []
-    #result = collections.defaultdict(dict)
-    for event in cfg.events:
-        for _, tower in towers.items():
 
-            result = client.submit(compute_tower_damage, event, lines, tower, cfg)
-            results.append(result)
+def compute_damage_probability_line_interaction(self):
+    """
+    compute damage probability due to line interaction
+    :param lines: a dictionary of lines
+    :return: lines: a dictionary of lines
+    """
+    for line_name, line in self.lines.items():
 
-    results = client.gather(results)
+        dic_tf_ds = {}
+        tf_ds = np.zeros((line.no_towers,
+                          line.no_sims,
+                          self.no_time), dtype=bool)
 
-    client.close()
+        for trigger, target in self.cfg.line_interaction.items():
 
-    # aggregate by event and line
-    damage_prob = {}
-    for event in cfg.events:
-        damage_prob[event.id] = {}
-        for line_name in dic_lines.keys():
-            dump_str, dump_df = zip(*[(x['tower'], x['dmg']) for x in results if (x['event']==event.id) and (x['line']==line_name)])
+            if line_name in target:
+
+                try:
+                    id_tower, id_sim, id_time = zip(
+                        *self.lines[trigger].dmg_idx_interaction[line_name])
+                except ValueError:
+                    self.logger.info(f'no interaction applied: from {trigger} to {line_name}')
+                else:
+                    dt = line.dmg_time_idx[0] - self.dmg_time_idx[0]
+                    tf_ds[id_tower, id_sim, id_time + dt] = True
+                    self.logger.info(f'interaction applied: from {trigger} to {line_name}')
+
+        # append damage state by line itself
+        # due to either direct wind and adjacent towers
+        # also need to override non-collapse damage states
+
+        if tf_ds.sum():
+            print(f'tf_ds is not empty for {line.name}')
+        else:
+            print(f'tf_ds is empty for {line.name}')
+
+        # append damage state by either direct wind or adjacent towers
+        for ds in self.cfg.damage_states[::-1]:
+
+            line.damage_prob_interaction = {}
+
             try:
-                damage_prob[event.id][line_name] = functools.reduce(combine_by_line, zip(dump_df, dump_str))[0]
-            except KeyError:
-                pass
+                id_tower, id_sim, id_time = line.dmg_idx[ds]
+            except ValueError:
+                self.logger.info(f'no damage {ds} for {line_name}')
+            else:
+                dt = line.dmg_time_idx[0] - self.dmg_time_idx[0]
+                tf_ds[id_tower, id_sim, id_time + dt] = True
 
-    #with multiprocessing.Pool() as pool:
-    #    results = pool.starmap(compute_dmg, itertools.product(cfg.events, towers.values()))
-    #print(len(results))
-    return results
+                line.damage_prob_interaction[ds] = pd.DataFrame(tf_ds.sum(axis=1).T / line.no_sims,
+                    columns=line.names, index=self.time)
 
-def run_simulation(cfg, client_ip=None):
+                dic_tf_ds[ds] = np.copy(tf_ds)
+
+            # check whether collapse induced by line interaction
+            #tf_ds_itself[id_tower, id_sim, id_time] = True
+
+            #collapse_by_interaction = np.logical_xor(tf_sim['collapse'],
+            #                                         tf_ds_itself)
+
+            #if np.any(collapse_by_interaction):
+            #    print(f'{line_name} is affected by line interaction')
+
+
+        # compute mean and std of no. of towers for each of damage states
+        try:
+            line.no_damage_interaction, line.prob_no_damage_interaction = line.compute_stats(dic_tf_ds)
+        except KeyError:
+            print(dic_tf_ds)
+
+
+def run_simulation_old(cfg, client_ip=None):
     """
     main function
     :param cfg: an instance of TransmissionConfig
@@ -205,6 +252,7 @@ def run_simulation(cfg, client_ip=None):
     logger.info(f'MC simulation took {time.time() - tic} seconds')
 
     return lines
+
 
 def set_logger(path_cfg, logging_level=None):
     """debug, info, warning, error, critical"""
@@ -298,12 +346,7 @@ def main():
             path_cfg = os.path.dirname(os.path.realpath(options.config_file))
             set_logger(path_cfg, options.verbose)
             conf = Config(file_cfg=options.config_file)
-            #run_simulation(cfg=conf, client_ip=options.client_ip)
-            start = time.time()
-            results = run_simulation_alt(cfg=conf, client_ip=options.client_ip)
-            #results = demo_dask(cfg=conf, client_ip=options.client_ip)
-            #print(results)
-            print(f'Elapsed time: {time.time() - start}')
+            run_simulation(cfg=conf, client_ip=options.client_ip)
     else:
         parser.print_help()
 
