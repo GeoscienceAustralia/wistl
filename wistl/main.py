@@ -51,9 +51,10 @@ def run_simulation(cfg, client_ip=None):
                 result = client.submit(compute_damage_by_tower, tower, event, lines, cfg)
                 results.append(result)
 
-        results = client.gather(results)
+        #results = client.gather(results)
 
         # compute damage by line and event
+        #big_future = client.scatter(results)
         out = []
         for event in cfg.events:
             for _, line in lines.items():
@@ -65,6 +66,7 @@ def run_simulation(cfg, client_ip=None):
 
         client.close()
 
+        logger.info(f'Elapsed time: {time.time()-tic:.3f}')
     else:
 
         logger.info('serial MC run on....')
@@ -82,6 +84,7 @@ def run_simulation(cfg, client_ip=None):
 
                 _ = compute_damage_by_line(line, results, event, cfg)
 
+        logger.info(f'Elapsed time: {time.time()-tic:.3f}')
 
 def create_towers_and_lines(cfg):
 

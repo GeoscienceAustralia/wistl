@@ -60,7 +60,7 @@ def set_dmg(tower, wind, cfg):
         #idt0 = max(min(valid) - 1, 0)
         idt0 = min(valid)
     except ValueError:
-        #logger.info(f'{tower.name} sustains no damage')
+        logger.info(f'{tower.name} sustains no damage')
         dmg = pd.DataFrame(None)
     else:
         #idt1 = max(valid) + 2
@@ -135,7 +135,7 @@ def set_dmg_sim(tower, dmg_state_sim, dmg, event, cfg):
 
             if len(diff[diff > 0]):
                 idx = np.argmax(diff)
-                logger.warning(f'PE of {ds} of {tower.name} by {event.id}: {dmg_sim[ds].iloc[idx]:.3f} vs {dmgx[idx]:.3f}')
+                logger.warning(f'{event.id}, {tower.name}, {ds}: (S) {dmg_sim[ds].iloc[idx]:.4f} vs (A) {dmgx[idx]:.4f}')
 
         return dmg_sim
 

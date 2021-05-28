@@ -48,14 +48,12 @@ def compute_damage_by_line(line, results, event, cfg):
                 idx = diff[diff > 0].max(axis=0).idxmax()
                 idt = diff[diff > 0][idx].idxmax()
                 logger.warning(f"""
-                Simulation results not close to analytical for {line.linename}: {ds}
-                At {idt} for tower {idx}:
-                (S) {damage_prob_sim[ds][idx].loc[idt]:.4f} vs (A) {damage_prob[ds][idx].loc[idt]:.4f}
-                """)
+Simulation results not close to analytical - {event.id}, {line.linename}
+{idx}, {ds}: (S) {damage_prob_sim[ds][idx].loc[idt]:.4f} vs (A) {damage_prob[ds][idx].loc[idt]:.4f}""")
 
     # save
     #if cfg.options['save_output']:
-    #    write_output()
+    #   write_output()
 
     return {'event': event.id,
             'line': line.linename,
@@ -598,11 +596,14 @@ class Line(object):
         df.to_csv(_file)
         self.logger.info(f'{_file} is saved')
 
-    def write_output(self):
+    def write_output(event_id, line_name,
+                     damage_prob,
+                     damage_prob_sim, no_damage, prob_no_damage,
+                     damage_prob_sim_wo_cascading, no_damage_wo_cascading, prob_no_damage_wo_cascading):
 
-        items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_no_cascading',
-                 'no_damage', 'no_damage_no_cascading',
-                 'prob_no_damage', 'prob_no_damage_no_cascading']
+        items = ['damage_prob', 'damage_prob_sim', 'damage_prob_sim_wo_cascading',
+                 'no_damage', 'no_damage_wo_cascading',
+                 'prob_no_damage', 'prob_no_damage_wo_cascading']
 
         columns_by_item = {'damage_prob': self.names,
                            'damage_prob_sim': self.names,
