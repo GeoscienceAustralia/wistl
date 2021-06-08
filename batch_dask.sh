@@ -3,11 +3,16 @@ set -eu
 # The specific module+version that each node should load.
 #module_name=$1
 #shift
-# ppn: processes per node: no. for worker processes to start on each node
-# tpp: threads per process
+# ppn: processes per node: no. for worker processes to start on each node: no idea about process?
+# tpp: threads per process (no. of threades for worker)
 ppn=48
-tpp=1
+tpp=2
+
+# no. of workers: ncpus (PBS) - 2
+# this memory defines memory for worker process and it is limited to memory size in mem (PBS)
 mem=4e9 # Four gigabytes per worker process
+# in the log client processes = (ncpus-2), threads: (ncpus-2) * tpp, memory = mem(PBS) * ncpus
+#INFO:<Client: 'tcp://10.6.24.71:45275' processes=6 threads=24, memory=3.15 GB>
 umask=0027
 HOME_PATH=/home/547/hxr547
 WISTL_ENV_PATH=$HOME_PATH/.conda/envs/wistl
