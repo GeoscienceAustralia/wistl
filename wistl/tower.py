@@ -2,6 +2,7 @@
 
 import os
 import pandas as pd
+import dask.array as da
 import numpy as np
 import logging
 import bisect
@@ -86,11 +87,12 @@ def set_dmg_state_sim(dmg, cfg, rnd_state):
 
         # 1. determine damage state of tower due to wind
         rv = rnd_state.uniform(size=(cfg.no_sims, no_time))
-
+        #rv = da.from_array(rv)
         # ds_wind.shape == (no_sims, no_time)
         # PD not PE = 0(non), 1, 2 (collapse)
         # dmg_state_sim.shape == (no_sims, no_time)
         _array = (rv[:, :, np.newaxis] < dmg.values).sum(axis=2)
+        #_array = da.from_array(_array, chunks=(4000, 1280))
 
         for ids, ds in enumerate(cfg.damage_states, 1):
 
@@ -169,7 +171,10 @@ def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
 
         # generate regardless of time index
         rv = rnd_state.uniform(size=len(dmg_state_sim['collapse']['id_sim']))
+        #rv = da.from_array(rv)
 
+        #_array = (rv[:, np.newaxis] >= tower.cond_pc_adj_sim_prob).sum(axis=1)
+        #df['id_adj'] = da.from_array(_array)
         df['id_adj'] = (rv[:, np.newaxis] >= tower.cond_pc_adj_sim_prob).sum(axis=1)
 
         # remove case with no adjacent tower collapse
@@ -188,11 +193,8 @@ def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
             try:
                 np.testing.assert_allclose(prob[0], collapse_adj[idl], atol=cfg.atol, rtol=cfg.rtol)
             except AssertionError:
-                logger.debug(
-                    f'Pc({idl}|{tower.name}): '
-                    f'simulation {prob[0].values} vs. '
-                    f'analytical {collapse_adj[idl]}')
-
+                logger.debug(f"""
+Pc({idl}|{tower.name}): (S) {prob[0].values} vs. (A) {collapse_adj[idl]}""")
         collapse_adj_sim = df.copy()
 
         return collapse_adj_sim
