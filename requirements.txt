@@ -11,7 +11,7 @@ numpy==1.10.2
 openssl==1.0.2e
 pandas==0.17.1
 parmap==1.2.3
-pip==7.1.2
+pip==21.1
 pyparsing==2.0.3
 pyqt==4.11.4
 pyshp==1.2.3
