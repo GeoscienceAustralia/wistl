@@ -11,7 +11,6 @@ from scipy import stats
 from wistl.config import unit_vector_by_bearing, angle_between_unit_vectors
 
 
-logger = logging.getLogger(__name__)
 
 
 def compute_damage_by_tower(tower, event, lines, cfg):
@@ -19,6 +18,9 @@ def compute_damage_by_tower(tower, event, lines, cfg):
     compute probability exceedance of damage of tower in isolation (Pc)
     Note: dmg index is not identical to wind index
     """
+
+    logger = logging.getLogger(__name__)
+
     line = lines[tower.lineroute]
     seed = (tower.idl +
             line.seed * line.no_towers +
@@ -52,6 +54,8 @@ def compute_damage_by_tower(tower, event, lines, cfg):
 
 
 def set_dmg(tower, wind, cfg):
+
+    logger = logging.getLogger(__name__)
 
     df = wind.apply(compute_damage_using_directional_vulnerability, args=(tower,), axis=1)
 
@@ -117,6 +121,7 @@ def set_dmg_sim(tower, dmg_state_sim, dmg, event, cfg):
     PE not PD 1, 2 (collapse)
     """
 
+    logger = logging.getLogger(__name__)
     if not dmg.empty:
 
         dmg_sim = {}
@@ -164,6 +169,8 @@ def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
     :param seed: seed is None if no seed number is provided
     :return:
     """
+
+    logger = logging.getLogger(__name__)
 
     if tower.cond_pc_adj_sim_idx and not dmg_state_sim['collapse'].empty:
 

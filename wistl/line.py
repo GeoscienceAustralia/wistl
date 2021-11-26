@@ -3,11 +3,10 @@
 import os
 import pandas as pd
 import numpy as np
-import h5py
+#import h5py
 import logging
 
 
-logger = logging.getLogger(__name__)
 
 
 def compute_damage_by_line(line, results, event, cfg):
@@ -17,6 +16,8 @@ def compute_damage_by_line(line, results, event, cfg):
            cfg: instance of config
     :return: None but update attributes of
     """
+
+    logger = logging.getLogger(__name__)
 
     #logger.info(f'computing damage of {self.name} for {self.event_id}')
 

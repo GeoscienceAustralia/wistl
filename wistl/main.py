@@ -10,7 +10,7 @@ import time
 import collections
 import logging.config
 import pandas as pd
-from optparse import OptionParser
+from argparse import ArgumentParser
 from dask.distributed import Client
 
 from wistl.config import Config, set_towers_and_lines
@@ -33,6 +33,8 @@ def run_simulation(cfg, client_ip=None):
     """
 
     tic = time.time()
+
+    set_logger(cfg.path_cfg)
 
     logger = logging.getLogger(__name__)
 
@@ -314,21 +316,20 @@ def set_logger(path_cfg, logging_level=None):
 
 
 def process_commandline():
-    usage = '%prog -c <config_file> [-i <client_ip>] [-v <logging_level>]'
-    parser = OptionParser(usage=usage, version=VERSION_DESC)
-    parser.add_option("-c", "--config",
-                      dest="config_file",
-                      help="read configuration from FILE",
-                      metavar="FILE")
-    parser.add_option("-i", "--ip",
-                      dest="client_ip",
-                      help="set client ip address for dask cluster",
-                      metavar="ip_address")
-    parser.add_option("-v", "--verbose",
-                      dest="verbose",
-                      default=None,
-                      metavar="logging_level",
-                      help="set logging level")
+    parser = ArgumentParser()
+    parser.add_argument("-c", "--config",
+                        dest="config_file",
+                        help="read configuration from FILE",
+                        metavar="FILE")
+    parser.add_argument("-i", "--ip",
+                        dest="client_ip",
+                        help="set client ip address for dask cluster",
+                        metavar="ip_address")
+    parser.add_argument("-v", "--verbose",
+                        dest="verbose",
+                        default=None,
+                        metavar="logging_level",
+                        help="set logging level")
     return parser
 
 
@@ -336,16 +337,16 @@ def main():
 
     parser = process_commandline()
 
-    (options, args) = parser.parse_args()
+    args = parser.parse_args()
 
-    if options.config_file:
-        if not os.path.isfile(options.config_file):
-            sys.exit(f'{options.config_file} not found')
+    if args.config_file:
+        if not os.path.isfile(args.config_file):
+            sys.exit(f'{args.config_file} not found')
         else:
-            path_cfg = os.path.dirname(os.path.realpath(options.config_file))
-            set_logger(path_cfg, options.verbose)
-            conf = Config(file_cfg=options.config_file)
-            run_simulation(cfg=conf, client_ip=options.client_ip)
+            path_cfg = os.path.dirname(os.path.realpath(args.config_file))
+            #set_logger(path_cfg, options.verbose)
+            conf = Config(file_cfg=args.config_file)
+            run_simulation(cfg=conf, client_ip=args.client_ip)
     else:
         parser.print_help()
 
