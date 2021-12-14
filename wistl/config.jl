@@ -1,5 +1,18 @@
 #!/usr/bin/env python
 
+using ConfParser
+
+conf = ConfParse(file_cfg)
+
+if a == 1
+    if b > 0
+        println("yes")
+    end
+else
+    println("no")
+end
+α  = 10
+#=
 import os
 import bisect
 import sys
@@ -36,6 +49,7 @@ Event = namedtuple('Event', params_event)
 
 # scenario -> damage scenario
 # event -> wind event
+
 
 class Config(object):
     """
@@ -1122,5 +1136,5 @@ def read_cond_prob_interaction_metadata(cfg):
                     self.file_cond_prob_interaction_metadata)
 
     return self._cond_prob_interaction_metadata
-
+=#
 
