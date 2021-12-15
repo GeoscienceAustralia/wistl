@@ -2,9 +2,7 @@
 WISTL: Wind Impact Simulation on Transmission Lines
 """
 
-using ArgParse
 
-#=
 import os
 import sys
 import time
@@ -332,39 +330,8 @@ def process_commandline():
                         metavar="logging_level",
                         help="set logging level")
     return parser
-=#
-
-function parse_commandline()
-    s = ArgParseSettings()
-
-    @add_arg_table s begin
-        "config_file"
-        help = "read configuration from FILE"
-        required = true
-    end
-
-    return parse_args(s)
-end
-
-function main()
-    parsed_args = parse_commandline()
-    cfg_file = parsed_args["config_file"]
-    if !isfile(cfg_file)
-        println("$cfg_file not found")
-        exit(0) 
-    else
-        path_cfg = abspath(cfg_file)
-        for (arg, val) in parsed_args
-             println("$arg  =>  $val")
-        end
-    end
-end
-
-main()
 
 
-
-#=
 def main():
 
     parser = process_commandline()
@@ -385,4 +352,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-=#
