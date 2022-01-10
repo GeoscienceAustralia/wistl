@@ -6,7 +6,7 @@ import pandas as pd
 import os
 
 from wistl.config import Config
-from wistl.scenario import Scenario
+#from wistl.scenario import Scenario
 from wistl.line import Line
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -16,14 +16,10 @@ class TestLineInteraction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        logging.basicConfig(level=logging.DEBUG)
         cls.logger = logging.getLogger(__name__)
 
         file_cfg = os.path.join(BASE_DIR, 'test_interaction.cfg')
-        cls.cfg = Config(file_cfg, cls.logger)
-        cls.scenario = Scenario(cfg=cls.cfg,
-                                event=cls.cfg.events[0],
-                                logger=cls.logger)
+        cls.cfg = Config(file_cfg)
 
     @classmethod
     def h5file_full(cls, damage_line, str_head):

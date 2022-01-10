@@ -12,9 +12,7 @@ from collections import namedtuple, defaultdict
 from shapely import geometry
 from geopy.distance import geodesic
 from scipy import stats
-
-from wistl.constants import K_FACTOR, NO_CIRCUIT, FIELDS_TOWER, params_event
-
+import dask.config
 
 OPTIONS = ['run_parallel', 'save_output', 'save_figure',
            'run_analytical', 'run_simulation', 'use_random_seed',
@@ -29,11 +27,54 @@ INPUT_FILES = ['fragility_metadata', 'cond_prob_metadata',
                'cond_prob_interaction_metadata']
 SHAPEFILE_TYPE = {'C': object, 'F': np.float64, 'N': np.int64}
 
+# k: 0.33 for a single, 0.5 for double circuit
+K_FACTOR = {1: 0.33, 2: 0.5}  # hard-coded
+#NO_CIRCUIT = 2 # vary by line
+# no_circuit can be defined by line
 
-Event = namedtuple('Event', params_event)
+FIELDS_TOWER = ['name',
+                'type',
+                'latitude',
+                'longitude',
+                'function',
+                'devangle',
+                'axisaz',
+                'height',
+                'lineroute',
+                'design_span',
+                'design_speed',
+                'terrain_cat',
+                'height_z',
+                'shape',
+                'design_level',
+               ]
+
+FIELDS_LINE = ['linename',
+               'type',
+               'lineroute',
+               'capacity',
+               'numcircuit',
+               'shapes',
+               ]
+
+PARAMS_EVENT = ['id',
+                'path_wind_event',
+                'name',
+                'scale',
+                'seed',
+                ]
+
+Event = namedtuple('Event', PARAMS_EVENT)
 
 # scenario -> damage scenario
 # event -> wind event
+
+# dask configuration for logging
+fn = os.path.join(os.path.dirname(__file__), 'wistl.yaml')
+with open(fn) as f:
+    defaults = yaml.safe_load(f)
+    dask.config.update_defaults(defaults)
+    #dask.config.ensure_file(source=fn, comment=True)
 
 
 class Config(object):
@@ -41,10 +82,10 @@ class Config(object):
     class to hold all configuration variables.
     """
 
-    def __init__(self, file_cfg=None, logger=None):
+    def __init__(self, file_cfg=None):
 
         self.file_cfg = os.path.abspath(file_cfg)
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__)
 
         self.options = {}
 
@@ -69,8 +110,8 @@ class Config(object):
 
         self._fragility_metadata = None
         self._fragility = None   # pandas.DataFrame
-        self._damage_states = None
-        self._no_damage_states = None
+        self._dmg_states = None
+        self._no_dmg_states = None
         self._non_collapse = None
 
         self._cond_prob_metadata = None
@@ -201,21 +242,21 @@ class Config(object):
         return self._fragility
 
     @property
-    def damage_states(self):
-        if self._damage_states is None:
-            self._damage_states = self.fragility_metadata['main']['limit_states']
-        return self._damage_states
+    def dmg_states(self):
+        if self._dmg_states is None:
+            self._dmg_states = self.fragility_metadata['main']['limit_states']
+        return self._dmg_states
 
     @property
-    def no_damage_states(self):
-        if self._no_damage_states is None:
-            self._no_damage_states = len(self.damage_states)
-        return self._no_damage_states
+    def no_dmg_states(self):
+        if self._no_dmg_states is None:
+            self._no_dmg_states = len(self.dmg_states)
+        return self._no_dmg_states
 
     @property
     def non_collapse(self):
         if self._non_collapse is None:
-            self._non_collapse = self.damage_states[:]
+            self._non_collapse = self.dmg_states[:]
             self._non_collapse.remove('collapse')
         return self._non_collapse
 
@@ -438,7 +479,7 @@ class Config(object):
     #        design_value = self.design_value_by_line[row['lineroute']]
     #    except KeyError:
     #        msg = f"{row['lineroute']} is undefined in {self.file_design_value}"
-    #        self.logger.critical(msg)
+    #        logger.critical(msg)
     #    else:
     #        design_speed = design_value['design_speed']
 
@@ -500,7 +541,13 @@ def _set_lines(cfg):
 
     df = pd.DataFrame(None)
     for _file in cfg.file_shape_line:
-        df = df.append(read_shape_file(_file))
+        tmp = read_shape_file(_file)
+        try:
+            df = df.append(tmp[FIELDS_LINE])
+        except KeyError as msg:
+            cfg.logger.critical(str(msg).replace('index', f'{_file}'))
+
+    # use only required
     df.set_index('lineroute', inplace=True, drop=False)
 
     # only selected lines
@@ -598,8 +645,9 @@ def assign_id_adj_towers(tower, towers_by_line, lines, cfg):
     # assign -1 to strainer tower
     for i, idx in enumerate(id_adj):
         if idx >= 0:
-            global_id = lines[tower['lineroute']]['name2id'][names[idx]]
-            _tower = towers_by_line[tower['lineroute']][global_id]
+            #global_id = lines[tower['lineroute']]['name2id'][names[idx]]
+            #_tower = towers_by_line[tower['lineroute']][global_id]
+            _tower = towers_by_line[tower['lineroute']][names[idx]]
             flag_strainer = _tower['function'] in cfg.strainer
 
             if flag_strainer:
@@ -632,7 +680,7 @@ def ratio_z_to_10(tower, cfg):
                             cfg.terrain_multiplier[tc_str])
     except KeyError:
         msg = f'{tc_str} is undefined in {self.file_terrain_multiplier}'
-        logger.critical(msg)
+        cfg.logger.critical(msg)
     else:
         idx_10 = cfg.terrain_multiplier['height'].index(10)
         mzcat_10 = cfg.terrain_multiplier[tc_str][idx_10]
@@ -652,10 +700,11 @@ def assign_collapse_capacity(tower, lines):
     selected_line = lines[tower['lineroute']]
     idx = selected_line['names'].index(tower['name'])
     actual_span = selected_line['actual_span'][idx]
+    no_circuit = selected_line['numcircuit']
 
     # calculate utilization factor
     # 1 in case sw/sd > 1
-    u_factor = 1.0 - K_FACTOR[NO_CIRCUIT] * (1.0 - actual_span / tower['design_span'])
+    u_factor = 1.0 - K_FACTOR[no_circuit] * (1.0 - actual_span / tower['design_span'])
     u_factor = min(1.0, u_factor)
 
     return {'actual_span': actual_span,
@@ -665,27 +714,27 @@ def assign_collapse_capacity(tower, lines):
 
 def sort_by_location(line, towers_by_line):
 
-    id_by_line = []
+    logger = logging.getLogger(__name__)
     name_by_line = []
     idx_sorted = []
 
-    for tower_id, tower in towers_by_line[line['linename']].items():
+    for name, tower in towers_by_line[line['linename']].items():
 
-        id_by_line.append(tower_id)
-        name_by_line.append(tower['name'])
+        name_by_line.append(name)
 
         temp = np.linalg.norm(line['coord'] - tower['coord'], axis=1)
         id_closest = np.argmin(temp)
         ok = abs(temp[id_closest]) < 1.0e-4
         if not ok:
-            msg = f"Can not locate tower:{tower['name']} in line:{line['linename']}"
+            msg = f"Can not locate tower:{name} in line:{line['linename']}"
             logger.error(msg)
         idx_sorted.append(id_closest)
 
-    return {'id2name': {k: v for k, v in zip(id_by_line, name_by_line)},
-            'ids': [x for _, x in sorted(zip(idx_sorted, id_by_line))],
+    return {#'id2name': {k: v for k, v in zip(id_by_line, name_by_line)},
+            #'ids': [x for _, x in sorted(zip(idx_sorted, id_by_line))],
             'names': [x for _, x in sorted(zip(idx_sorted, name_by_line))],
-            'name2id': {k: v for k, v in zip(name_by_line, id_by_line)}}
+            #'name2id': {k: v for k, v in zip(name_by_line, id_by_line)}
+            }
 
 
 def assign_cond_pc_adj(tower):
@@ -894,26 +943,6 @@ def unit_vector(vector):
     return vector / np.linalg.norm(vector)
 
 
-def unit_vector_by_bearing(angle_deg):
-    """
-    return unit vector given bearing
-    :param angle_deg: 0-360
-    :return: unit vector given bearing in degree
-    """
-    angle_rad = np.deg2rad(angle_deg)
-    return np.array([-1.0 * np.sin(angle_rad), -1.0 * np.cos(angle_rad)])
-
-
-def angle_between_unit_vectors(v1, v2):
-    """
-    compute angle between two unit vectors
-    :param v1: vector 1
-    :param v2: vector 2
-    :return: the angle in degree between vectors 'v1' and 'v2'
-
-    """
-    return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
-
 def h_fragility(_file):
     with open(_file, 'r') as ymlfile:
         out = yaml.load(ymlfile, Loader=yaml.FullLoader)
@@ -1115,7 +1144,7 @@ def read_cond_prob_interaction_metadata(cfg):
 
         if not os.path.exists(self.file_cond_prob_interaction_metadata):
             msg = f'{self.file_cond_prob_interaction_metadata} not found'
-            self.logger.critical(msg)
+            logger.critical(msg)
         else:
             self._cond_prob_interaction_metadata = read_yml_file(
                     self.file_cond_prob_interaction_metadata)

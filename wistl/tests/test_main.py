@@ -7,9 +7,13 @@ import logging
 import pandas as pd
 import numpy as np
 import os
+from collections import namedtuple
+from dask.distributed import Client
 
 from wistl.config import Config
-from wistl.main import run_simulation
+from wistl.main import *
+from wistl.line import Line
+from wistl.tower import Tower
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -19,17 +23,18 @@ class TestTransmission(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        logging.basicConfig(level=logging.WARNING)
         logger = logging.getLogger(__name__)
         file_cfg = os.path.join(BASE_DIR, 'test1.cfg')
 
-        cls.cfg = Config(file_cfg=file_cfg, logger=logger)
-        cls.cfg.no_sims = 1000000
-        cls.cfg.save = False
-        cls.cfg.figure = False
+        cls.cfg = Config(file_cfg=file_cfg)
+        cls.cfg.no_sims = 10
+        #cls.cfg.save = False
+        #cls.cfg.figure = False
+        cls.event = cls.cfg.events[0]
 
-        with cls.assertLogs('wistl', level='INFO') as cm:
-            cls.lines = run_simulation(cls.cfg)
+        cls.towers, cls.lines = create_towers_and_lines(cls.cfg)
+        #with cls.assertLogs('wistl', level='INFO') as cm:
+        #    cls.lines = run_simulation(cls.cfg)
         # if cls.cfg.parallel:
         #     cls.damaged_networks, cls.damaged_lines = \
         #         sim_towers(cls.cfg)
@@ -95,11 +100,20 @@ class TestTransmission(unittest.TestCase):
             #             self.check_file_consistency_simulation_non_cascading(line)
     """
 
-    def test_transmission_analytical_vs_simulation_only_isolation(self):
+    def test_run_simulation_serial(self):
+        self.cfg.options['run_parallel'] = False
+        run_simulation(self.cfg)
 
-        for line in self.lines:
-            for k in line.dmg_towers:
-                self.compare_analytical_vs_simulation_for_collapse(line.towers[k])
+    def test_run_simulation_parallel(self):
+        self.cfg.options['run_parallel'] = True
+        run_simulation(self.cfg)
+
+    def test_create_towers_and_lines(self):
+
+        self.assertTrue(isinstance(self.towers, dict))
+        self.assertTrue(isinstance(self.lines, dict))
+        self.assertTrue(isinstance(self.lines['LineA'], Line))
+        self.assertTrue(isinstance(self.towers['T13'], Tower))
 
         # if self.cfg.parallel:
         #     for line in self.damaged_lines:

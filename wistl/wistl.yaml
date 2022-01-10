@@ -1,0 +1,19 @@
+logging:
+  version: 1
+  handlers:
+    file:
+      class: logging.handlers.RotatingFileHandler
+      filename: output.log
+      level: INFO
+    console:
+      class: logging.StreamHandler
+      level: INFO
+  loggers:
+    distributed.worker:
+      level: INFO
+      handlers:
+        - file
+    distributed.scheduler:
+      level: INFO
+      handlers:
+        - file
