@@ -4,7 +4,7 @@ import os
 import collections
 import pandas as pd
 import numpy as np
-#import h5py
+import h5py
 #import logging
 from distributed.worker import logger
 
@@ -80,7 +80,7 @@ def compute_dmg_by_line(line, results, event, cfg):
             ds: pd.DataFrame(None, columns=range(line.no_towers + 1)) for ds in cfg.dmg_states}
 
     # compare simulation against analytical
-    if dmg_prob is not None and cfg.options['run_simulation']:
+    if cfg.options['run_simulation']:
 
         for ds in cfg.dmg_states:
             diff = np.abs(dmg_prob_sim[ds] - dmg_prob[ds]) - (cfg.atol + cfg.rtol * dmg_prob[ds])
@@ -92,21 +92,103 @@ def compute_dmg_by_line(line, results, event, cfg):
 Simulation results not close to analytical - {event.id}, {line.linename}
 {idx}, {ds}: (S) {dmg_prob_sim[ds][idx].loc[idt]:.4f} vs (A) {dmg_prob[ds][idx].loc[idt]:.4f}""")
 
+    summary = {'event': event.id,
+               'line': line.linename,
+               'dmg_prob': dmg_prob,
+               'dmg_prob_sim': dmg_prob_sim,
+               'no_dmg': no_dmg,
+               'prob_no_dmg': prob_no_dmg,
+               'dmg_prob_sim_wo_cascading': dmg_prob_sim_wo_cascading,
+               'no_dmg_wo_cascading': no_dmg_wo_cascading,
+               'prob_no_dmg_wo_cascading': prob_no_dmg_wo_cascading,
+              }
+
     # save
-    #if cfg.options['save_output']:
-    #   write_output()
+    if cfg.options['save_output'] and not summary['dmg_prob']['collapse'].empty:
+        write_output(summary, cfg)
 
-    return {'event': event.id,
-            'line': line.linename,
-            'dmg_prob': dmg_prob,
-            'dmg_prob_sim': dmg_prob_sim,
-            'no_dmg': no_dmg,
-            'prob_no_dmg': prob_no_dmg,
-            'dmg_prob_sim_wo_cascading': dmg_prob_sim_wo_cascading,
-            'no_dmg_wo_cascading': no_dmg_wo_cascading,
-            'prob_no_dmg_wo_cascading': prob_no_dmg_wo_cascading,
-            }
+    return summary
 
+
+def write_csv_output(dic, key, idt_max):
+    """
+    """
+    _file = self.file_output + f'_{key}.csv'
+    df = pd.DataFrame(None)
+    for k, v in dic.items():
+        df[k] = v.loc[idt_max]
+    df.to_csv(_file)
+
+
+def write_output(summary, cfg):
+
+    if not os.path.exists(cfg.path_output):
+        os.makedirs(cfg.path_output)
+
+    towers = summary['dmg_prob']['collapse'].columns
+    no_towers = len(towers)
+    columns_by_item = {'dmg_prob': towers,
+                       'dmg_prob_sim': towers,
+                       'dmg_prob_sim_wo_cascading': towers,
+                       'no_dmg': ['mean', 'std'],
+                       'no_dmg_wo_cascading': ['mean', 'std'],
+                       'prob_no_dmg': range(no_towers + 1),
+                       'prob_no_dmg_wo_cascading': range(no_towers + 1)
+                       }
+
+    outfile = os.path.join(cfg.path_output, summary['event'] + f'_{summary["line"]}.h5')
+    with h5py.File(outfile, 'w') as hf:
+        for item, columns in columns_by_item.items():
+            group = hf.create_group(item)
+            for ds in cfg.dmg_states:
+                try:
+                    value = summary[item][ds]
+                except TypeError:
+                    logger.debug(f'cannot get {item}{ds}')
+                else:
+                    try:
+                        data = group.create_dataset(ds, data=value)
+                    except TypeError:
+                        print(item, ds)
+                    else:
+                        data.attrs['columns'] = ','.join(f'{x}' for x in columns)
+
+                # metadata
+                #hf.attrs['time_start'] = str(time[0])
+                #try:
+                #    hf.attrs['time_freq'] = str(time[1]-self.time[0])
+                #except IndexError:
+                #    hf.attrs['time_freq'] = str(time[0])
+                #hf.attrs['time_period'] = time.shape[0]
+
+    logger.info(f'{outfile} is saved')
+    #else:
+    #    logger.info(f'No output for {name} by {event_id}')
+
+    '''
+    for key in ['no_dmg', 'no_dmg_wo_cascading']:
+
+        # save no_dmg and prob_no_dmg csv
+        try:
+            idt_max = summary[key]['collapse']['mean'].idxmax()
+        except TypeError:
+            pass
+        else:
+            # save no_dmg to csv
+            write_csv_output(summary[key], key, idt_max)
+
+            # sve prob_no_dmg to csv
+            write_csv_output(summary[f'prob_{key}'], f'prob_', idt_max)
+
+            # save dmg_prob to csv
+            _file = file_output + f'_dmg_prob.csv'
+            df = pd.DataFrame(None)
+            for k, v in dmg_prob.items():
+                df[k] = v.loc[idt_max]
+            for k, v in dmg_prob_sim.items():
+                df[f'{k}_sim'] = v.loc[idt_max]
+            df.to_csv(_file)
+    '''
 
 def compute_stats(dic_tf_ds, cfg, no_towers, idx_time):
     """
@@ -229,7 +311,7 @@ def compute_dmg_prob(event, line, cfg, results):
             try:
                 value = dmg_ds - dmg_collapse + pc_collapse[k]
             except ValueError:
-                self.logger.critical(f'PE of {ds} of {name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
+                logger.critical(f'PE of {ds} of {name} can not be used, {dmg_ds.shape} and {dmg_collapse.shape} is incompatible with {pc_collapse.shape}')
             else:
                 temp[k] = np.where(value > 1.0, [1.0], value)
 
@@ -660,93 +742,6 @@ class Line_OLD(object):
             df[k] = v.loc[idt_max]
         df.to_csv(_file)
         self.logger.info(f'{_file} is saved')
-
-    def write_output(event_id, line_name,
-                     dmg_prob,
-                     dmg_prob_sim, no_dmg, prob_no_dmg,
-                     dmg_prob_sim_wo_cascading, no_dmg_wo_cascading, prob_no_dmg_wo_cascading):
-
-        items = ['dmg_prob', 'dmg_prob_sim', 'dmg_prob_sim_wo_cascading',
-                 'no_dmg', 'no_dmg_wo_cascading',
-                 'prob_no_dmg', 'prob_no_dmg_wo_cascading']
-
-        columns_by_item = {'dmg_prob': self.names,
-                           'dmg_prob_sim': self.names,
-                           'dmg_prob_sim_no_cascading': self.names,
-                           'no_dmg': ['mean', 'std'],
-                           'no_dmg_no_cascading': ['mean', 'std'],
-                           'prob_no_dmg': range(self.no_towers + 1),
-                           'prob_no_dmg_no_cascading': range(self.no_towers + 1)
-                           }
-
-        if self.no_time:
-
-            if not os.path.exists(self.path_output):
-                os.makedirs(self.path_output)
-                self.logger.info(f'{self.path_output} is created')
-
-            # save no_dmg and prob_no_dmg csv
-            try:
-                idt_max = self.no_dmg['collapse']['mean'].idxmax()
-            except TypeError:
-                pass
-            else:
-                # save no_dmg to csv
-                self.write_csv_output(idt_max, 'no_dmg', self.no_dmg)
-
-                # sve prob_no_dmg to csv
-                self.write_csv_output(idt_max, 'prob_no_dmg', self.prob_no_dmg)
-
-                # save dmg_prob to csv
-                _file = self.file_output + f'_dmg_prob.csv'
-                df = pd.DataFrame(None)
-                for k, v in self.dmg_prob.items():
-                    df[k] = v.loc[idt_max]
-                for k, v in self.dmg_prob_sim.items():
-                    df[f'{k}_sim'] = v.loc[idt_max]
-                df.to_csv(_file)
-                self.logger.info(f'{_file} is saved')
-
-            # save no_dmg_non_cascading and prob_no_dmg_non_cascading csv
-            try:
-                idt_max = self.no_dmg_no_cascading['collapse']['mean'].idxmax()
-            except TypeError:
-                pass
-            else:
-                # save no_dmg to csv
-                self.write_csv_output(idt_max, 'no_dmg_no_cascading', self.no_dmg_no_cascading)
-                # sve prob_no_dmg to csv
-                self.write_csv_output(idt_max, 'prob_no_dmg_no_cascading', self.prob_no_dmg_no_cascading)
-
-            _file = self.file_output + '.h5'
-            with h5py.File(_file, 'w') as hf:
-
-                for item in items:
-
-                    group = hf.create_group(item)
-
-                    for ds in self.dmg_states:
-
-                        try:
-                            value = getattr(self, item)[ds]
-                        except TypeError:
-                            self.logger.debug(f'cannot get {item}{ds}')
-                        else:
-                            data = group.create_dataset(ds, data=value)
-                            data.attrs['columns'] = ','.join(f'{x}' for x in columns_by_item[item])
-
-                # metadata
-                #hf.attrs['nrow'], data.attrs['ncol'] = value.shape
-                hf.attrs['time_start'] = str(self.time[0])
-                try:
-                    hf.attrs['time_freq'] = str(self.time[1]-self.time[0])
-                except IndexError:
-                    hf.attrs['time_freq'] = str(self.time[0])
-                hf.attrs['time_period'] = self.time.shape[0]
-
-            self.logger.info(f'{self.file_output} is saved')
-        else:
-            self.logger.info(f'No output for {self.name} by {self.event_id}')
 
 
 '''

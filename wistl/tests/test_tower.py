@@ -208,7 +208,7 @@ class TestTower1(unittest.TestCase):
 
             check_sim_accuracy(tower, dmg_state_sim, dmg, self.event, self.cfg)
 
-        msg = f'{self.event.id}, {tower.name}, collapse'
+        msg = f'PE(collapse of {tower.name}|{self.event.id}'
         self.assertIn(msg, cm.output[0])
 
     def test_logger_collapse_adj_sim(self):

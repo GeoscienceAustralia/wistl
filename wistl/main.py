@@ -56,7 +56,8 @@ def run_simulation(cfg, client_ip=None):
 
         client.close()
 
-        logger.info(f'Elapsed time: {time.time()-tic:.3f}')
+        logger.info(f'Elapsed computation time: {time.time()-tic:.3f}')
+
     else:
 
         #import logging
@@ -78,11 +79,11 @@ def run_simulation(cfg, client_ip=None):
 
 def create_towers_and_lines(cfg):
 
-    dic_towers, dic_lines = set_towers_and_lines(cfg)
+    dic_towers_by_line, dic_lines = set_towers_and_lines(cfg)
 
     # using default dict or named tuple
     towers, lines = {}, {}
-    for line_name, items in dic_towers.items():
+    for line_name, items in dic_towers_by_line.items():
         lines[line_name] = Line(**dic_lines[line_name])
         for tower_name, item in items.items():
             towers[tower_name] = Tower(**item)

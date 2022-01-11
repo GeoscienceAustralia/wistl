@@ -79,7 +79,7 @@ with open(fn) as f:
 
 class Config(object):
     """
-    class to hold all configuration variables.
+    class to hold configuration values
     """
 
     def __init__(self, file_cfg=None):

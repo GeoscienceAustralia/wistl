@@ -1113,8 +1113,8 @@ class TestConfig(unittest.TestCase):
     def test_read_wind_scenario(self):
 
         self.assertEqual(self.cfg.events[0].id, 'test1_s3.0')
-        self.assertEqual(self.cfg.events[1].id, 'test2_s2.5')
-        self.assertEqual(self.cfg.events[2].id, 'test2_s3.5')
+        self.assertEqual(self.cfg.events[1].id, 'test2_s2.0')
+        self.assertEqual(self.cfg.events[2].id, 'test2_s2.5')
 
     def test_find_id_nearest_pt(self):
 

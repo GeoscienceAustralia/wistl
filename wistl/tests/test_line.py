@@ -76,11 +76,11 @@ class TestLine1(unittest.TestCase):
         for ds in self.cfg.dmg_states:
             self.assertFalse(result['dmg_prob'][ds].empty)
             self.assertFalse(result['dmg_prob_sim'][ds].empty)
-            self.assertTrue(result['dmg_prob_sim_wo_cascading'][ds].empty)
+            self.assertFalse(result['dmg_prob_sim_wo_cascading'][ds].empty)
             self.assertFalse(result['prob_no_dmg'][ds].empty)
             self.assertFalse(result['no_dmg'][ds].empty)
-            self.assertTrue(result['prob_no_dmg_wo_cascading'][ds].empty)
-            self.assertTrue(result['no_dmg_wo_cascading'][ds].empty)
+            self.assertFalse(result['prob_no_dmg_wo_cascading'][ds].empty)
+            self.assertFalse(result['no_dmg_wo_cascading'][ds].empty)
 
     def test_line(self):
 

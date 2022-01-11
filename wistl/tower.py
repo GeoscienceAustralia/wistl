@@ -53,13 +53,14 @@ def compute_dmg_by_tower(tower, event, line, cfg, wind=None):
 
     #logger = logging.getLogger(__name__)
 
+    logger.info(f'Processing {event.id}: {line.linename}: {tower.name}')
+
     #line = lines[tower.lineroute]
     seed = (tower.idl +
             line.seed * line.no_towers +
             event.seed * line.no_towers * len(cfg.selected_lines))
     rnd_state = np.random.RandomState(seed=seed)
 
-    logger.info(f'Process {os.getpid()} done processing record {event.name} - {tower.name}')
 
     if wind is None:
         wind = read_wind(tower, event)
@@ -227,7 +228,7 @@ def check_sim_accuracy(tower, dmg_state_sim, dmg, event, cfg):
                 idx = dfc[f'diff_{ds}'].idxmax()
                 x = dfc.loc[idx, f'{ds}_x']
                 y = dfc.loc[idx, f'{ds}_y']
-                logger.warning(f'{event.id}, {tower.name}, {ds}: (S) {x:.4f} vs (A) {y:.4f}')
+                logger.warning(f'PE({ds} of {tower.name}|{event.id}): (S) {x:.4f} vs (A) {y:.4f}')
 
         #dmgx = dmg.iloc[dmg_sim[ds].index][ds].values
         #diff = np.abs(dmg_sim[ds].values - dmgx) - (cfg.atol + cfg.rtol * dmgx)
@@ -256,6 +257,41 @@ def set_collapse_adj(tower, dmg):
             for key, value in tower.cond_pc_adj.items()
             if not dmg['collapse'].empty}
 
+def check_against_collapse_adj(collapse_adj_sim, collapse_adj, tower, cfg):
+    """
+    Args:
+        collapse_adj_sim: DataFrame(columns=['id_sim','id_time','id_adj']
+        collapse_adj: Dict(key=tower.idl, value=np.array)
+        tower: instance of Tower class
+    Returns:
+        DataFrame(columns=['id_sim','id_time','id_adj'])
+        can be empty DataFrame
+    """
+
+    if not collapse_adj_sim.empty:
+
+        tmp = collapse_adj_sim.groupby(['id_time', 'id_adj']).apply(len).reset_index()
+
+        for idl in tower.cond_pc_adj.keys():
+
+            prob = (tmp.loc[tmp['id_adj'].apply(lambda x: idl in x)].groupby('id_time').sum() / cfg.no_sims)[0].values
+            if prob.size:
+                try:
+                    np.testing.assert_allclose(prob, collapse_adj[idl], atol=cfg.atol, rtol=cfg.rtol)
+                except AssertionError:
+                    try:
+                        idmax = np.abs(prob - collapse_adj[idl]).argmax()
+                    except ValueError:
+                        idmax = 0
+                    finally:
+                        logger.warning(f"""
+Pc({idl}|{tower.name}): (S) {prob[idmax]:.4f} vs. (A) {collapse_adj[idl][idmax]:.4f}""")
+
+            else:
+                logger.warning(f"""
+Pc({idl}|{tower.name}): (S) NA vs. (A) {collapse_adj[idl][0]:.4f}""")
+
+        return prob
 
 def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
     """
@@ -273,10 +309,12 @@ def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
     """
     if tower.cond_pc_adj_sim_idx and not dmg_state_sim['collapse'].empty:
 
+        # copy to prevent modify the original
+        # df: DataFrame(colums=['id_sim','id_time'])
         df = dmg_state_sim['collapse'].copy()
 
         # generate regardless of time index
-        rv = rnd_state.uniform(size=len(dmg_state_sim['collapse']['id_sim']))
+        rv = rnd_state.uniform(size=len(df['id_sim']))
         #rv = da.from_array(rv)
 
         #_array = (rv[:, np.newaxis] >= tower.cond_pc_adj_sim_prob).sum(axis=1)
@@ -291,22 +329,12 @@ def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
         df['id_adj'] = df['id_adj'].apply(lambda x: tower.cond_pc_adj_sim_idx[x])
 
         # check against collapse_adj
-        tmp = df.groupby(['id_time', 'id_adj']).apply(len).reset_index()
-
-        if not tmp.empty:
-            for idl in tower.cond_pc_adj.keys():
-                prob = tmp.loc[tmp['id_adj'].apply(lambda x: idl in x)].groupby('id_time').sum() / cfg.no_sims
-                try:
-                    np.testing.assert_allclose(prob[0].values, collapse_adj[idl], atol=cfg.atol, rtol=cfg.rtol)
-                except AssertionError:
-                    logger.warning(f"""
-Pc({idl}|{tower.name}): (S) {prob[0].values} vs. (A) {collapse_adj[idl]}""")
-        collapse_adj_sim = df.copy()
+        check_against_collapse_adj(df, collapse_adj,  tower, cfg)
 
     else:
-        collapse_adj_sim = pd.DataFrame(None, columns=['id_sim', 'id_time', 'id_adj'])
+        df = pd.DataFrame(None, columns=['id_sim', 'id_time', 'id_adj'])
 
-    return collapse_adj_sim
+    return df
 
 
 def angle_between_two(deg1, deg2):

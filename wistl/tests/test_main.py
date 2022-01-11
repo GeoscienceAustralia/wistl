@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 from collections import namedtuple
-from dask.distributed import Client
+#from dask.distributed import Client
 
 from wistl.config import Config
 from wistl.main import *
