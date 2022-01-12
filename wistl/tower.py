@@ -53,19 +53,18 @@ def compute_dmg_by_tower(tower, event, line, cfg, wind=None):
 
     #logger = logging.getLogger(__name__)
 
-    logger.info(f'Processing {event.id}: {line.linename}: {tower.name}')
-
     #line = lines[tower.lineroute]
     seed = (tower.idl +
             line.seed * line.no_towers +
             event.seed * line.no_towers * len(cfg.selected_lines))
     rnd_state = np.random.RandomState(seed=seed)
 
-
     if wind is None:
         wind = read_wind(tower, event)
 
     dmg = set_dmg(tower, wind, cfg)
+    #if dmg.empty:
+    #    logger.info(f'{tower.name} of {line.linename} sustains no damage by {event.id}')
 
     collapse_adj = set_collapse_adj(tower, dmg)
 
@@ -74,7 +73,7 @@ def compute_dmg_by_tower(tower, event, line, cfg, wind=None):
 
         dmg_state_sim = set_dmg_state_sim(dmg, cfg, rnd_state)
 
-        _ = check_sim_accuracy(tower, dmg_state_sim, dmg, event, cfg)
+        #_ = check_sim_accuracy(tower, dmg_state_sim, dmg, event, cfg)
 
         collapse_adj_sim = set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg)
 
@@ -84,7 +83,6 @@ def compute_dmg_by_tower(tower, event, line, cfg, wind=None):
                          for ds in cfg.dmg_states}
 
         collapse_adj_sim = pd.DataFrame(None, columns=['id_sim', 'id_time', 'id_adj'])
-
 
     return {'event': event.id,
             'line': tower.lineroute,
@@ -118,7 +116,6 @@ def set_dmg(tower, wind, cfg):
         #idt0 = max(min(valid) - 1, 0)
         idt0 = min(valid)
     except ValueError:
-        logger.info(f'{tower.name} sustains no damage')
         dmg = pd.DataFrame(None, columns=cfg.dmg_states)
     else:
         #idt1 = max(valid) + 2
@@ -284,12 +281,10 @@ def check_against_collapse_adj(collapse_adj_sim, collapse_adj, tower, cfg):
                     except ValueError:
                         idmax = 0
                     finally:
-                        logger.warning(f"""
-Pc({idl}|{tower.name}): (S) {prob[idmax]:.4f} vs. (A) {collapse_adj[idl][idmax]:.4f}""")
+                        logger.warning(f'Pc({idl}|{tower.name}): (S) {prob[idmax]:.4f} vs. (A) {collapse_adj[idl][idmax]:.4f}')
 
             else:
-                logger.warning(f"""
-Pc({idl}|{tower.name}): (S) NA vs. (A) {collapse_adj[idl][0]:.4f}""")
+                logger.warning(f'Pc({idl}|{tower.name}): (S) NA vs. (A) {collapse_adj[idl][0]:.4f}')
 
         return prob
 
@@ -329,7 +324,7 @@ def set_collapse_adj_sim(tower, dmg_state_sim, collapse_adj, rnd_state, cfg):
         df['id_adj'] = df['id_adj'].apply(lambda x: tower.cond_pc_adj_sim_idx[x])
 
         # check against collapse_adj
-        check_against_collapse_adj(df, collapse_adj,  tower, cfg)
+        #check_against_collapse_adj(df, collapse_adj,  tower, cfg)
 
     else:
         df = pd.DataFrame(None, columns=['id_sim', 'id_time', 'id_adj'])

@@ -53,7 +53,7 @@ def compute_dmg_by_line(line, results, event, cfg):
 
     #logger = logging.getLogger(__name__)
 
-    #logger.info(f'computing damage of {self.name} for {self.event_id}')
+    logger.info(f'computing damage of {line.linename} by {event.id}')
 
     # compute damage probability analytically
     dmg_prob, dmg = compute_dmg_prob(event, line, cfg, results)
@@ -88,9 +88,7 @@ def compute_dmg_by_line(line, results, event, cfg):
             if len(diff[diff > 0]):
                 idx = diff[diff > 0].max(axis=0).idxmax()
                 idt = diff[diff > 0][idx].idxmax()
-                logger.warning(f"""
-Simulation results not close to analytical - {event.id}, {line.linename}
-{idx}, {ds}: (S) {dmg_prob_sim[ds][idx].loc[idt]:.4f} vs (A) {dmg_prob[ds][idx].loc[idt]:.4f}""")
+                logger.debug(f"""{event.id}, {idx}({line.linename}), {ds}: (S) {dmg_prob_sim[ds][idx].loc[idt]:.4f} vs (A) {dmg_prob[ds][idx].loc[idt]:.4f}""")
 
     summary = {'event': event.id,
                'line': line.linename,

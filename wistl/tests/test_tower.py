@@ -225,7 +225,9 @@ class TestTower1(unittest.TestCase):
             collapse_adj = set_collapse_adj(self.tower, dmg)
 
             dmg_state_sim = set_dmg_state_sim(dmg, self.cfg, rnd_state)
-            _ = set_collapse_adj_sim(self.tower, dmg_state_sim, collapse_adj, rnd_state, self.cfg)
+            collapse_adj_sim = set_collapse_adj_sim(self.tower, dmg_state_sim, collapse_adj, rnd_state, self.cfg)
+            _ = check_against_collapse_adj(collapse_adj_sim, collapse_adj, self.tower, self.cfg)
+
         msg = 'Pc'
         self.assertIn(msg, cm.output[0])
 
